@@ -7,4 +7,5 @@ table { background-color: azure; }
 tbody tr:nth-of-type(odd) { background-color: aqua; }
 TD,TH { padding: 10px; }
 .archive { border: solid; border-width: thin; padding: 10px; border-color: gray; }
+blockquote { padding: 5px; background-color: whitesmoke;}
 footer { border-top: solid; border-width: thin; }
