@@ -1,0 +1,271 @@
+# Common Lisp Pitfalls
+## Meta info
+### 対象読者
+複数の処理系で可能な限り可搬的になるようコードを書きたい初級〜中級CLer。
+### 現時点での対象処理系
+SBCL、CLISP、ECL、CCL
+
+## Introduction
+僕がハマってきたピットフォール群をメモ的にコレクションしていきたい。
+
+ピットフォールは主に以下の種類に分けられる。
+
+* 仕様上未定義と定義されている（明示的未定義）。
+* 仕様上触れられていない（暗黙裏に未定義）。
+* 仕様上明確に定義されているが難解。
+* 仕様上明確に定義されているが独自拡張している処理系あり。
+* 処理系が仕様に違反。
+
+先頭から順番に読むもよし、気になるオペレータ名で検索をかけるもよし。
+
+なお、記事が追加される場合は先頭に追加していくこととする。
+また、項目は重複する可能性があるものとする。
+
+## \*PRINT-LENGTH\*
+プリティプリンタ周りの実装は可搬的でないケースが多い。
+構造体の表示に関しては仕様でも触れられていない。
+CCLでは型名もスロット名も「リスト内の要素」と解釈されている。
+SBCL,ECLでは型名はカウントせず、スロット：値の対を一要素と解釈されている。
+CLISPでは構造体自体は言わばアトムであると解釈されている。
+
+```lisp
+=> FOO
+(defstruct foo a b c d)
+(let((*print-length* 2))
+  (print(make-foo :a (list 1 2 3 4 5))))
+
+#+clisp
+#S(FOO :A (1 2 ...) :B NIL :C NIL :D NIL)
+
+#+(or sbcl ecl)
+#S(FOO :A (1 2 ...) :B NIL ...)
+
+#+ccl
+#S(FOO :A ...)
+```
+
+## READ
+これは処理系のバグに相当するが、`+.`や`-.`はAnsiスタンダードでは数ではないとされているが、ECLでは０に解釈される。
+
+```lisp
+(read-from-string "+.") => implementation-dependent.
+                        ; Symbol +. in spec.
+                        ; 0 in ECL.
+```
+
+通常問題になることは無いと思われるが、Common LispでCommon Lispのパーザを書き、それをテストしたところ遭遇した。
+
+## BACKQUOTE
+バッククォートの実装は処理系依存である。
+多くの処理系でバッククォートはマクロに展開され、すなわちコンパイル時に等価なフォームが生成されるが、そうでない処理系も存在する。
+具体的にはCCLはフォーム生成をリード時に行う。
+
+```lisp
+'`(hoge ,@(cdr '(1 2 3))) => implementation-dependent.
+                          ; `(HOGE ,`(CDR '(1 2 3))) in many impls.
+                          ; (LIST* 'HOGE (CDR '(1 2 3))) in CCL.
+```
+
+## SIGNAL
+`SIGNAL`の振る舞いは、受け取ったコンディションを元にハンドラを探し、ハンドラがあればコールしてまわり、どのハンドラもコントロールフロー制御をしなければ最終的に`NIL`を返すというものである。
+
+トップレベルにハンドラがあるかどうかは処理系依存となる。
+
+```lisp
+(signal 'error) => implementation-dependent. NIL or invokes debugger.
+```
+## `*STANDARD-OUTPUT*` `*STANDARD-INPUT*`
+多くの処理系では、たとえば`*STANDARD-OUTPUT*`に`*STANDARD-INPUT*`を束縛することはエラーとなるが、そうでない処理系も存在する。
+たとえばCCLでは両シンボルは`*TERMINAL-IO*`へのaliasとして機能している。
+
+```lisp
+(let((*standard-output* *standard-input*))
+  ...)
+=> implementation-dependent. Error or works.
+```
+
+```lisp
+(output-stream-p *standard-input*) => implementation-dependent. T in CCL.
+```
+通常このような馬鹿げたコードを書くことはないが、「アウトプットストリームを期待している関数にインプットストリームを渡すとエラーになる」という文脈のテストコードを書く際などに、想定外に成功するという形で現れる。
+
+## CASE ECASE CCASE
+`NIL`ないし`T`をキーにしたい場合は必ず括弧にくくらねばならない。
+
+```lisp
+(case var
+  (nil :this-clause-is-never-chosen.)
+  ((nil) :ok.)
+  (t :this-clause-is-treated-as-default-clause.)
+  ((t) :ok.))
+```
+
+## LOOP
+`:MAXIMIZE`や`:MINIMIZE`が実行されなかった場合の返り値は未定義。
+
+```lisp
+(loop :for i :in () :minimize i) => unspecified. NIL or 0.
+```
+
+終端チェック節の後に変数束縛節を使うのはinvalid。
+期待通り動く処理系とそうでない処理系とがある。
+
+```lisp
+(loop :for i :in '(1 1 1 #\1)
+      :while (integerp i)
+      :for c = (code-char i) ; <--- invalid.
+      :do ...)
+```
+
+## DEFTYPE
+再帰定義は未定義。
+上手く動く処理系とそうでない処理系がある。
+
+```lisp
+(deftype strings()
+  (or null (cons string strings)))
+=> STRINGS
+(typep :hoge strings)
+=> unspecified. Works or infinite loop.
+```
+
+マクロとしての`AND`は左から右に評価されるが、型指定子としての`AND`はその限りではない。
+
+```lisp
+(typep :hoge '(and integer (satisfies evenp)))
+=> unspecified. Works or signals error.
+```
+
+## DOCUMENTATION
+これは処理系のバグに相当するが、ECLではSETFできない。
+仕様ではSETF出来る。
+
+```lisp
+;; @ECL
+(setf(documentation 'hoge 'function) "docstring")
+=> "docstring"
+(documentation 'hoge 'function)
+=> NIL
+```
+
+## MAKE-STRING-INPUT-STREAM WITH-INPUT-FROM-STRING
+これは処理系独自拡張になるが、ECLでは文字列指定子（string-designator）が使える。
+
+```lisp
+;; @ECL
+(with-input-from-string(s :hoge)
+  (read s))
+=> HOGE ; Error in spec.
+
+(with-input-from-string(s #\c)
+  (read s))
+=> C ; Error in spec.
+```
+
+## SETF FDEFINITION
+SETF可能でも、それがSETF Expanderを持つとは限らない。
+
+```lisp
+(defstruct foo bar)
+=> FOO
+(fdefinition '(setf foo-bar)) => unspecified.
+
+(fdefinition '(setf car)) => unspecified.
+```
+
+## NIL
+これは可搬的なのだが、分かりづらいので。
+
+`NIL`は型名でもある。
+型名としての`NIL`は「無」を表す。
+そのためあらゆる型のsubtypeである。
+
+```lisp
+(subtypep nil nil) => T
+```
+
+また、「無」を表すので、けしてどの型でもない。
+すなわち自分自身でもない。
+
+```lisp
+(typep nil nil) => NIL
+```
+
+値としての`NIL`の型名は`NULL`である。
+
+```lisp
+(typep nil 'null) => T
+```
+
+筆者個人は例えば以下のようなコードを書き、
+
+```lisp
+(typep '(0) '(cons (eql 0) nil))
+```
+`T`を期待するも`NIL`が返ってきて、「何故だ」と悩んだ挙句、「あぁ、`NIL`じゃない、`NULL`だ」となることが、まま、ある。
+
+## SYMBOL
+エスケープされた文字を含むシンボルの表示方法はポータブルではない。
+
+```lisp
+\#hoge
+=> |#HOGE|
+; otherwise
+=> \#HOGE
+```
+
+## PATHNAME
+リテラルで書く場合、変な値が入る場合がある。
+
+```lisp
+(pathname-version #P"") => :NEWEST
+```
+
+これは処理系独自拡張なのだが、シンボルを受け付ける処理系もある。
+
+```lisp
+(pathname :/foo/bar/bazz) => #P"/foo/bar/bazz" ; Error in spec.
+```
+## *
+０を掛けた場合、０になるとは限らない。
+
+```lisp
+(* 0 0.0) => 0 or 0.0
+```
+
+## CONDITION
+`PRINC`した場合、メッセージが表示されるとは限らない。
+
+```lisp
+(princ (nth-value 1 (ignore-errors (/ 2 0))))
+=> unspecified. "Division by zero." or #<DIVISION-BY-ZERO #X123456>
+```
+
+## SYMBOL-FUNCTION FDEFINITION
+シンボルがマクロや特殊形式の場合、関数オブジェクトが入っているとは限らない。
+
+```lisp
+(symbol-function 'when) => unspecified.
+```
+
+## CONCATENATE
+これは処理系独自拡張なのだが、SEQUENCE-DESIGNATORとして`ARRAY`を受け付ける処理系もある。
+
+```lisp
+(concatenate 'array #(1 2 3) #(4 5 6)) => #(1 2 3 4 5 6) ; Error in many impls.
+```
+
+## COERCE
+シーケンスを配列に出来る処理系とそうでない処理系がある。
+
+```lisp
+(coerce '(1 2 3) 'array) => implementation-dependent. #(1 2 3) or signals error.
+```
+
+## MAKE-ARRAY
+どのような値で初期化されるかは未定義。
+
+```lisp
+(make-array 1) => unspecified. #(0) or #(nil)
+```
+
