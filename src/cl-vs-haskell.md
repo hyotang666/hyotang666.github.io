@@ -405,13 +405,47 @@ ghci> 92 `div` 10
 ```
 Haskellでは簡単に関数を中置に出来るが、Common Lispにそのような機能はない。
 数学系のものに限るなら、infix-mathが便利に使える。
-また、infix-mathは拡張もできるので、自身で拡張さえすればどのような関数も中置に出来るとは言える。
-もっとも「お手軽」とは言えないが。
 
 ```lisp
 cl-user> (infix-math:$ 92 floor 10)
 9
 2
+```
+数学系のものに限らず何でも中置にできれば便利なこともあろうかと思われるので作ってみよう。
+
+```lisp
+(defun |#%-reader|(stream character number)
+  (declare(ignore character number))
+  (let((form(read stream t t t)))
+    (rotatef(car form)(cadr form))
+    form))
+```
+リードテーブルは以下の通り。
+
+```lisp
+(named-readtables:defreadtable :secondfix-syntax
+  (:merge :standard)
+  (:dispatch-macro-char #\# #\% #'|#%-reader|))
+```
+これで以下のように書ける。
+
+```lisp
+cl-user> #%(92 floor 10)
+9
+2
+```
+実は本リーダマクロは、リードテーブルの名前が示す通り、厳密には中置ではなく第二値演算となっている。
+よって、例えば以下のように書いても動く。
+
+```lisp
+cl-user> #%(1 + 2 3 4 5)
+15
+```
+非常に奇妙な仕様だが、`FIND`などにキーワード引数を渡したい場合などに便利だ。
+
+```lisp
+cl-user> #%("hoge" find '("fuga" "bazz") :test #'string=)
+NIL
 ```
 
 ## 1.2

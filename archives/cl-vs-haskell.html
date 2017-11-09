@@ -378,13 +378,42 @@ cl-user&gt; <span class="paren1">(<span class="code">1+ <span class="paren2">(<s
 <span class="function">9</span></span></code></pre>
 
 <p>Haskellでは簡単に関数を中置に出来るが、Common Lispにそのような機能はない。
-数学系のものに限るなら、infix-mathが便利に使える。
-また、infix-mathは拡張もできるので、自身で拡張さえすればどのような関数も中置に出来るとは言える。
-もっとも「お手軽」とは言えないが。</p>
+数学系のものに限るなら、infix-mathが便利に使える。</p>
 
 <pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">infix-math:$ 92 floor 10</span>)</span>
 9
 2</span></code></pre>
+
+<p>数学系のものに限らず何でも中置にできれば便利なこともあろうかと思われるので作ってみよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |#%-reader|<span class="paren2">(<span class="code">stream character number</span>)</span>
+  <span class="paren2">(<span class="code">declare<span class="paren3">(<span class="code">ignore character number</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">form<span class="paren5">(<span class="code">read stream t t t</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">rotatef<span class="paren4">(<span class="code">car form</span>)</span><span class="paren4">(<span class="code">cadr form</span>)</span></span>)</span>
+    form</span>)</span></span>)</span></span></code></pre>
+
+<p>リードテーブルは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">named-readtables:defreadtable</span></i> <span class="keyword">:secondfix-syntax</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:merge</span> <span class="keyword">:standard</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:dispatch-macro-char</span> <span class="character">#\#</span> <span class="character">#\%</span> #'|#%-reader|</span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書ける。</p>
+
+<pre><code><span class="code">cl-user&gt; #%<span class="paren1">(<span class="code">92 floor 10</span>)</span>
+9
+2</span></code></pre>
+
+<p>実は本リーダマクロは、リードテーブルの名前が示す通り、厳密には中置ではなく第二値演算となっている。
+よって、例えば以下のように書いても動く。</p>
+
+<pre><code><span class="code">cl-user&gt; #%<span class="paren1">(<span class="code">1 + 2 3 4 5</span>)</span>
+15</span></code></pre>
+
+<p>非常に奇妙な仕様だが、<code>FIND</code>などにキーワード引数を渡したい場合などに便利だ。</p>
+
+<pre><code><span class="code">cl-user&gt; #%<span class="paren1">(<span class="code"><span class="string">"hoge"</span> find '<span class="paren2">(<span class="code"><span class="string">"fuga"</span> <span class="string">"bazz"</span></span>)</span> <span class="keyword">:test</span> #'string=</span>)</span>
+NIL</span></code></pre>
 
 <h2>1.2</h2>
 

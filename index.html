@@ -9,213 +9,1224 @@
     <meta name='generator' content='pages' />
 <link rel='stylesheet' href='css/css.css' type='text/css' />
   </head>
-<body><h1>Common Lisp vs Haskell, Chapter 4</h1>
+<body><h1>Common Lisp vs Haskell, chapter 1</h1>
 
 <h2>Meta note</h2>
 
 <h3>対象読者</h3>
 
-<p><a href="archives/cl-vs-haskell.3.html" >前章</a>を読了済みの者。</p>
+<p>初級〜中級CLer。
+ないしCommon Lispに興味のあるHaskeller（いなさそうだなぁ）。</p>
+
+<p>長文なのでお暇な時にどうぞ。</p>
 
 <h2>Introduction</h2>
 
-<p>本稿は「すごいH本」の内容をCommon Lispに翻訳しながらCLerがHaskellを学ぶその第4章である。
-本章のテーマは再帰である。
-そのため基本ライブラリにあるような機能を敢えて再発明している。
-しかしながらCLerにとって再帰は自家薬籠中のものである。
-今更再帰を学ぶもない。
-そこで、本章では原著をリスペクトし、敢えて再発明再帰コードも掲載するが、それと同時に再発明している機能を再発明せずに素のCommon Lispで書くならどう書くかも同時に記していくこととする。
-初心者CLerにとっては、特に末尾再帰への変換の仕方が参考になるかと思われる。
-中級以上の方は読み飛ばして、どうぞ。</p>
+<p>論文を呼んでいると例題コードがHaskellで書かれているものに出会うことがままある。
+筆者はCommon Lispにこそ精通している者であるが、Haskellについては無知蒙昧の徒である。
+筆者は論文内の例題コードを、「色々難しいことをごちゃごちゃ言ったけど、実装するならこんな感じだよ」という、本文を理解するための補助輪のような存在と認識している。
+その補助輪がチンプンカンプンであれば、内容の理解は一層難しくなる。
+そこで論文を読めるようにするためにHaskellを読めるようにすることにした。</p>
 
-<h1>4</h1>
+<p>しかしながら大きな問題がある。
+筆者はHaskellという言語をリスペクトしている。
+Common Lispを書いていて不満に思う幾つかをHaskellは綺麗（？）に解決しているように見えるからだ。
+とはいえ現時点で筆者はHaskellerになる気は毛頭ない。
+筆者がHaskellを学ぶのは上記の通り、あくまで手段として、だ。
+当然モチベーションは上がらない。
+けして、やりたいことがすなわちHaskellというわけではないからだ。
+入門書を読んでいても内容がさっぱり頭に入らない。
+これではいけない。
+そこでHaskellの各種機能を慣れ親しんだCommon Lispに置き換えながら学習することにした。</p>
 
-<h2>4.1</h2>
+<p>通常言語Xを学ぶ際に、言語Yに翻訳しながら解釈していくのは悪手である。
+言語Xには言語Xの作法があり、言語Yのそれとは相容れない可能性があり、言語Yの知識が言語Xを学ぶことの足を引っ張ることになるのはよくあることである。
+しかしながら今回に限りそれは当てはまらない。
+筆者はけしてHaskellerになりたくて学び始めたわけではないからだ。
+Ruby開発者のMatzがRubyプログラマでないのと同様に、いわばCommon Lisp上に埋め込みHaskellを作る気持ちで、すなわちHaskellという言語を学ぶ対象でなく作る対象と認識することで学習意欲を維持しようという作戦なわけだ。</p>
 
-<h3>maximum</h3>
+<p>さて、彼我の言語を見比べると、当然そこには差異がある。
+そこで、HaskellになくCommon Lispに特徴的な機能については、Common Lispに無知蒙昧なHaskellerに解説するつもりで説明を試みた。
+本稿の該当部分は初心者CLerにとってCommon Lisp学習の一助となろう。</p>
 
-<pre><code><span class="code"><span class="function">maximum'</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Ord</span> a</span>)</span> <span class="atom">=&gt;</span> <span class="paren1">[<span class="code">a</span>]</span> <span class="keyword">-&gt;</span> a
-<span class="function">maximum'</span> <span class="paren1">[<span class="code"></span>]</span> <span class="keyword">=</span> error <span class="string">"maximum of empty list!"</span>
-<span class="function">maximum'</span> <span class="paren1">[<span class="code">x</span>]</span> <span class="keyword">=</span> x
-<span class="function">maximum'</span> <span class="paren1">(<span class="code">x<span class="variable">:</span>xs</span>)</span> <span class="keyword">=</span> max x <span class="paren1">(<span class="code">maximum' xs</span>)</span></span></code></pre>
+<p>また逆に、Common LispになくHaskellに特徴的な機能については、ライブラリを使って再現できそうなものは積極的にライブラリを使用し、ライブラリも見つからないような機能の中で簡単に実装できそうなものは自前で実装を試みた。
+本稿の該当部分は中級CLerにとって興味深い内容となろう。
+なお、本章に於けるハイライトは「中置演算を導入する（infix-math）」「リスト内包表記を導入する（incf-cl）」「無限リストを扱う（SERIES）」といったあたりだろうか。</p>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">list</span>)</span>t</span>)</span>maximum</span>)</span></span>)</span>
-<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> maximum<span class="paren2">(<span class="code">list</span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">list acc</span>)</span>
-            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp list</span>)</span>
-              acc
-              <span class="paren6">(<span class="code">rec<span class="paren1">(<span class="code">cdr list</span>)</span><span class="paren1">(<span class="code">max <span class="paren2">(<span class="code">car list</span>)</span>acc</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-    <span class="paren3">(<span class="code">trivia:match list
-      <span class="paren4">(<span class="code">nil <span class="paren5">(<span class="code">error <span class="string">"Maximum of empty list!"</span></span>)</span></span>)</span>
-      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">list x</span>)</span>x</span>)</span>
-      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">cons x y</span>)</span><span class="paren5">(<span class="code">rec y x</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-<span class="comment">;; or
-</span><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> maximum<span class="paren2">(<span class="code">list</span>)</span>
-  <span class="paren2">(<span class="code">apply #'max list</span>)</span></span>)</span></span></code></pre>
+<p>Haskellerにとって本稿は、Common Lispの強力さの一端をうかがい知れる内容となっていようし、また、Haskellの強力さを再認識できる内容ともなっていよう。</p>
 
-<h2>4.2</h2>
+<p>上級CLerにとって得られるものは何もないかと思われるので、よほど暇でない限りはご自身のお仕事に戻って、どうぞ。</p>
 
-<h3>replicate</h3>
+<p>なお、今回採用したHaskell入門書はいわゆる「すごいH本」である。
+本稿は「すごいH本」の内容をCommon Lispに翻訳しながらCLerがHaskellを学ぶその第一章である。</p>
 
-<pre><code><span class="code"><span class="function">replicate'</span> <span class="keyword">::</span> <span class="variable">Int</span> <span class="keyword">-&gt;</span> a <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code">a</span>]</span>
-<span class="function">replicate'</span> n x
-&nbsp;   <span class="keyword">|</span> n <span class="atom">&lt;=</span> 0 <span class="keyword">=</span> <span class="paren1">[<span class="code"></span>]</span>
-&nbsp;   <span class="keyword">|</span> otherwise <span class="keyword">=</span> x <span class="variable">:</span>replicate' <span class="paren1">(<span class="code">n<span class="atom">-</span>1</span>)</span> x</span></code></pre>
+<h1>1</h1>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">integer t</span>)</span>list</span>)</span></span>)</span></span>)</span>
-<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> replicate<span class="paren2">(<span class="code">num elt</span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">num &amp;optional acc</span>)</span>
-            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">&lt;= num 0</span>)</span>
-              acc
-              <span class="paren6">(<span class="code">rec<span class="paren1">(<span class="code">1- num</span>)</span><span class="paren1">(<span class="code">cons elt acc</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-    <span class="paren3">(<span class="code">rec num</span>)</span></span>)</span></span>)</span>
-<span class="comment">;; or
-</span><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> replicate<span class="paren2">(<span class="code">num elt</span>)</span>
-  <span class="paren2">(<span class="code">make-list num <span class="keyword">:initial-element</span> elt</span>)</span></span>)</span></span></code></pre>
+<h2>0</h2>
 
-<h3>take</h3>
+<p>まずは簡単な四則演算から。</p>
 
-<pre><code><span class="code"><span class="function">take'</span> <span class="keyword">::</span> <span class="variable">Int</span> <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code">a</span>]</span> <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code">a</span>]</span>
-<span class="function">take'</span> n _
-&nbsp;   <span class="keyword">|</span> n<span class="atom">&lt;=</span>0 <span class="keyword">=</span> <span class="paren1">[<span class="code"></span>]</span>
-<span class="function">take'</span> _ <span class="paren1">[<span class="code"></span>]</span> <span class="keyword">=</span> <span class="paren1">[<span class="code"></span>]</span>
-<span class="function">take'</span> n <span class="paren1">(<span class="code">x<span class="variable">:</span>xs</span>)</span> <span class="keyword">=</span> x <span class="variable">:</span> take' <span class="paren1">(<span class="code">x<span class="atom">-</span>1</span>)</span> xs</span></code></pre>
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> 2 <span class="atom">+</span> 15
+<span class="function">17</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> 49 <span class="atom">*</span> 100
+<span class="function">4900</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> 1892 <span class="atom">-</span> 1472
+<span class="function">420</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> 5 <span class="atom">/</span> 2
+<span class="function">2</span><span class="atom">.</span>5</span></code></pre>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">integer list</span>)</span>list</span>)</span></span>)</span></span>)</span>
-<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> take<span class="paren2">(<span class="code">num list</span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">num list &amp;optional acc</span>)</span>
-            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">or <span class="paren1">(<span class="code">&lt;= num 0</span>)</span>
-                   <span class="paren1">(<span class="code">endp list</span>)</span></span>)</span>
-              <span class="paren6">(<span class="code">nreverse acc</span>)</span>
-              <span class="paren6">(<span class="code">rec<span class="paren1">(<span class="code">1- num</span>)</span><span class="paren1">(<span class="code">cdr list</span>)</span><span class="paren1">(<span class="code">cons<span class="paren2">(<span class="code">car list</span>)</span>acc</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-    <span class="paren3">(<span class="code">rec num list</span>)</span></span>)</span></span>)</span>
-<span class="comment">;; or
-</span><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> take<span class="paren2">(<span class="code">number list</span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> elt <span class="keyword">:in</span> list
-        <span class="keyword">:repeat</span> <span class="paren3">(<span class="code">max 0 number</span>)</span>
-        <span class="keyword">:collect</span> elt</span>)</span></span>)</span></span></code></pre>
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">+ 2 15</span>)</span>
+17
+cl-user&gt; <span class="paren1">(<span class="code">* 49 100</span>)</span>
+4900
+cl-user&gt; <span class="paren1">(<span class="code">- 1892 1472</span>)</span>
+420
+cl-user&gt; <span class="paren1">(<span class="code">/ 5 2</span>)</span>
+5/2
+cl-user&gt; <span class="paren1">(<span class="code">float<span class="paren2">(<span class="code">/ 5 2</span>)</span></span>)</span>
+2.5</span></code></pre>
 
-<h3>reverse</h3>
+<p>Common Lispはオペレータが前置になっているという点以外はほとんど同じ。
+唯一特徴的なのは<code>/</code>が分数を返すという点。
+実数が欲しい場合は<code>FLOAT</code>に渡す必要がある。</p>
 
-<pre><code><span class="code"><span class="function">reverse'</span> <span class="keyword">::</span> <span class="paren1">[<span class="code">a</span>]</span> <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code">a</span>]</span>
-<span class="function">reverse'</span> <span class="paren1">[<span class="code"></span>]</span> <span class="keyword">=</span> <span class="paren1">[<span class="code"></span>]</span>
-<span class="function">reverse'</span> <span class="paren1">(<span class="code">x<span class="variable">:</span>xs</span>)</span> <span class="keyword">=</span> reverse' xs <span class="atom">++</span> <span class="paren1">[<span class="code">x</span>]</span></span></code></pre>
+<p>Common Lispはオペレータを前置するシンタックスをサポートしているので、これら四則演算関数が二引数関数とは限らない。</p>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">list</span>)</span>list</span>)</span>reverse%</span>)</span></span>)</span>
-<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> reverse%<span class="paren2">(<span class="code">list</span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">list &amp;optional acc</span>)</span>
-            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp list</span>)</span>
-              acc
-              <span class="paren6">(<span class="code">rec<span class="paren1">(<span class="code">cdr list</span>)</span><span class="paren1">(<span class="code">cons <span class="paren2">(<span class="code">car list</span>)</span> acc</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-    <span class="paren3">(<span class="code">rec list</span>)</span></span>)</span></span>)</span></span></code></pre>
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">+</span>)</span>
+0
+cl-user&gt; <span class="paren1">(<span class="code">-</span>)</span>
+<span class="comment">;; ERROR
+</span>cl-user&gt; <span class="paren1">(<span class="code">*</span>)</span>
+1
+cl-user&gt; <span class="paren1">(<span class="code">/</span>)</span>
+<span class="comment">;; ERROR
+</span>cl-user&gt; <span class="paren1">(<span class="code">+ 1</span>)</span>
+1
+cl-user&gt; <span class="paren1">(<span class="code">- 1</span>)</span>
+-1
+cl-user&gt; <span class="paren1">(<span class="code">* 3</span>)</span>
+3
+cl-user&gt; <span class="paren1">(<span class="code">/ 3</span>)</span>
+1/3
+cl-user&gt; <span class="paren1">(<span class="code">+ 1 2 3</span>)</span>
+6
+cl-user&gt; <span class="paren1">(<span class="code">- 1 2 3</span>)</span>
+-4
+cl-user&gt; <span class="paren1">(<span class="code">* 1 2 3</span>)</span>
+6
+cl-user&gt; <span class="paren1">(<span class="code">/ 1 2 3</span>)</span>
+1/6</span></code></pre>
 
-<h3>repeat</h3>
+<p>括弧による優先順位の明示。</p>
 
-<pre><code><span class="code"><span class="function">repeat'</span> <span class="keyword">::</span> a <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code">a</span>]</span>
-<span class="function">repeat'</span> x <span class="keyword">=</span> x <span class="variable">:</span> repeat' x</span></code></pre>
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code">50 <span class="atom">*</span> 100</span>)</span> <span class="atom">-</span> 4999
+<span class="function">1</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> 50 <span class="atom">*</span> 100 <span class="atom">-</span> 4999
+<span class="function">1</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> 50 <span class="atom">*</span> <span class="paren1">(<span class="code">100 <span class="atom">-</span> 4999</span>)</span>
+<span class="atom">-</span>244950</span></code></pre>
 
-<p>Common Lispは遅延評価をする言語ではないので、こればかりは再帰で書けない点要注意。</p>
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">- <span class="paren2">(<span class="code">* 50 100</span>)</span> 4999</span>)</span>
+1
+cl-user&gt; <span class="paren1">(<span class="code">* 50 <span class="paren2">(<span class="code">- 100 4999</span>)</span></span>)</span>
+-244950</span></code></pre>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">t</span>)</span>series:series</span>)</span>repeat</span>)</span></span>)</span>
-<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> repeat<span class="paren2">(<span class="code">elt</span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">list<span class="paren5">(<span class="code">list elt</span>)</span></span>)</span></span>)</span>
-    <span class="paren3">(<span class="code">rplacd list list</span>)</span></span>)</span></span>)</span></span></code></pre>
+<p>Common Lispは括弧が必須。
+おかげで暗黙裏の優先順位を覚える必要がない。
+これはトレードオフであり、好みの問題だ。
+たとえ優先順位を覚える必要にかられようとも括弧を書きたくない人もおられよう。</p>
 
-<h3>zip</h3>
+<p>なお、Common Lispではそのような構文を導入することもできる。</p>
 
-<pre><code><span class="code"><span class="function">zip'</span> <span class="keyword">::</span> <span class="paren1">[<span class="code">a</span>]</span> <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code">b</span>]</span> <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code">a,b</span>)</span></span>]</span>
-<span class="function">zip'</span> _ <span class="paren1">[<span class="code"></span>]</span> <span class="keyword">=</span> <span class="paren1">[<span class="code"></span>]</span>
-<span class="function">zip'</span> <span class="paren1">[<span class="code"></span>]</span> _ <span class="keyword">=</span> <span class="paren1">[<span class="code"></span>]</span>
-<span class="function">zip'</span> <span class="paren1">(<span class="code">x<span class="variable">:</span>xs</span>)</span> <span class="paren1">(<span class="code">y<span class="variable">:</span>ys</span>)</span> <span class="keyword">=</span> <span class="paren1">(<span class="code">x,y</span>)</span> <span class="variable">:</span> zip' xs ys</span></code></pre>
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">infix-math:$ 50 * 100 - 4999</span>)</span>
+1
+cl-user&gt; <span class="paren1">(<span class="code">infix-math:$ 50 * <span class="paren2">(<span class="code">100 - 4999</span>)</span></span>)</span>
+-249950</span></code></pre>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">list list</span>)</span>list</span>)</span>zip</span>)</span></span>)</span>
-<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> zip<span class="paren2">(<span class="code">l1 l2</span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">l1 l2 &amp;optional acc</span>)</span>
-            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">or <span class="paren1">(<span class="code">null l1</span>)</span><span class="paren1">(<span class="code">null l2</span>)</span></span>)</span>
-              <span class="paren6">(<span class="code">nreverse acc</span>)</span>
-              <span class="paren6">(<span class="code">rec <span class="paren1">(<span class="code">cdr l1</span>)</span><span class="paren1">(<span class="code">cdr l2</span>)</span><span class="paren1">(<span class="code">acons<span class="paren2">(<span class="code">car l1</span>)</span><span class="paren2">(<span class="code">car l2</span>)</span>acc</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-    <span class="paren3">(<span class="code">rec l1 l2</span>)</span></span>)</span></span>)</span>
-<span class="comment">;; or
-</span><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> zip<span class="paren2">(<span class="code">l1 l2</span>)</span>
-  <span class="paren2">(<span class="code">mapcar #'cons l1 l2</span>)</span></span>)</span>
-<span class="comment">;; or
-</span><span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">symbol-function 'zip</span>)</span><span class="paren2">(<span class="code">symbol-function 'pairlis</span>)</span></span>)</span></span></code></pre>
+<p>ブール代数。</p>
 
-<p>上記２例目と３例目は少々異なる。
-<code>MAPCAR</code>を使っている２例目は引数の２リストが異なる長さでも機能する。
-しかし<code>PAIRLIS</code>を使っている３例目は引数の長さが異なっていればエラーを投げる。
-また、<code>MAPCAR</code>を使っている２例目はリストの順序を保持するが、<code>PAIRLIS</code>を使っている３例目は順序が保持されるとは限らない。
-（仕様上未定義。）
-また、<code>PAIRLIS</code>はオプショナルな第三引数も受け取り、指定された場合、結果が連結される。</p>
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">True</span> <span class="atom">&amp;&amp;</span> <span class="variable">False</span>
+<span class="variable">False</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">True</span> <span class="atom">&amp;&amp;</span> <span class="variable">True</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">False</span> <span class="atom">||</span> <span class="variable">True</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> not <span class="variable">False</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> not <span class="paren1">(<span class="code"><span class="variable">True</span> <span class="atom">&amp;&amp;</span> <span class="variable">True</span></span>)</span>
+<span class="variable">False</span></span></code></pre>
 
-<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">pairlis '<span class="paren2">(<span class="code">1 2 3</span>)</span> '<span class="paren2">(<span class="code">a b c</span>)</span></span>)</span>
-<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">3 . C</span>)</span><span class="paren2">(<span class="code">2 . B</span>)</span><span class="paren2">(<span class="code">1 . A</span>)</span></span>)</span>
-cl-user&gt; <span class="paren1">(<span class="code">pairlis '<span class="paren2">(<span class="code">4</span>)</span> '<span class="paren2">(<span class="code">d</span>)</span> *</span>)</span>
-<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">4 . D</span>)</span><span class="paren2">(<span class="code">3 . C</span>)</span><span class="paren2">(<span class="code">2 . B</span>)</span><span class="paren2">(<span class="code">1 . A</span>)</span></span>)</span></span></code></pre>
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">and t nil</span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">and t t</span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">or nil t</span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">not nil</span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">not<span class="paren2">(<span class="code">and t t</span>)</span></span>)</span>
+NIL</span></code></pre>
 
-<h3>elm</h3>
+<p>Common Lispは汎ブール（Generalized Boolean）をサポートしている。
+すなわち、<code>NIL</code>以外は全てTrueとなる。</p>
 
-<pre><code><span class="code"><span class="function">elm'</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Eq</span> a</span>)</span> <span class="atom">=&gt;</span> a <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code">a</span>]</span> <span class="keyword">-&gt;</span> <span class="variable">Bool</span>
-<span class="function">elm'</span> a <span class="paren1">[<span class="code"></span>]</span> <span class="keyword">=</span> <span class="variable">False</span>
-<span class="function">elm'</span> a <span class="paren1">(<span class="code">x<span class="variable">:</span>xs</span>)</span>
-&nbsp;   <span class="keyword">|</span> a <span class="atom">==</span> x <span class="keyword">=</span> <span class="variable">True</span>
-&nbsp;   <span class="keyword">|</span> otherwise <span class="keyword">=</span> a <span class="atom">`elm`</span> xs</span></code></pre>
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">not 1</span>)</span>
+NIL</span></code></pre>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">elt list</span>)</span>boolean</span>)</span>elm</span>)</span></span>)</span>
-<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> elm<span class="paren2">(<span class="code">elt list</span>)</span>
-  <span class="paren2">(<span class="code">unless <span class="paren3">(<span class="code">null list</span>)</span>
-    <span class="paren3">(<span class="code">destructuring-bind<span class="paren4">(<span class="code">x . xs</span>)</span>list
-      <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i><span class="paren5">(<span class="code">eql x elt</span>)</span>
-        t
-        <span class="paren5">(<span class="code">elm elt xs</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-<span class="comment">;; or
-</span><span class="paren1">(<span class="code">setf<span class="paren2">(<span class="code">symbol-function 'elm</span>)</span><span class="paren2">(<span class="code">symbol-function 'member</span>)</span></span>)</span></span></code></pre>
+<p>Common Lispでは前置構文がサポートされているので、ブール代数のオペレータも２引数オペレータではない。</p>
 
-<h2>4.3</h2>
+<pre><code>cl-user&gt; (and)
+T
+cl-user&gt; (or)
+NIL
+cl-user&gt; (and t nil t)
+NIL</code></pre>
 
-<h3>quicksort</h3>
+<p>Common Lispは汎ブールがサポートされているので、返り値は<code>BOOLEAN</code>ではなく値となる。
+すなわち、<code>AND</code>なら最後に評価した節の返り値が、<code>OR</code>なら最初にtrueに評価された節の返り値が式全体の返り値となる。</p>
 
-<pre><code><span class="code"><span class="function">quicksort</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Ord</span> a</span>)</span> <span class="atom">=&gt;</span> <span class="paren1">[<span class="code">a</span>]</span> <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code">a</span>]</span>
-<span class="function">quicksort</span> <span class="paren1">[<span class="code"></span>]</span> <span class="keyword">=</span> <span class="paren1">[<span class="code"></span>]</span>
-<span class="function">quicksort</span> <span class="paren1">(<span class="code">x<span class="variable">:</span>xs</span>)</span> <span class="keyword">=</span> 
-&nbsp;   <span class="keyword">let</span> smallOrEqual <span class="keyword">=</span> <span class="paren1">[<span class="code">a <span class="keyword">|</span> a <span class="keyword">&lt;-</span> xs, a <span class="atom">&lt;=</span> x</span>]</span>
-&nbsp;       larger <span class="keyword">=</span> <span class="paren1">[<span class="code">a <span class="keyword">|</span> a <span class="keyword">&lt;-</span> xs, a <span class="atom">&gt;</span> x</span>]</span>
-&nbsp;   <span class="keyword">in</span> quicksort smallerOrEqual <span class="atom">++</span> <span class="paren1">[<span class="code">x</span>]</span> <span class="atom">++</span> quicksort larger</span></code></pre>
+<pre><code>cl-user&gt; (or nil 1 2)
+1
+cl-user&gt; (and 1 2 3)
+3</code></pre>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">list</span>)</span>list</span>)</span>quicksort</span>)</span></span>)</span>
-<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> quicksort<span class="paren2">(<span class="code">list</span>)</span>
-  <span class="paren2">(<span class="code">unless<span class="paren3">(<span class="code">null list</span>)</span>
-    <span class="paren3">(<span class="code">bind:bind<span class="paren4">(<span class="code"><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">x . xs</span>)</span>list</span>)</span>
-               <span class="paren5">(<span class="code"><span class="paren6">(<span class="code"><span class="keyword">:values</span> small-or-equal larger</span>)</span>
-                <span class="paren6">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> elt <span class="keyword">:in</span> xs
-                      <span class="keyword">:if</span><span class="paren1">(<span class="code">&lt;= elt x</span>)</span>
-                      <span class="keyword">:collect</span> elt <span class="keyword">:into</span> SoE
-                      <span class="keyword">:else</span> <span class="keyword">:collect</span> elt <span class="keyword">:into</span> L
-                      <span class="keyword">:finally</span><span class="paren1">(<span class="code">return<span class="paren2">(<span class="code">values SoE L</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-      <span class="paren4">(<span class="code">nconc <span class="paren5">(<span class="code">quicksort small-or-equal</span>)</span><span class="paren5">(<span class="code">list x</span>)</span><span class="paren5">(<span class="code">quicksort larger</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-<span class="comment">;; or
-</span><span class="paren1">(<span class="code">setf<span class="paren2">(<span class="code">symbol-function 'quicksort</span>)</span><span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">list</span>)</span><span class="paren3">(<span class="code">sort list #'&lt;</span>)</span></span>)</span></span>)</span></span></code></pre>
+<p>等号</p>
 
-<p>Common Lispの<code>SORT</code>は高階関数である。
-渡す関数次第で降順、昇順どちらでもいける。</p>
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> 5 <span class="atom">==</span> 5
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> 1 <span class="atom">==</span> 0
+<span class="variable">False</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> 5 <span class="atom">/=</span> 5
+<span class="variable">False</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> 5 <span class="atom">/=</span> 4
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="string">"hello"</span> <span class="atom">==</span> <span class="string">"hello"</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> 5 <span class="atom">+</span> <span class="string">"llama"</span>
+<span class="comment">-- ERROR</span></span></code></pre>
 
-<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">sort '<span class="paren2">(<span class="code">1 3 2 4</span>)</span> #'&lt;</span>)</span>
+<p>多くの言語で<code>=</code>は代入のための予約語であるため、等値比較には<code>==</code>を使うこととなる。
+Common Lispは代入のためのキーワードを持たないので等値比較に<code>=</code>を使う。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">= 1 2</span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">= 1 1</span>)</span>
+T</span></code></pre>
+
+<p>ただし<code>=</code>は数値比較のためのものであって、引数に数値以外が来るとエラーとなる。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">= 1 nil</span>)</span>
+<span class="comment">;; ERROR.</span></span></code></pre>
+
+<p>そのような場合には<code>EQ</code>のファミリーを使う。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">eql 1 nil</span>)</span>
+NIL</span></code></pre>
+
+<p><code>EQ</code>ファミリーの特徴は以下の通り。</p>
+
+<ul>
+<li>EQ</li>
+</ul>
+
+<p>シンボル同士の比較に用いる。
+内部的にはポインタ比較なので高速に機能する。</p>
+
+<ul>
+<li>EQL</li>
+</ul>
+
+<p>シンボル、文字、整数の比較に用いる。</p>
+
+<ul>
+<li>EQUAL</li>
+</ul>
+
+<p>リスト、パス名、ケースセンシティブな文字列比較に用いる。</p>
+
+<ul>
+<li>EQUALP</li>
+</ul>
+
+<p>ケースインセンシティブな文字列比較、ハッシュテーブル、構造体、配列の比較に用いる。</p>
+
+<p>文字の比較、文字列比較のための専用オペレータもある。
+気をつけなければならないのは<code>STRING</code>のファミリーで、これは文字列ではなく、文字列指定子（STRING-DESIGNATOR）を受け付ける。
+すなわち、文字でもシンボルでも機能する。</p>
+
+<pre><code><span class="code"><span class="comment">;; For character. Not generalized.
+</span>cl-user&gt; <span class="paren1">(<span class="code">char= <span class="character">#\a</span> <span class="character">#\a</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">char= <span class="character">#\a</span> <span class="character">#\A</span></span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">char-equal <span class="character">#\a</span> <span class="character">#\A</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">char= <span class="character">#\a</span> nil</span>)</span>
+<span class="comment">;; ERROR
+</span>
+<span class="comment">;; For string-designator. Not generalized.
+</span>cl-user&gt; <span class="paren1">(<span class="code">string= <span class="string">"hoge"</span> <span class="string">"hoge"</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">string= <span class="string">"hoge"</span> <span class="string">"HOGE"</span></span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">string-equal <span class="string">"hoge"</span> <span class="string">"HOGE"</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">string= <span class="character">#\a</span> <span class="string">"a"</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">string= 'hoge <span class="string">"HOGE"</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">string= <span class="string">"0"</span> 0</span>)</span>
+<span class="comment">;; ERROR</span></span></code></pre>
+
+<p>Common Lispの等値関数群は初心者にとって難解で悪名高いのだが、それに対する反論としてはSICPとCLtL2からの引用で事足りえよう。</p>
+
+<blockquote>
+<p>参照透明性を一旦捨てると、計算オブジェクトが「同じ」であるとは何を意味するかの概念を形式的に捕らえるのは難しくなる。実はわれわれのプログラムがモデル化している実世界の「同じ」の意味もあまりはっきりしない。一般に二つの見かけ上同じなオブジェクトが本当に「同じもの」であるかは、一つのオブジェクトを変えてみて、もう一つのオブジェクトが同じように変わっているかを見て決める。しかし「同じ」オブジェクトを二度観測し、オブジェクトのある性質が一回目と二回目の観測で違っているということ以外に、あるオブジェクトが「変った」ことがどうして分るだろうか。つまり何か<em>先験的な</em>「同一」という概念なしに「変化」を決めることは出来ず、変化の効果を観測することなしに同一性を決めることは出来ない。</p>
+
+<p>オブジェクトの等値性は、唯一定められた正しいアルゴリズムに基づいた概念ではない。等値の述語のもっともらしさは、ある特定のプログラムの文脈においてのみ判断できるものである。EQUALとEQUALP関数はいかなる型の引数も受け付け、名前も非常に汎用に聞こえるが、これらはすべてのアプリケーションに対してもっともらしいわけではない。これらの関数を使用するか否かという決定は、これらの関数の抽象的な性質よりも動作を規定したドキュメントによって成されるべきである。もし、ある場面でEQUALもEQUALPも不適切であると判明した場合には、プログラマはEQUALやEQUALPが「誤って動作する」と非難するのではなく、他の適切な操作関数を作り出すことが望まれる。</p>
+</blockquote>
+
+<h2>1.1</h2>
+
+<p>関数呼びだし。</p>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> succ 8
+<span class="function">9</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">1+ 8</span>)</span>
+9</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> min 9 10
+<span class="function">9</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> min 3<span class="atom">.</span>4 3<span class="atom">.</span>2
+<span class="function">3</span><span class="atom">.</span>2
+<span class="function">ghci</span><span class="atom">&gt;</span> max 100 101
+<span class="function">101</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">min 9 10</span>)</span>
+9
+cl-user&gt; <span class="paren1">(<span class="code">min 3.2 3.4</span>)</span>
+3.2
+cl-user&gt; <span class="paren1">(<span class="code">max 100 101</span>)</span>
+101</span></code></pre>
+
+<p>Common Lispは前置構文をサポートしているので、<code>MAX</code>、<code>MIN</code>関数もまた２引数関数ではない。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">min 1 2 3</span>)</span>
+1
+cl-user&gt; <span class="paren1">(<span class="code">max 1 2 3</span>)</span>
+3
+cl-user&gt; <span class="paren1">(<span class="code">min 3</span>)</span>
+3
+cl-user&gt; <span class="paren1">(<span class="code">max 3</span>)</span>
+3</span></code></pre>
+
+<p>括弧による優先順位の明示</p>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> succ 9 <span class="atom">+</span> max 5 4 <span class="atom">+</span> 1
+<span class="function">16</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code">succ 9</span>)</span> <span class="atom">+</span> <span class="paren1">(<span class="code">max 5 4</span>)</span> <span class="atom">+</span> 1
+<span class="function">16</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">+ <span class="paren2">(<span class="code">1+ 9</span>)</span> <span class="paren2">(<span class="code">max 5 4</span>)</span> 1</span>)</span>
+16
+cl-user&gt; <span class="paren1">(<span class="code">infix-math:$ 1 + 9 + <span class="paren2">(<span class="code">5 max 4</span>)</span> + 1</span>)</span>
+16</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> succ 9 <span class="atom">*</span> 10
+<span class="function">100</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> succ <span class="paren1">(<span class="code">9 <span class="atom">*</span> 10</span>)</span>
+<span class="function">91</span></span></code></pre>
+
+<p>Common Lispでは括弧は必須なので、曖昧性がない。
+これはトレードオフである。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">* <span class="paren2">(<span class="code">1+ 9</span>)</span> 10</span>)</span>
+100
+cl-user&gt; <span class="paren1">(<span class="code">1+ <span class="paren2">(<span class="code">* 9 10</span>)</span></span>)</span>
+91</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> div 92 10
+<span class="function">9</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> 92 <span class="atom">`div`</span> 10
+<span class="function">9</span></span></code></pre>
+
+<p>Common Lispで上記の<code>DIV</code>に相当する関数は全部で４つある。
+各々あまりの丸め込み方が異なる。</p>
+
+<pre><code><span class="code"><span class="comment">;; Truncated toward negative infinity.
+</span>cl-user&gt; <span class="paren1">(<span class="code">floor 92 10</span>)</span>
+9
+2
+<span class="comment">;; Truncated toward positive infinity.
+</span>cl-user&gt; <span class="paren1">(<span class="code">ceiling 92 10</span>)</span>
+10
+-8
+<span class="comment">;; Truncated toward zero.
+</span>cl-user&gt; <span class="paren1">(<span class="code">truncate -1 2</span>)</span>
+0
+-1
+<span class="comment">;; Rounded to the nearest mathematical integer.
+</span><span class="comment">;; If the mathematical quotient is exactly halfway between two integers,
+</span><span class="comment">;; (that is, it has the form integer+1/2),
+</span><span class="comment">;; then the quotient has been rounded to the even (divisible by two) integer.
+</span>cl-user&gt; <span class="paren1">(<span class="code">round 5 3</span>)</span>
+2
+-1</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> 92 <span class="atom">`div`</span> 10
+<span class="function">9</span></span></code></pre>
+
+<p>Haskellでは簡単に関数を中置に出来るが、Common Lispにそのような機能はない。
+数学系のものに限るなら、infix-mathが便利に使える。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">infix-math:$ 92 floor 10</span>)</span>
+9
+2</span></code></pre>
+
+<p>数学系のものに限らず何でも中置にできれば便利なこともあろうかと思われるので作ってみよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |#%-reader|<span class="paren2">(<span class="code">stream character number</span>)</span>
+  <span class="paren2">(<span class="code">declare<span class="paren3">(<span class="code">ignore character number</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">form<span class="paren5">(<span class="code">read stream t t t</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">rotatef<span class="paren4">(<span class="code">car form</span>)</span><span class="paren4">(<span class="code">cadr form</span>)</span></span>)</span>
+    form</span>)</span></span>)</span></span></code></pre>
+
+<p>リードテーブルは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">named-readtables:defreadtable</span></i> <span class="keyword">:secondfix-syntax</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:merge</span> <span class="keyword">:standard</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:dispatch-macro-char</span> <span class="character">#\#</span> <span class="character">#\%</span> #'|#%-reader|</span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書ける。</p>
+
+<pre><code><span class="code">cl-user&gt; #%<span class="paren1">(<span class="code">92 floor 10</span>)</span>
+9
+2</span></code></pre>
+
+<p>実は本リーダマクロは、リードテーブルの名前が示す通り、厳密には中置ではなく第二値演算となっている。
+よって、例えば以下のように書いても動く。</p>
+
+<pre><code><span class="code">cl-user&gt; #%<span class="paren1">(<span class="code">1 + 2 3 4 5</span>)</span>
+15</span></code></pre>
+
+<p>非常に奇妙な仕様だが、<code>FIND</code>などにキーワード引数を渡したい場合などに便利だ。</p>
+
+<pre><code><span class="code">cl-user&gt; #%<span class="paren1">(<span class="code"><span class="string">"hoge"</span> find '<span class="paren2">(<span class="code"><span class="string">"fuga"</span> <span class="string">"bazz"</span></span>)</span> <span class="keyword">:test</span> #'string=</span>)</span>
+NIL</span></code></pre>
+
+<h2>1.2</h2>
+
+<pre><code><span class="code"><span class="function">doubleMe</span> x <span class="keyword">=</span> x <span class="atom">+</span> x</span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> double-me <span class="paren2">(<span class="code">x</span>)</span>
+  <span class="paren2">(<span class="code">+ x x</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">:</span>l baby
+<span class="function">ghci</span><span class="atom">&gt;</span> doubleMe 9
+<span class="function">18</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> doubleMe 8<span class="atom">.</span>3
+<span class="function">16</span><span class="atom">.</span>6</span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">load <span class="string">"baby"</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">double-me 9</span>)</span>
+18
+cl-user&gt; <span class="paren1">(<span class="code">double-me 8.3</span>)</span>
+16.6</span></code></pre>
+
+<pre><code><span class="code"><span class="function">doubleUs</span> x y <span class="keyword">=</span> x <span class="atom">*</span> 2 <span class="atom">+</span> y <span class="atom">*</span> 2</span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> double-us <span class="paren2">(<span class="code">x y</span>)</span>
+  <span class="paren2">(<span class="code">+ <span class="paren3">(<span class="code">* x 2</span>)</span>
+     <span class="paren3">(<span class="code">* y 2</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> doubleUs 4 9
+<span class="function">26</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> doubleUs 2<span class="atom">.</span>3 34<span class="atom">.</span>2
+<span class="function">73</span><span class="atom">.</span>0
+<span class="function">ghci</span><span class="atom">&gt;</span> doubleUs 28 88 <span class="atom">+</span> doubleMe 123
+<span class="function">478</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">double-us 4 9</span>)</span>
+26
+cl-user&gt; <span class="paren1">(<span class="code">double-us 2.3 34.2</span>)</span>
+73.0
+cl-user&gt; <span class="paren1">(<span class="code">+ <span class="paren2">(<span class="code">double-us 28 88</span>)</span> <span class="paren2">(<span class="code">double-me 123</span>)</span></span>)</span>
+478</span></code></pre>
+
+<pre><code><span class="code"><span class="function">doubleSmallNumber</span> x <span class="keyword">=</span> <span class="keyword">if</span> x <span class="atom">&gt;</span> 100
+&nbsp;                       <span class="keyword">then</span> x
+&nbsp;                       <span class="keyword">else</span> x<span class="atom">*</span>2</span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> double-small-number <span class="paren2">(<span class="code">x</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">&gt; x 100</span>)</span>
+    x
+    <span class="paren3">(<span class="code">* x 2</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">doubleSmallNumber'</span> x <span class="keyword">=</span> <span class="paren1">(<span class="code"><span class="keyword">if</span> x <span class="atom">&gt;</span> 100 <span class="keyword">then</span> x <span class="keyword">else</span> x<span class="atom">*</span>2</span>)</span> <span class="atom">+</span> 1</span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> double-small-number% <span class="paren2">(<span class="code">x</span>)</span>
+  <span class="paren2">(<span class="code">1+ <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">&gt; x 100</span>)</span>
+        x
+        <span class="paren4">(<span class="code">* x 2</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">conanO'Brien</span> <span class="keyword">=</span> <span class="string">"It's a-me, Conan O'Brien!"</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |Connan O'Brien|<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">progn</span></i> <span class="string">"It's a-me, Conan O'Brien!"</span></span>)</span></span>)</span>
+<span class="comment">;; or below.
+</span><span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">symbol-function '|Connan O'Brien|</span>)</span>
+      <span class="paren2">(<span class="code">constantly <span class="string">"It's a-me, Conan O'Brien!"</span></span>)</span></span>)</span></span></code></pre>
+
+<p>リテラル文字列を返す関数を書く時には注意が必要。
+というのも、ドキュメンテーション文字列と解釈されうるからで、処理系依存でエラーになる場合がある。
+よって上記の例では文字列を<code>PROGN</code>でラップしてBODYであることを明示している。</p>
+
+<h2>1.3</h2>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="keyword">let</span> lostNumbers <span class="keyword">=</span> <span class="paren1">[<span class="code">4,8,15,16,23,42</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> lostNumbers
+<span class="paren1">[<span class="code">4,8,15,16,23,42</span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*lost-numbers*</span> '<span class="paren2">(<span class="code">4 8 15 16 23 42</span>)</span></span>)</span>
+*LOST-NUMBERS*
+cl-user&gt; *lost-numbers*
+<span class="paren1">(<span class="code">4 8 14 15 23 42</span>)</span></span></code></pre>
+
+<p>上記のようにスペシャル変数名の左右に<code>*</code>を付けるのはマナーであってルールではない。
+別に<code>*</code>が無くても問題はない。</p>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">1,2,3,4</span>]</span> <span class="atom">++</span> <span class="paren1">[<span class="code">9,10,11,12</span>]</span>
+<span class="paren1">[<span class="code">1,2,3,4,9,10,11,12</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="string">"hello"</span> <span class="atom">++</span> <span class="string">" "</span> <span class="atom">++</span> <span class="string">"world"</span>
+<span class="string">"hello world"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code"><span class="character">'w'</span>,<span class="character">'o'</span></span>]</span> <span class="atom">++</span> <span class="paren1">[<span class="code"><span class="character">'o'</span>,<span class="character">'t'</span></span>]</span>
+<span class="string">"woot"</span></span></code></pre>
+
+<p>Haskellに於いて文字列はリストだが、Common Lispに於いて文字列はベクタである。
+よってリスト用関数は文字列に適用できない。
+ただしリスト、文字列、ベクタをひっくるめて扱うシーケンスという型があり、それ用のオペレータも充実している。
+上記<code>++</code>に相当するのはCommon Lispでなら<code>CONCATENATE</code>である。
+第一引数に返り値の型を明示する必要がある。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">concatenate 'list '<span class="paren2">(<span class="code">1 2 3 4</span>)</span> '<span class="paren2">(<span class="code">9 10 11 12</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">1 2 3 4 9 10 11 12</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">concatenate 'string <span class="string">"hello"</span> <span class="string">" "</span> <span class="string">"world"</span></span>)</span>
+"hello world"
+cl-user&gt; <span class="paren1">(<span class="code">concatenate 'string <span class="string">"wo"</span> '<span class="paren2">(<span class="code"><span class="character">#\o</span> <span class="character">#\t</span></span>)</span></span>)</span>
+"woot"
+cl-user&gt; <span class="paren1">(<span class="code">concatenate 'list <span class="string">"foo"</span> <span class="string">"bar"</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="character">#\f</span> <span class="character">#\o</span> <span class="character">#\o</span> <span class="character">#\b</span> <span class="character">#\a</span> <span class="character">#\r</span></span>)</span></span></code></pre>
+
+<p>リスト専用のものとしては<code>APPEND</code>がある。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">append '<span class="paren2">(<span class="code">1 2 3 4</span>)</span> '<span class="paren2">(<span class="code">9 10 11 12</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">1 2 3 4 9 10 11 12</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="character">'A'</span><span class="variable">:</span><span class="string">" SMALL CAT"</span>
+<span class="string">"A SMALL CAT"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> 5<span class="variable">:</span><span class="paren1">[<span class="code">1,2,3,4,5</span>]</span>
+<span class="paren1">[<span class="code">5,1,2,3,4,5</span>]</span></span></code></pre>
+
+<p>Common Lispに於いて文字列はアトムであってリストではない。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">cons <span class="character">#\A</span> <span class="string">" SMALL CAT"</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="character">#\A</span> . <span class="string">" SMALL CAT"</span></span>)</span></span></code></pre>
+
+<p>Common Lispに於いて文字（CHARACTER）は列（SEQUENCE）ではない。
+よって文字と文字列の連結は<code>CONCATENATE</code>ではできない。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">concatenate 'string <span class="character">#\A</span> <span class="string">" SMALL CAT"</span></span>)</span>
+<span class="comment">;; ERROR.</span></span></code></pre>
+
+<p><code>UIOP:STRCAT</code>を使うのがよい。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">uiop:strcat <span class="character">#\A</span> <span class="string">" SMALL CAT"</span></span>)</span>
+"A SMALL CAT"</span></code></pre>
+
+<p><code>CONS</code>はリストをコンストラクトするためのオペレータである。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">cons 5 '<span class="paren2">(<span class="code">1 2 3 4 5</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">5 1 2 3 4 5</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="string">"Steve Buscemi"</span> <span class="atom">!!</span> 6
+<span class="character">'B'</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">9<span class="atom">.</span>4,33<span class="atom">.</span>2,96<span class="atom">.</span>2,11<span class="atom">.</span>2,23<span class="atom">.</span>25</span>]</span> <span class="atom">!!</span> 1
+<span class="function">33</span><span class="atom">.</span>2</span></code></pre>
+
+<p>Haskellの<code>!!</code>はCommon Lispの<code>ELT</code>に相当する。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">elt <span class="string">"Steve Buscemi"</span> 6</span>)</span>
+#\B
+cl-user&gt; <span class="paren1">(<span class="code">elt '<span class="paren2">(<span class="code">9.4 33.2 96.2 11.2 23.25</span>)</span> 1</span>)</span>
+33.2</span></code></pre>
+
+<p><code>ELT</code>は型によるディスパッチを必要とするのでその分遅い。
+より具体的な型に特定化されたアクセサがあるので、必要ならそれらを使う。</p>
+
+<pre><code><span class="code"><span class="comment">;; String spcific.
+</span>cl-user&gt; <span class="paren1">(<span class="code">char <span class="string">"Steve Buscemi"</span> 6</span>)</span>
+#\B
+<span class="comment">;; Simple string specific.
+</span>cl-user&gt; <span class="paren1">(<span class="code">schar <span class="string">"Steve Buscemi"</span> 6</span>)</span>
+#\B
+<span class="comment">;; Array specific.
+</span>cl-user&gt; <span class="paren1">(<span class="code">aref #<span class="paren2">(<span class="code">5 4 3</span>)</span> 0</span>)</span>
+5
+<span class="comment">;; Simple vector specific.
+</span>cl-user&gt; <span class="paren1">(<span class="code">svref #<span class="paren2">(<span class="code">5 4 3</span>)</span> 0</span>)</span>
+5
+<span class="comment">;; List specific.
+</span>cl-user&gt; <span class="paren1">(<span class="code">nth 0 '<span class="paren2">(<span class="code">1 2 3</span>)</span></span>)</span>
+1</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="keyword">let</span> b <span class="keyword">=</span> <span class="paren1">[<span class="code"><span class="paren2">[<span class="code">1,2,3,4</span>]</span>,<span class="paren2">[<span class="code">5,3,3,3</span>]</span>,<span class="paren2">[<span class="code">1,2,2,3,4</span>]</span>,<span class="paren2">[<span class="code">1,2,3</span>]</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> b
+<span class="paren1">[<span class="code"><span class="paren2">[<span class="code">1,2,3,4</span>]</span>,<span class="paren2">[<span class="code">5,3,3,3</span>]</span>,<span class="paren2">[<span class="code">1,2,2,3,4</span>]</span>,<span class="paren2">[<span class="code">1,2,3</span>]</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> b <span class="atom">++</span> <span class="paren1">[<span class="code"><span class="paren2">[<span class="code">1,1,1,1</span>]</span></span>]</span>
+<span class="paren1">[<span class="code"><span class="paren2">[<span class="code">1,2,3,4</span>]</span>,<span class="paren2">[<span class="code">5,3,3,3</span>]</span>,<span class="paren2">[<span class="code">1,2,2,3,4</span>]</span>,<span class="paren2">[<span class="code">1,2,3</span>]</span>,<span class="paren2">[<span class="code">1,1,1,1</span>]</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">6,6,6</span>]</span><span class="variable">:</span>b
+<span class="paren1">[<span class="code"><span class="paren2">[<span class="code">6,6,6</span>]</span><span class="paren2">[<span class="code">1,2,3,4</span>]</span>,<span class="paren2">[<span class="code">5,3,3,3</span>]</span>,<span class="paren2">[<span class="code">1,2,2,3,4</span>]</span>,<span class="paren2">[<span class="code">1,2,3</span>]</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> b <span class="atom">!!</span> 2
+<span class="paren1">[<span class="code">1,2,2,3,4</span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*b*</span> '<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">1 2 3 4</span>)</span><span class="paren3">(<span class="code">5 3 3 3</span>)</span><span class="paren3">(<span class="code">1 2 2 3 4</span>)</span><span class="paren3">(<span class="code">1 2 3</span>)</span></span>)</span></span>)</span>
+*B*
+cl-user&gt; *b*
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">1 2 3 4</span>)</span><span class="paren2">(<span class="code">5 3 3 3</span>)</span><span class="paren2">(<span class="code">1 2 2 3 4</span>)</span><span class="paren2">(<span class="code">1 2 3</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">append <span class="special">*b*</span> '<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">1 1 1 1</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">1 2 3 4</span>)</span><span class="paren2">(<span class="code">5 3 3 3</span>)</span><span class="paren2">(<span class="code">1 2 2 3 4</span>)</span><span class="paren2">(<span class="code">1 2 3</span>)</span><span class="paren2">(<span class="code">1 1 1 1</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">cons '<span class="paren2">(<span class="code">6 6 6</span>)</span> <span class="special">*b*</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">6 6 6</span>)</span><span class="paren2">(<span class="code">1 2 3 4</span>)</span><span class="paren2">(<span class="code">5 3 3 3</span>)</span><span class="paren2">(<span class="code">1 2 2 3 4</span>)</span><span class="paren2">(<span class="code">1 2 3</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">nth 2 <span class="special">*b*</span></span>)</span>
+<span class="paren1">(<span class="code">1 2 2 3 4</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">3,2,1</span>]</span> <span class="atom">&gt;</span> <span class="paren1">[<span class="code">2,1,0</span>]</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">3,2,1</span>]</span> <span class="atom">&gt;</span> <span class="paren1">[<span class="code">2,10,100</span>]</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">3,4,2</span>]</span> <span class="atom">&lt;</span> <span class="paren1">[<span class="code">3,4,3</span>]</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">3,4,2</span>]</span> <span class="atom">&gt;</span> <span class="paren1">[<span class="code">2,4</span>]</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">3,4,2</span>]</span> <span class="atom">==</span> <span class="paren1">[<span class="code">3,4,2</span>]</span>
+<span class="variable">True</span></span></code></pre>
+
+<p>Common Lispにリストの比較関数は存在しない。
+上記haskellコードと同様のセマンティクスは<code>SOME</code>を使うことで再現出来る。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">some #'&gt; '<span class="paren2">(<span class="code">3 2 1</span>)</span>'<span class="paren2">(<span class="code">2 1 0</span>)</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">some #'&gt; '<span class="paren2">(<span class="code">3 2 1</span>)</span> '<span class="paren2">(<span class="code">2 10 100</span>)</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">some #'&lt; '<span class="paren2">(<span class="code">3 4 2</span>)</span> '<span class="paren2">(<span class="code">3 4 3</span>)</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">some #'&gt; '<span class="paren2">(<span class="code">3 4 2</span>)</span> '<span class="paren2">(<span class="code">2 4</span>)</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">equal '<span class="paren2">(<span class="code">3 4 2</span>)</span> '<span class="paren2">(<span class="code">3 4 2</span>)</span></span>)</span>
+T</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> head <span class="paren1">[<span class="code">5,4,3,2,1</span>]</span>
+<span class="function">5</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> tail <span class="paren1">[<span class="code">5,4,3,2,1</span>]</span>
+<span class="paren1">[<span class="code">4,3,2,1</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> last <span class="paren1">[<span class="code">5,4,3,2,1</span>]</span>
+<span class="function">1</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> init <span class="paren1">[<span class="code">5,4,3,2,1</span>]</span>
+<span class="paren1">[<span class="code">5,4,3,2</span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">car '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span></span>)</span>
+5
+cl-user&gt; <span class="paren1">(<span class="code">cdr '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">4 3 2 1</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">first '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span></span>)</span>
+5
+cl-user&gt; <span class="paren1">(<span class="code">rest '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">4 3 2 1</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">last '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">1</span>)</span></span></code></pre>
+
+<p>Common Lispの<code>LAST</code>は最後の<em>コンス</em>を返すという仕様である。
+要素が欲しいなら<code>alexandria:lastcar</code>を使う。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">alexandria:lastcar '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span></span>)</span>
+1</span></code></pre>
+
+<p><code>LASTCAR</code>は名前が示す通りリスト専用である。
+シーケンスに使いたいなら<code>alexandria:last-elt</code>が使える。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">alexandria:last-elt <span class="string">"foobar"</span></span>)</span>
+#/r</span></code></pre>
+
+<p>Common Lispに於いて<code>init</code>に相当するのは<code>BUTLAST</code>である。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">butlast '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">5 4 3 2</span>)</span></span></code></pre>
+
+<p>なお、<code>LAST</code>と<code>BUTLAST</code>はオプショナルな引数を受け付ける。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">butlast '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span> 2</span>)</span>
+<span class="paren1">(<span class="code">5 4 3</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">last '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span> 2</span>)</span>
+<span class="paren1">(<span class="code">2 1</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> head <span class="paren1">[<span class="code"></span>]</span>
+<span class="atom">***</span> <span class="variable">ERROR</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">elt <span class="paren2">(<span class="code"></span>)</span> 0</span>)</span>
+<span class="comment">;; ERROR
+</span>cl-user&gt; <span class="paren1">(<span class="code">car <span class="paren2">(<span class="code"></span>)</span></span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">cdr <span class="paren2">(<span class="code"></span>)</span></span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">last<span class="paren2">(<span class="code"></span>)</span></span>)</span>
+NIL
+cl-suer&gt; <span class="paren1">(<span class="code">butlast <span class="paren2">(<span class="code"></span>)</span></span>)</span>
+NIL</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> length <span class="paren1">[<span class="code">5,4,3,2,1</span>]</span>
+<span class="function">5</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">length '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span></span>)</span>
+5</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> null <span class="paren1">[<span class="code">1,2,3</span>]</span>
+<span class="variable">False</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> null <span class="paren1">[<span class="code"></span>]</span>
+<span class="variable">True</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">null '<span class="paren2">(<span class="code">1 2 3</span>)</span></span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">null <span class="paren2">(<span class="code"></span>)</span></span>)</span>
+T</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> reverse <span class="paren1">[<span class="code">5,4,3,2,1</span>]</span>
+<span class="paren1">[<span class="code">1,2,3,4,5</span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">reverse '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">1 2 3 4 5</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> take 3 <span class="paren1">[<span class="code">5,4,3,2,1</span>]</span>
+<span class="paren1">[<span class="code">5,4,3</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> take 1 <span class="paren1">[<span class="code">3,9,3</span>]</span>
+<span class="paren1">[<span class="code">3</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> take 5 <span class="paren1">[<span class="code">1,2</span>]</span>
+<span class="paren1">[<span class="code">1,2</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> take 0 <span class="paren1">[<span class="code">6,6,6</span>]</span>
+<span class="paren1">[<span class="code"></span>]</span></span></code></pre>
+
+<p>Haskellに於ける<code>take</code>はCommon Lispに於いて<code>SUBSEQ</code>が相当する。
+ただし、いささか勝手が異なる。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">subseq '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span> 0 3</span>)</span>
+<span class="paren1">(<span class="code">5 4 3</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">subseq '<span class="paren2">(<span class="code">3 9 3</span>)</span> 0 1</span>)</span>
+<span class="paren1">(<span class="code">3</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">subseq '<span class="paren2">(<span class="code">1 2</span>)</span> 0 5</span>)</span>
+<span class="comment">;; ERROR
+</span>cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> elt <span class="keyword">:in</span> '<span class="paren2">(<span class="code">1 2</span>)</span>
+               <span class="keyword">:repeat</span> 5
+               <span class="keyword">:collect</span> elt</span>)</span>
+<span class="paren1">(<span class="code">1 2</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">subseq '<span class="paren2">(<span class="code">6 6 6</span>)</span> 0 0</span>)</span>
+NIL</span></code></pre>
+
+<p>完全に同じセマンティクスのものが欲しいなら、SERAPEUMの<code>TAKE</code>が使える。
+incf-clにも<code>TAKE</code>はあるが、リスト専用である。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">serapeum:take 3 '<span class="paren2">(<span class="code">5 4 3 2 1</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">5 4 3</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">serapeum:take 1 '<span class="paren2">(<span class="code">3 9 3</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">3</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">serapeum:take 5 '<span class="paren2">(<span class="code">1 2</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">1 2</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">serapeum:take 0 '<span class="paren2">(<span class="code">6 6 6</span>)</span></span>)</span>
+NIL</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> drop 3 <span class="paren1">[<span class="code">8,4,2,1,5,6</span>]</span>
+<span class="paren1">[<span class="code">1,5,6</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> drop 0 <span class="paren1">[<span class="code">1,2,3,4</span>]</span>
+<span class="paren1">[<span class="code">1,2,3,4</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> drop 100 <span class="paren1">[<span class="code">1,2,3,4</span>]</span>
+<span class="paren1">[<span class="code"></span>]</span></span></code></pre>
+
+<p>Haskellの<code>drop</code>はCommon Lispに於いては<code>NTHCDR</code>が相当する。
+ただし、名前の通り<code>NTHCDR</code>はリスト専用である。
+文字列にも使いたいならSERAPEUMの<code>DROP</code>が使える。
+incf-clにも<code>DROP</code>はあるが、リスト専用である。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">nthcdr 3 '<span class="paren2">(<span class="code">8 4 2 1 5 6</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">1 5 6</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">nthcdr 0 '<span class="paren2">(<span class="code">1 2 3 4</span>)</span></span>)</span>
 <span class="paren1">(<span class="code">1 2 3 4</span>)</span>
-cl-user&gt; <span class="paren1">(<span class="code">sort '<span class="paren2">(<span class="code">1 3 2 4</span>)</span> #'&gt;</span>)</span>
-<span class="paren1">(<span class="code">4 3 2 1</span>)</span></span></code></pre>
+cl-user&gt; <span class="paren1">(<span class="code">nthcdr 100 '<span class="paren2">(<span class="code">1 2 3 4</span>)</span></span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">nthcdr 3 <span class="string">"foobar"</span></span>)</span>
+<span class="comment">;; ERROR
+</span>cl-user&gt; <span class="paren1">(<span class="code">serapeum:drop 3 <span class="string">"foobar"</span></span>)</span>
+"bar"</span></code></pre>
 
-<p>また、<code>:KEY</code>キーワード引数にも対応している。</p>
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> maximum <span class="paren1">[<span class="code">1,9,2,3,4</span>]</span>
+<span class="function">9</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> minimum <span class="paren1">[<span class="code">8,4,2,1,5,6</span>]</span>
+<span class="function">1</span></span></code></pre>
 
-<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">defstruct</span></i> person name age</span>)</span>
-PERSON
-cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> persons <span class="paren2">(<span class="code">list <span class="paren3">(<span class="code">make-person <span class="keyword">:name</span> <span class="string">"a"</span> <span class="keyword">:age</span> 1</span>)</span>
-                               <span class="paren3">(<span class="code">make-person <span class="keyword">:name</span> <span class="string">"b"</span> <span class="keyword">:age</span> 2</span>)</span>
-                               <span class="paren3">(<span class="code">make-person <span class="keyword">:name</span> <span class="string">"c"</span> <span class="keyword">:age</span> 3</span>)</span>
-                               <span class="paren3">(<span class="code">make-person <span class="keyword">:name</span> <span class="string">"d"</span> <span class="keyword">:age</span> 4</span>)</span></span>)</span></span>)</span>
-PERSONS
-cl-user&gt; <span class="paren1">(<span class="code">sort persons #'&gt; <span class="keyword">:key</span> #'person-age</span>)</span>
-<span class="paren1">(<span class="code">#S<span class="paren2">(<span class="code">PERSON <span class="keyword">:NAME</span> <span class="string">"d"</span> <span class="keyword">:AGE</span> 4</span>)</span> #S<span class="paren2">(<span class="code">PERSON <span class="keyword">:NAME</span> <span class="string">"c"</span> <span class="keyword">:AGE</span> 3</span>)</span>
- #S<span class="paren2">(<span class="code">PERSON <span class="keyword">:NAME</span> <span class="string">"b"</span> <span class="keyword">:AGE</span> 2</span>)</span> #S<span class="paren2">(<span class="code">PERSON <span class="keyword">:NAME</span> <span class="string">"a"</span> <span class="keyword">:AGE</span> 1</span>)</span></span>)</span></span></code></pre>
+<p>Common Lispに上記相当の関数はない。
+<code>APPLY</code>でなんとかする。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">apply #'max '<span class="paren2">(<span class="code">1 9 2 3 4</span>)</span></span>)</span>
+9
+cl-user&gt; <span class="paren1">(<span class="code">max 1 9 2 3 4</span>)</span>
+9
+cl-user&gt; <span class="paren1">(<span class="code">apply #'min '<span class="paren2">(<span class="code">8 4 2 1 5 6</span>)</span></span>)</span>
+1
+cl-user&gt; <span class="paren1">(<span class="code">min 8 4 2 1 5 6</span>)</span>
+1</span></code></pre>
+
+<p>以下の<code>sum</code>、<code>product</code>も同様である。
+この辺、余計な名前を覚えなくて良い分、Common Lispの方がスッキリしている印象ではあるが、Haskellの関数がデフォルトでカリー化されているという仕様を鑑みれば、まぁ、必要だよなぁ、とも思う。</p>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> sum <span class="paren1">[<span class="code">5,2,1,6,3,2,5,7</span>]</span>
+<span class="function">31</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> product <span class="paren1">[<span class="code">6,2,1,2</span>]</span>
+<span class="function">24</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> product <span class="paren1">[<span class="code">1,2,5,6,7,9,2,0</span>]</span>
+<span class="function">0</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">apply #'+ '<span class="paren2">(<span class="code">5 2 1 6 3 2 5 7</span>)</span></span>)</span>
+31
+cl-user&gt; <span class="paren1">(<span class="code">+ 5 2 1 6 3 2 5 7</span>)</span>
+31
+cl-user&gt; <span class="paren1">(<span class="code">apply #'* '<span class="paren2">(<span class="code">6 2 1 2</span>)</span></span>)</span>
+24
+cl-user&gt; <span class="paren1">(<span class="code">* 6 2 1 2</span>)</span>
+24
+cl-user&gt; <span class="paren1">(<span class="code">apply #'* '<span class="paren2">(<span class="code">1 2 5 6 7 9 2 0</span>)</span></span>)</span>
+0
+cl-user&gt; <span class="paren1">(<span class="code">* 1 2 5 6 7 9 2 0</span>)</span>
+0</span></code></pre>
+
+<p>Haskellの<code>elem</code>はおよそCommon Lispの<code>FIND</code>に相当していると言える。</p>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> 4 <span class="atom">`elem`</span> <span class="paren1">[<span class="code">3,4,5,6</span>]</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> 10 <span class="atom">`elem`</span> <span class="paren1">[<span class="code">3,4,5,6</span>]</span>
+<span class="variable">False</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">find 4 '<span class="paren2">(<span class="code">3 4 5 6</span>)</span></span>)</span>
+4
+cl-user&gt; <span class="paren1">(<span class="code">find 10 '<span class="paren2">(<span class="code">3 4 5 6</span>)</span></span>)</span>
+NIL</span></code></pre>
+
+<p>なお、<code>FIND</code>は見つけたものを返すので<code>NIL</code>を見つけられない。
+そのような場合、<code>POSITION</code>を使う。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">find nil '<span class="paren2">(<span class="code">1 nil 2</span>)</span></span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">position nil '<span class="paren2">(<span class="code">1 nil 2</span>)</span></span>)</span>
+1</span></code></pre>
+
+<h2>1.4</h2>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">1<span class="keyword">..</span>20</span>]</span>
+<span class="paren1">[<span class="code">1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code"><span class="character">'a'</span><span class="keyword">..</span><span class="character">'z'</span></span>]</span>
+<span class="string">"abcdefghijklmnopqrstuvwxyz"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code"><span class="character">'K'</span><span class="keyword">..</span><span class="character">'Z'</span></span>]</span>
+<span class="string">"KLMNOPQRSTUVWXYZ"</span></span></code></pre>
+
+<p>Common Lispに上記機能はない。
+<code>Ord</code>という型と、後継者関数<code>succ</code>の存在が大きい。
+これはHaskellの綺麗さの一旦であろうと思う。
+文字列がリストだというのも一役かってそう。
+ただ、Haskellerの中でも文字列がリストなのは間違いだという意見もあるらしく、どうなるものやら。</p>
+
+<p>整数のレンジを求めるだけならINCF-CLの<code>RANGE</code>が使える。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">incf-cl:range 1 20</span>)</span>
+<span class="paren1">(<span class="code">1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20</span>)</span></span></code></pre>
+
+<p>文字のレンジから文字列を求めるのは、それ用のユーティリティも見当たらず、必要なら自作するしかない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> char-range<span class="paren2">(<span class="code">x y</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">code-x<span class="paren5">(<span class="code">char-code x</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">code-y<span class="paren5">(<span class="code">char-code y</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">string<span class="paren5">(<span class="code">make-string<span class="paren6">(<span class="code">1+<span class="paren1">(<span class="code">- code-y code-x</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> n <span class="keyword">:upfrom</span> code-x <span class="keyword">:to</span> code-y
+          <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+          <span class="keyword">:do</span><span class="paren4">(<span class="code">setf<span class="paren5">(<span class="code">char string i</span>)</span><span class="paren5">(<span class="code">code-char n</span>)</span></span>)</span></span>)</span>
+    string</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">char-range <span class="character">#\a</span> <span class="character">#\z</span></span>)</span>
+"abcdefghijklmnopqrstuvwxyz"
+cl-user&gt; <span class="paren1">(<span class="code">char-range <span class="character">#\K</span> <span class="character">#\Z</span></span>)</span>
+"KLMNOPQRSTUVWXYZ"</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">2,4<span class="keyword">..</span>20</span>]</span>
+<span class="paren1">[<span class="code">2,4,6,8,10,12,14,16,18,20</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">3,6<span class="keyword">..</span>20</span>]</span>
+<span class="paren1">[<span class="code">3,6,9,12,15,18</span>]</span></span></code></pre>
+
+<p>Common Lispでは<code>LOOP</code>マクロが割と強力なので、<code>LOOP</code>でなんとかするCLerが多いのではないかと思われる。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> e <span class="keyword">:upfrom</span> 2 <span class="keyword">:to</span> 20 <span class="keyword">:by</span> 2 <span class="keyword">:collect</span> e</span>)</span>
+<span class="paren1">(<span class="code">2 4 6 8 10 12 14 16 18 20</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">incf-cl:range 2 2 20</span>)</span>
+<span class="paren1">(<span class="code">2 4 6 8 10 12 14 16 18 20</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> e <span class="keyword">:upfrom</span> 6 <span class="keyword">:to</span> 20 <span class="keyword">:by</span> 3 <span class="keyword">:collect</span> e</span>)</span>
+<span class="paren1">(<span class="code">6 9 12 15 18</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">incf-cl:range 6 3 20</span>)</span>
+<span class="paren1">(<span class="code">6 9 12 15 18</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">1,2,4,8,16<span class="keyword">..</span>100</span>]</span>
+;; <span class="variable">Does</span> not work<span class="atom">.</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 1 <span class="keyword">:for</span> expt = <span class="paren2">(<span class="code">expt 2 i</span>)</span> <span class="keyword">:while</span> <span class="paren2">(<span class="code">&lt; expt 100</span>)</span> <span class="keyword">:collect</span> expt</span>)</span>
+<span class="paren1">(<span class="code">2 4 8 16 32 64</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">20,19<span class="keyword">..</span>1</span>]</span>
+<span class="paren1">[<span class="code">20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">20<span class="keyword">..</span>1</span>]</span>
+<span class="paren1">[<span class="code"></span>]</span></span></code></pre>
+
+<p>icf-clの<code>RANGE</code>は降順をサポートしていない。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:downfrom</span> 20 <span class="keyword">:to</span> 1 <span class="keyword">:collect</span> i</span>)</span>
+<span class="paren1">(<span class="code">20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 20 <span class="keyword">:to</span> 1 <span class="keyword">:collect</span> i</span>)</span>
+NIL</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">13,26<span class="keyword">..</span>24<span class="atom">*</span>13</span>]</span>
+<span class="paren1">[<span class="code">13,26,39,52,65,78,91,104,117,130,143,156,169,182,195,208,221,234,247,260,273,286,299,312</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> take 24 <span class="paren1">[<span class="code">13,26<span class="keyword">..</span></span>]</span>
+<span class="paren1">[<span class="code">13,26,39,52,65,78,91,104,117,130,143,156,169,182,195,208,221,234,247,260,273,286,299,312</span>]</span></span></code></pre>
+
+<p>無限リストを扱うなら<code>SERIES</code>が使える。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 13 <span class="keyword">:by</span> 13 <span class="keyword">:repeat</span> 24 <span class="keyword">:collect</span> i</span>)</span>
+<span class="paren1">(<span class="code">13 26 39 52 65 78 91 104 117 130 143 156 169 182 195 208 221 234 247 260 273 286 299 312</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">series:collect <span class="paren2">(<span class="code">series:scan-range <span class="keyword">:from</span> 13 <span class="keyword">:by</span> 13 <span class="keyword">:length</span> 24</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">13 26 39 52 65 78 91 104 117 130 143 156 169 182 195 208 221 234 247 260 273 286 299 312</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> take 10 <span class="paren1">(<span class="code">cycle <span class="paren2">[<span class="code">1,2,3</span>]</span></span>)</span>
+<span class="paren1">[<span class="code">1,2,3,1,2,3,1,2,3,1</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> take 12 <span class="paren1">(<span class="code">cycle <span class="string">"LOL "</span></span>)</span>
+<span class="string">"LOL LOL LOL "</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">incf-cl:take 10 <span class="paren2">(<span class="code">incf-cl:cycle '<span class="paren3">(<span class="code">1 2 3</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">1 2 3 1 2 3 1 2 3 1</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">series:collect<span class="paren2">(<span class="code">series:subseries<span class="paren3">(<span class="code">series:series 1 2 3</span>)</span>0 10</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">1 2 3 1 2 3 1 2 3 1</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">series:collect 'string <span class="paren2">(<span class="code">series:subseries <span class="paren3">(<span class="code">series:series . #.<span class="paren4">(<span class="code">coerce <span class="string">"LOL "</span> 'list</span>)</span></span>)</span>
+                                                   0 12</span>)</span></span>)</span>
+"LOL LOL LOL "
+cl-user&gt; <span class="paren1">(<span class="code">coerce <span class="paren2">(<span class="code">incf-cl:take 12 <span class="paren3">(<span class="code">incf-cl:cycle<span class="paren4">(<span class="code">coerce <span class="string">"LOL "</span> 'list</span>)</span></span>)</span></span>)</span>'string</span>)</span>
+"LOL LOL LOL "</span></code></pre>
+
+<p>なお、効率はSERIESの方が良い。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">series:collect 'string <span class="paren3">(<span class="code">series:subseries <span class="paren4">(<span class="code">series:series . #.<span class="paren5">(<span class="code">coerce <span class="string">"LOL "</span> 'list</span>)</span></span>)</span>
+                                            0 12</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">compile nil *</span>)</span>
+<span class="paren1">(<span class="code">time<span class="paren2">(<span class="code">funcall *</span>)</span></span>)</span>
+<span class="comment">;; 19,076 processor cycles, 0 byte consed.
+</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">coerce <span class="paren3">(<span class="code">incf-cl:take 12 <span class="paren4">(<span class="code">incf-cl:cycle '#.<span class="paren5">(<span class="code">coerce <span class="string">"LOL "</span> 'list</span>)</span></span>)</span></span>)</span>'string</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">compile nil *</span>)</span>
+<span class="paren1">(<span class="code">time<span class="paren2">(<span class="code">funcall *</span>)</span></span>)</span>
+<span class="comment">;; 95,076 processor cycles, 0 byte consed.</span></span></code></pre>
+
+<p>マクロ展開のオーバーヘッドを効率に入れないよう、コンパイルしてから計測している点注意。
+上記のコストは完全に実行時のコストである。</p>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> take 10 <span class="paren1">(<span class="code">repeat 5</span>)</span>
+<span class="paren1">[<span class="code">5,5,5,5,5,5,5,5,5,5</span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">series:collect<span class="paren2">(<span class="code">series:subseries<span class="paren3">(<span class="code">series:series 5</span>)</span>0 10</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">5 5 5 5 5 5 5 5 5 5</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> replicate 3 10
+<span class="paren1">[<span class="code">10,10,10</span>]</span></span></code></pre>
+
+<p>Haskellの<code>replicate</code>はCommon Lispに於いては<code>MAKE-LIST</code>に相当する。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">make-list 3 <span class="keyword">:initial-element</span> 10</span>)</span>
+<span class="paren1">(<span class="code">10 10 10</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">0<span class="atom">.</span>1,0<span class="atom">.</span>3 <span class="keyword">..</span> 1</span>]</span>
+<span class="paren1">[<span class="code">0<span class="atom">.</span>1,0<span class="atom">.</span>3,0<span class="atom">.</span>5,0<span class="atom">.</span>7,0<span class="atom">.</span>8999999999999999,0<span class="atom">.</span>999999999999999</span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> f <span class="keyword">:upfrom</span> 0.1 <span class="keyword">:to</span> 1 <span class="keyword">:by</span> 0.2 <span class="keyword">:collect</span> f</span>)</span>
+<span class="paren1">(<span class="code">0.1 0.3 0.5 0.7 0.900000004</span>)</span></span></code></pre>
+
+<h2>1.5</h2>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">x<span class="atom">*</span>2 <span class="keyword">|</span> x <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code">1<span class="keyword">..</span>10</span>]</span></span>]</span>
+<span class="paren1">[<span class="code">2,4,6,8,10,12,14,16,18,20</span>]</span></span></code></pre>
+
+<p>リスト内包表記にはINCF-CLの<code>LC</code>が使える。
+素の<code>LOOP</code>マクロでも多くをまかなえる。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 1 <span class="keyword">:to</span> 10 <span class="keyword">:collect</span> <span class="paren2">(<span class="code">* i 2</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">2 4 6 8 10 12 14 16 18 20</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">incf-cl:lc <span class="paren2">(<span class="code">* x 2</span>)</span><span class="paren2">(<span class="code">incf-cl:&lt;- x <span class="paren3">(<span class="code">incf-cl:range 1 10</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">2 4 6 8 10 12 14 16 18 20</span>)</span></span></code></pre>
+
+<p>単純な例では<code>LOOP</code>の方が効率がいい。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren2">(<span class="code"></span>)</span><span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 1 <span class="keyword">:to</span> 10 <span class="keyword">:collect</span> <span class="paren3">(<span class="code">* i 2</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">compile nil *</span>)</span>
+<span class="paren1">(<span class="code">time<span class="paren2">(<span class="code">funcall *</span>)</span></span>)</span>
+<span class="comment">;; 6,308 processor cycles, 0 bytes consed.
+</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren2">(<span class="code"></span>)</span><span class="paren2">(<span class="code">incf-cl:lc <span class="paren3">(<span class="code">* x 2</span>)</span><span class="paren3">(<span class="code">incf-cl:&lt;- x <span class="paren4">(<span class="code">incf-cl:range 1 10</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">compile nil *</span>)</span>
+<span class="paren1">(<span class="code">time<span class="paren2">(<span class="code">funcall *</span>)</span></span>)</span>
+<span class="comment">;; 11,514 processor cycles, 0 bytes consed.</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">x<span class="atom">*</span>2 <span class="keyword">|</span> x <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code">1<span class="keyword">..</span>10</span>]</span>, x<span class="atom">*</span>2 <span class="atom">&gt;=</span> 12</span>]</span>
+<span class="paren1">[<span class="code">12,14,16,18,20</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">x <span class="keyword">|</span> x <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code">50<span class="keyword">..</span>100</span>]</span>, x <span class="atom">`mod`</span> 7 <span class="atom">==</span> 3</span>]</span>
+<span class="paren1">[<span class="code">52,59,66,73,80,87,94</span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> x <span class="keyword">:upfrom</span> 1 <span class="keyword">:to</span> 10
+               <span class="keyword">:for</span> y = <span class="paren2">(<span class="code">* x 2</span>)</span>
+               <span class="keyword">:when</span> <span class="paren2">(<span class="code">&gt;= y 12</span>)</span>
+               <span class="keyword">:collect</span> y</span>)</span>
+<span class="paren1">(<span class="code">12 14 16 18 20</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">incf-cl:lc <span class="paren2">(<span class="code">* x 2</span>)</span><span class="paren2">(<span class="code">incf-cl:&lt;- x <span class="paren3">(<span class="code">incf-cl:range 1 10</span>)</span></span>)</span><span class="paren2">(<span class="code">&gt;= <span class="paren3">(<span class="code">* x 2</span>)</span>12</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">12 14 16 18 20</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> x <span class="keyword">:upfrom</span> 50 <span class="keyword">:to</span> 100 <span class="keyword">:when</span> <span class="paren2">(<span class="code">= 3 <span class="paren3">(<span class="code">mod x 7</span>)</span></span>)</span> <span class="keyword">:collect</span> x</span>)</span>
+<span class="paren1">(<span class="code">52 59 66 73 80 87 94</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">incf-cl:lc x <span class="paren2">(<span class="code">incf-cl:&lt;- x <span class="paren3">(<span class="code">incf-cl:range 50 100</span>)</span></span>)</span><span class="paren2">(<span class="code">= <span class="paren3">(<span class="code">mod x 7</span>)</span>3</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">52 59 66 73 80 87 94</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">boomBangs</span> xs <span class="keyword">=</span> <span class="paren1">[<span class="code"> <span class="keyword">if</span> x <span class="atom">&lt;</span> 10 <span class="keyword">then</span> <span class="string">"BOOM!"</span> <span class="keyword">else</span> <span class="string">"BANG!"</span> <span class="keyword">|</span> x <span class="keyword">&lt;-</span> xs, odd x </span>]</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> boom-bangs <span class="paren2">(<span class="code">xs</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> x <span class="keyword">:in</span> xs
+        <span class="keyword">:when</span> <span class="paren3">(<span class="code">oddp x</span>)</span>
+        <span class="keyword">:collect</span> <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">&lt; x 10</span>)</span>
+                   <span class="string">"BOOM!"</span>
+                   <span class="string">"BANG!"</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> boomBangs <span class="paren1">[<span class="code">7<span class="keyword">..</span>13</span>]</span>
+<span class="paren1">[<span class="code"><span class="string">"BOOM!"</span>,<span class="string">"BOOM!"</span>,<span class="string">"BANG!"</span>,<span class="string">"BANG!"</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">boom-bangs<span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 7 <span class="keyword">:to</span> 13 <span class="keyword">:collect</span> i</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"BOOM!"</span> <span class="string">"BOOM!"</span> <span class="string">"BANG!"</span> <span class="string">"BANG!"</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code"> x <span class="keyword">|</span> x <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code">10<span class="keyword">..</span>20</span>]</span>,x <span class="atom">/=</span> 13, x <span class="atom">/=</span> 15, x <span class="atom">/=</span> 19</span>]</span>
+<span class="paren1">[<span class="code">10,11,12,14,16,17,18,20</span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 10 <span class="keyword">:to</span> 20
+               <span class="keyword">:unless</span> <span class="paren2">(<span class="code">find i '<span class="paren3">(<span class="code">13 15 19</span>)</span></span>)</span>
+               <span class="keyword">:collect</span> i</span>)</span>
+<span class="paren1">(<span class="code">10 11 12 14 16 17 18 20</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">incf-cl:lc x <span class="paren2">(<span class="code">incf-cl:&lt;- x <span class="paren3">(<span class="code">incf-cl:range 10 20</span>)</span></span>)</span><span class="paren2">(<span class="code">not<span class="paren3">(<span class="code">find x '<span class="paren4">(<span class="code">13 15 19</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">10 11 12 14 16 17 18 20</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">x<span class="atom">+</span>y <span class="keyword">|</span> x <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code">1,2,3</span>]</span>, <span class="paren2">[<span class="code">10,100,1000</span>]</span></span>]</span>
+<span class="paren1">[<span class="code">11,101,1001,12,102,1002,13,103,1003</span>]</span></span></code></pre>
+
+<p>素の<code>LOOP</code>で書くのが苦しくなってきた。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:in</span> '<span class="paren2">(<span class="code">1 2 3</span>)</span>
+               <span class="keyword">:nconc</span> <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> j <span class="keyword">:in</span> '<span class="paren3">(<span class="code">10 100 1000</span>)</span>
+                            <span class="keyword">:collect</span> <span class="paren3">(<span class="code">+ i j</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">11 101 1001 12 102 1002 13 103 1003</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">alexandria:map-product #'+ '<span class="paren2">(<span class="code">1 2 3</span>)</span> '<span class="paren2">(<span class="code">10 100 1000</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">11 101 1001 12 102 1002 13 103 1003</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">incf-cl:lc <span class="paren2">(<span class="code">+ x y</span>)</span><span class="paren2">(<span class="code">incf-cl:&lt;- x '<span class="paren3">(<span class="code">1 2 3</span>)</span></span>)</span><span class="paren2">(<span class="code">incf-cl:&lt;- y '<span class="paren3">(<span class="code">10 100 1000</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">11 101 1001 12 102 1002 13 103 1003</span>)</span></span></code></pre>
+
+<p>複雑な例になると効率差がなくなってくる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren2">(<span class="code"></span>)</span><span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:in</span> '<span class="paren3">(<span class="code">1 2 3</span>)</span>
+               <span class="keyword">:nconc</span> <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> j <span class="keyword">:in</span> '<span class="paren4">(<span class="code">10 100 1000</span>)</span>
+                            <span class="keyword">:collect</span> <span class="paren4">(<span class="code">+ i j</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">compile nil *</span>)</span>
+<span class="paren1">(<span class="code">time<span class="paren2">(<span class="code">funcall *</span>)</span></span>)</span>
+<span class="comment">;; 11,058 processor cycles, 0 byte consed.
+</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren2">(<span class="code"></span>)</span><span class="paren2">(<span class="code">alexandria:map-product #'+ '<span class="paren3">(<span class="code">1 2 3</span>)</span> '<span class="paren3">(<span class="code">10 100 1000</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">compile nil *</span>)</span>
+<span class="paren1">(<span class="code">time<span class="paren2">(<span class="code">funcall *</span>)</span></span>)</span>
+<span class="comment">;; 30,191 processor cycles, 0 byte consed.
+</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren2">(<span class="code"></span>)</span> <span class="paren2">(<span class="code">incf-cl:lc <span class="paren3">(<span class="code">+ x y</span>)</span><span class="paren3">(<span class="code">incf-cl:&lt;- x '<span class="paren4">(<span class="code">1 2 3</span>)</span></span>)</span><span class="paren3">(<span class="code">incf-cl:&lt;- y '<span class="paren4">(<span class="code">10 100 1000</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">compile nil *</span>)</span>
+<span class="paren1">(<span class="code">time<span class="paren2">(<span class="code">funcall *</span>)</span></span>)</span>
+<span class="comment">;; 13,471 processor cycles, 0 byte consed.</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code"> x<span class="atom">*</span>y <span class="keyword">|</span> x <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code">2,5,10</span>]</span>, y <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code">8,10,11</span>]</span>, x<span class="atom">*</span>y <span class="atom">&gt;</span> 50</span>]</span>
+<span class="paren1">[<span class="code">55,80,100,110</span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">remove-if-not <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">x</span>)</span><span class="paren3">(<span class="code">&gt; x 50</span>)</span></span>)</span>
+                        <span class="paren2">(<span class="code">alexandria:map-product #'* '<span class="paren3">(<span class="code">2 5 10</span>)</span>'<span class="paren3">(<span class="code">8 10 11</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">55 80 100 110</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> x <span class="keyword">:in</span> '<span class="paren2">(<span class="code">2 5 10</span>)</span>
+               <span class="keyword">:nconc</span> <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> y <span class="keyword">:in</span> '<span class="paren3">(<span class="code">8 10 11</span>)</span>
+                            <span class="keyword">:for</span> z = <span class="paren3">(<span class="code">* x y</span>)</span>
+                            <span class="keyword">:when</span> <span class="paren3">(<span class="code">&gt; z 50</span>)</span>
+                            <span class="keyword">:collect</span> z</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">55 80 100 110</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">incf-cl:lc <span class="paren2">(<span class="code">* x y</span>)</span><span class="paren2">(<span class="code">incf-cl:&lt;- x '<span class="paren3">(<span class="code">2 5 10</span>)</span></span>)</span><span class="paren2">(<span class="code">incf-cl:&lt;- y '<span class="paren3">(<span class="code">8 10 11</span>)</span></span>)</span><span class="paren2">(<span class="code">&gt; <span class="paren3">(<span class="code">* x y</span>)</span> 50</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">55 80 100 110</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="keyword">let</span> nouns <span class="keyword">=</span> <span class="paren1">[<span class="code"><span class="string">"hobo"</span>,<span class="string">"frog"</span>,<span class="string">"pope"</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="keyword">let</span> adjectives <span class="keyword">=</span> <span class="paren1">[<span class="code"><span class="string">"lazy"</span>,<span class="string">"grouchy"</span>,<span class="string">"scheming"</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">adjective <span class="atom">++</span> <span class="string">" "</span> <span class="atom">++</span> noun <span class="keyword">|</span> adjective <span class="keyword">&lt;-</span> adjectives, noun <span class="keyword">&lt;-</span> nouns</span>]</span>
+<span class="paren1">[<span class="code"><span class="string">"lazy hobo"</span>,<span class="string">"lazy frog"</span>,<span class="string">"lazy pope"</span>,<span class="string">"grouchy hobo"</span>,<span class="string">"grouchy frog"</span>,<span class="string">"grouchy pope"</span>,<span class="string">"scheming hobo"</span>,<span class="string">"scheming frog"</span>,<span class="string">"scheming pope"</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">nouns '<span class="paren4">(<span class="code"><span class="string">"hobo"</span> <span class="string">"frog"</span> <span class="string">"pope"</span></span>)</span></span>)</span>
+              <span class="paren3">(<span class="code">adjectives '<span class="paren4">(<span class="code"><span class="string">"lazy"</span> <span class="string">"grouchy"</span> <span class="string">"scheming"</span></span>)</span></span>)</span></span>)</span>
+           <span class="paren2">(<span class="code">alexandria:map-product <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">adjective noun</span>)</span>
+                                     <span class="paren4">(<span class="code">concatenate 'string adjective <span class="string">" "</span> noun</span>)</span></span>)</span>
+                                   adjectives
+                                   nouns</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"lazy hobo"</span> <span class="string">"lazy frog"</span> <span class="string">"lazy pope"</span> <span class="string">"grouchy hobo"</span> <span class="string">"grouchy frog"</span> <span class="string">"grouchy pope"</span> <span class="string">"scheming hobo"</span> <span class="string">"scheming frog"</span> <span class="string">"scheming pope"</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">incf-cl:lc<span class="paren2">(<span class="code">concatenate 'string adjuctive <span class="string">" "</span> noun</span>)</span>
+                    <span class="paren2">(<span class="code">incf-cl:&lt;- adjuctive '<span class="paren3">(<span class="code"><span class="string">"lazy"</span> <span class="string">"grouchy"</span> <span class="string">"scheming"</span></span>)</span></span>)</span>
+                    <span class="paren2">(<span class="code">incf-cl:&lt;- noun '<span class="paren3">(<span class="code"><span class="string">"hobo"</span> <span class="string">"frog"</span> <span class="string">"pope"</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"lazy hobo"</span> <span class="string">"lazy frog"</span> <span class="string">"lazy pope"</span> <span class="string">"grouchy hobo"</span> <span class="string">"grouchy frog"</span> <span class="string">"grouchy pope"</span> <span class="string">"scheming hobo"</span> <span class="string">"scheming frog"</span> <span class="string">"scheming pope"</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">length'</span> xs <span class="keyword">=</span> sum <span class="paren1">[<span class="code">1 <span class="keyword">|</span> _ <span class="keyword">&lt;-</span> xs</span>]</span></span></code></pre>
+
+<p>Common Lispに於いて<code>'</code>はマクロ文字なので通常シンボル名などには使えない。
+代わりに<code>%</code>を使うのが作法として定着している。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> length% <span class="paren2">(<span class="code">xs</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:in</span> xs <span class="keyword">:sum</span> 1</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">removeNonUppercase</span> st <span class="keyword">=</span> <span class="paren1">[<span class="code"> c <span class="keyword">|</span> c <span class="keyword">&lt;-</span> st, c <span class="atom">`elem`</span> <span class="paren2">[<span class="code"><span class="character">'A'</span><span class="keyword">..</span><span class="character">'Z'</span></span>]</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> removeNonUppercase <span class="string">"Hahaha! Ahahaha!"</span>
+<span class="string">"HA"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> removeNonUppercase <span class="string">"IdontLIKEFROGS"</span>
+<span class="string">"ILIKEFROGS"</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> remove-non-uppercase <span class="paren2">(<span class="code">string</span>)</span>
+  <span class="paren2">(<span class="code">remove-if-not #'upper-case-p string</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">remove-non-uppercase <span class="string">"Hahaha! Ahahaha!"</span></span>)</span>
+"HA"</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="keyword">let</span> xxs <span class="keyword">=</span> <span class="paren1">[<span class="code"><span class="paren2">[<span class="code">1,3,5,2,3,1,2,4,5</span>]</span>,<span class="paren2">[<span class="code">1,2,3,4,5,6,7,8,9</span>]</span>,<span class="paren2">[<span class="code">1,2,4,2,1,6,3,1,3,2,3,6</span>]</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code"> <span class="paren2">[<span class="code"> x <span class="keyword">|</span> x <span class="keyword">&lt;-</span> xs, even x </span>]</span> <span class="keyword">|</span> xs <span class="keyword">&lt;-</span> xxs </span>]</span>
+<span class="paren1">[<span class="code"><span class="paren2">[<span class="code">2,2,4</span>]</span>,<span class="paren2">[<span class="code">2,4,6,8</span>]</span>,<span class="paren2">[<span class="code">2,4,2,6,2,6</span>]</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*xxs*</span> '<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">1 3 5 2 3 1 2 4 5</span>)</span><span class="paren3">(<span class="code">1 2 3 4 5 6 7 8 9</span>)</span><span class="paren3">(<span class="code">1 2 4 2 1 6 3 1 3 2 3 6</span>)</span></span>)</span></span>)</span>
+*XXS*
+cl-user&gt; <span class="paren1">(<span class="code">mapcar <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">xs</span>)</span><span class="paren3">(<span class="code">remove-if #'oddp xs</span>)</span></span>)</span> <span class="special">*xxs*</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">2 2 4</span>)</span> <span class="paren2">(<span class="code">2 4 6 8</span>)</span> <span class="paren2">(<span class="code">2 4 2 6 2 6</span>)</span></span>)</span></span></code></pre>
+
+<h2>1.6</h2>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code">1, 3</span>)</span>
+<span class="paren1">(<span class="code">1,3</span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code">3, <span class="character">'a'</span>, <span class="string">"hello"</span></span>)</span>
+<span class="paren1">(<span class="code">3,'a',<span class="string">"hello"</span></span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code">50, 50<span class="atom">.</span>4, <span class="string">"hello"</span>, <span class="character">'b'</span></span>)</span>
+<span class="paren1">(<span class="code">50,50<span class="atom">.</span>4,<span class="string">"hello"</span>,<span class="character">'b'</span></span>)</span></span></code></pre>
+
+<p>Common LispにHaskellのタプルに相当する機能はない。
+リストで代用が可能だろうか。</p>
+
+<pre><code><span class="code">cl-user&gt; '<span class="paren1">(<span class="code">1 . 3</span>)</span>
+<span class="paren1">(<span class="code">1 . 3</span>)</span>
+cl-user&gt; '<span class="paren1">(<span class="code">3 . <span class="paren2">(<span class="code"><span class="character">#\a</span> . <span class="paren3">(<span class="code"><span class="string">"hello"</span> . nil</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">3 <span class="character">#\a</span> <span class="string">"hello"</span></span>)</span>
+cl-user&gt; '<span class="paren1">(<span class="code">50 . <span class="paren2">(<span class="code">50.4 . <span class="paren3">(<span class="code"><span class="string">"hello"</span> . <span class="paren4">(<span class="code"><span class="character">#\b</span> . nil</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">50 50.4 <span class="string">"hello"</span> <span class="character">#\b</span></span>)</span></span></code></pre>
+
+<p>型を明示的に指定したければ<code>DEFTYPE</code>を使う。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> int-tuple<span class="paren2">(<span class="code"></span>)</span>
+  '<span class="paren2">(<span class="code">cons integer integer</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> int-triple<span class="paren2">(<span class="code"></span>)</span>
+  '<span class="paren2">(<span class="code">cons integer <span class="paren3">(<span class="code">cons integer <span class="paren4">(<span class="code">cons integer null</span>)</span></span>)</span></span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">typep '<span class="paren2">(<span class="code">1 . 2</span>)</span> 'int-tuple</span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">typep '<span class="paren2">(<span class="code">1 . <span class="paren3">(<span class="code">2 . nil</span>)</span></span>)</span> 'int-tuple</span>)</span>
+NIL</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> fst <span class="paren1">(<span class="code">8, 11</span>)</span>
+<span class="function">8</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> fst <span class="paren1">(<span class="code"><span class="string">"Wow"</span>, <span class="variable">False</span></span>)</span>
+<span class="string">"Wow"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> snd <span class="paren1">(<span class="code">8, 11</span>)</span>
+<span class="function">11</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> snd <span class="paren1">(<span class="code"><span class="string">"Wow"</span>, <span class="variable">False</span></span>)</span>
+<span class="variable">False</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">car '<span class="paren2">(<span class="code">8 . 11</span>)</span></span>)</span>
+8
+cl-user&gt; <span class="paren1">(<span class="code">car '<span class="paren2">(<span class="code"><span class="string">"Wow"</span> . false</span>)</span></span>)</span>
+"Wow"
+cl-user&gt; <span class="paren1">(<span class="code">cdr '<span class="paren2">(<span class="code">8 . 11</span>)</span></span>)</span>
+11
+cl-user&gt; <span class="paren1">(<span class="code">cdr '<span class="paren2">(<span class="code"><span class="string">"Wow"</span> . false</span>)</span></span>)</span>
+FALSE</span></code></pre>
+
+<p>上記の<code>FALSE</code>はただのシンボルであり、True値である点要注意。</p>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> zip <span class="paren1">[<span class="code">1,2,3,4,5</span>]</span> <span class="paren1">[<span class="code">5,5,5,5,5</span>]</span>
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code">1,5</span>)</span>,<span class="paren2">(<span class="code">2,5</span>)</span>,<span class="paren2">(<span class="code">3,5</span>)</span>,<span class="paren2">(<span class="code">4,5</span>)</span>,<span class="paren2">(<span class="code">5,5</span>)</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> zip <span class="paren1">[<span class="code">1<span class="keyword">..</span>5</span>]</span> <span class="paren1">[<span class="code"><span class="string">"one"</span>, <span class="string">"two"</span>, <span class="string">"three"</span>, <span class="string">"four"</span>, <span class="string">"five"</span></span>]</span>
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code">1,<span class="string">"one"</span></span>)</span>,<span class="paren2">(<span class="code">2,<span class="string">"two"</span></span>)</span>,<span class="paren2">(<span class="code">3,<span class="string">"three"</span></span>)</span>,<span class="paren2">(<span class="code">4,<span class="string">"four"</span></span>)</span>,<span class="paren2">(<span class="code">5,five</span>)</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> zip <span class="paren1">[<span class="code">5,3,2,6,2,7,2,5,4,6,6</span>]</span><span class="paren1">[<span class="code"><span class="string">"im"</span>, <span class="string">"a"</span>, <span class="string">"turtle"</span></span>]</span>
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code">5,<span class="string">"im"</span></span>)</span>,<span class="paren2">(<span class="code">3,<span class="string">"a"</span></span>)</span>,<span class="paren2">(<span class="code">2,<span class="string">"turtle"</span></span>)</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> zip <span class="paren1">[<span class="code">1<span class="keyword">..</span></span>]</span><span class="paren1">[<span class="code"><span class="string">"apple"</span>, <span class="string">"orange"</span>, <span class="string">"cherry"</span>, <span class="string">"mango"</span></span>]</span>
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code">1,<span class="string">"apple"</span></span>)</span>,<span class="paren2">(<span class="code">2,<span class="string">"orrange"</span></span>)</span>,<span class="paren2">(<span class="code">3,<span class="string">"cherry"</span></span>)</span>,<span class="paren2">(<span class="code">4,<span class="string">"mango"</span></span>)</span></span>]</span></span></code></pre>
+
+<p>Haskellの<code>zip</code>はCommon Lispに於いては<code>MAPCAR</code>でおよそ再現できる。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">mapcar #'cons '<span class="paren2">(<span class="code">1 2 3 4 5</span>)</span>'<span class="paren2">(<span class="code">5 5 5 5 5</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">1 . 5</span>)</span><span class="paren2">(<span class="code">2 . 5</span>)</span><span class="paren2">(<span class="code">3 . 5</span>)</span><span class="paren2">(<span class="code">4 . 5</span>)</span><span class="paren2">(<span class="code">5 . 5</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">mapcar #'cons <span class="paren2">(<span class="code">incf-cl:range 1 5</span>)</span>'<span class="paren2">(<span class="code"><span class="string">"one"</span> <span class="string">"two"</span> <span class="string">"three"</span> <span class="string">"four"</span> <span class="string">"five"</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">1 . <span class="string">"one"</span></span>)</span><span class="paren2">(<span class="code">2 . <span class="string">"two"</span></span>)</span><span class="paren2">(<span class="code">3 . <span class="string">"three"</span></span>)</span><span class="paren2">(<span class="code">4 . <span class="string">"four"</span></span>)</span><span class="paren2">(<span class="code">5 . <span class="string">"five"</span></span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">mapcar #'cons '<span class="paren2">(<span class="code">5 3 2 6 2 7 2 5 4 6 6</span>)</span>'<span class="paren2">(<span class="code"><span class="string">"im"</span> <span class="string">"a"</span> <span class="string">"turtle"</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">5 . <span class="string">"im"</span></span>)</span><span class="paren2">(<span class="code">3 . <span class="string">"a"</span></span>)</span><span class="paren2">(<span class="code">2 . <span class="string">"turtle"</span></span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">series:collect<span class="paren2">(<span class="code">series:map-fn 'list #'cons <span class="paren3">(<span class="code">series:scan-range <span class="keyword">:from</span> 1</span>)</span><span class="paren3">(<span class="code">series:scan '<span class="paren4">(<span class="code"><span class="string">"apple"</span> <span class="string">"orrange"</span> <span class="string">"cherry"</span> <span class="string">"mango"</span></span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">1 . <span class="string">"apple"</span></span>)</span><span class="paren2">(<span class="code">2 . <span class="string">"orrange"</span></span>)</span><span class="paren2">(<span class="code">3 . <span class="string">"cherry"</span></span>)</span><span class="paren2">(<span class="code">4 . <span class="string">"mango"</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="keyword">let</span> rightTriangles <span class="keyword">=</span>  <span class="paren1">[<span class="code"> <span class="paren2">(<span class="code">a,b,c</span>)</span> <span class="keyword">|</span> c <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code">1<span class="keyword">..</span>10</span>]</span>, a <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code">1<span class="keyword">..</span>c</span>]</span>, b <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code">1<span class="keyword">..</span>a</span>]</span>, a<span class="atom">^</span>2 <span class="atom">+</span> b<span class="atom">^</span>2 <span class="atom">==</span> c<span class="atom">^</span>2, a<span class="atom">+</span>b<span class="atom">+</span>c <span class="atom">==</span> 24</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> rightTriangles
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code">8,6,10</span>)</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt;
+<span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> c <span class="keyword">:upfrom</span> 1 <span class="keyword">:to</span> 10
+      <span class="keyword">:nconc</span> <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> a <span class="keyword">:upfrom</span> 1 to c
+                   <span class="keyword">:nconc</span> <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> b <span class="keyword">:upfrom</span> 1 to a
+                                <span class="keyword">:when</span> <span class="paren4">(<span class="code">and <span class="paren5">(<span class="code">= <span class="paren6">(<span class="code">+ <span class="paren1">(<span class="code">expt a 2</span>)</span>
+                                                 <span class="paren1">(<span class="code">expt b 2</span>)</span></span>)</span>
+                                              <span class="paren6">(<span class="code">expt c 2</span>)</span></span>)</span>
+                                           <span class="paren5">(<span class="code">= 24 <span class="paren6">(<span class="code">+ a b c</span>)</span></span>)</span></span>)</span>
+                                <span class="keyword">:collect</span> <span class="paren4">(<span class="code">list a b c</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">8 6 10</span>)</span></span>)</span>
+
+cl-user&gt;
+<span class="paren1">(<span class="code">incf-cl:lc <span class="paren2">(<span class="code">list a b c</span>)</span>
+            <span class="paren2">(<span class="code">incf-cl:&lt;- c <span class="paren3">(<span class="code">incf-cl:range 1 10</span>)</span></span>)</span>
+            <span class="paren2">(<span class="code">incf-cl:&lt;- a <span class="paren3">(<span class="code">incf-cl:range 1 c</span>)</span></span>)</span>
+            <span class="paren2">(<span class="code">incf-cl:&lt;- b <span class="paren3">(<span class="code">incf-cl:range 1 a</span>)</span></span>)</span>
+            <span class="paren2">(<span class="code">= <span class="paren3">(<span class="code">infix-math:$ a infix-math:^ 2 + b infix-math:^ 2</span>)</span>
+               <span class="paren3">(<span class="code">infix-math:$ c infix-math:^ 2</span>)</span></span>)</span>
+            <span class="paren2">(<span class="code">= <span class="paren3">(<span class="code">infix-math:$ a + b + c</span>)</span> 24</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">8 6 10</span>)</span></span>)</span></span></code></pre>
+
+<p>本稿では例題コードをREPLに貼り付ければそのまま動くように、必ずパッケージ名をプリフィックスにつけて記してある。
+そのため、大変冗長であり、煩わしく見えるかもしれない。
+実際に使う場合は各種パッケージをUSEすることになるかと思われるので、プリフィックスを付ける必要はなくなるであろう。</p>
+
+<p>プリフィックスをつけない場合、上記コードは以下のようになる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">lc <span class="paren2">(<span class="code">list a b c</span>)</span> <span class="paren2">(<span class="code">&lt;- c <span class="paren3">(<span class="code">range 1 10</span>)</span></span>)</span> <span class="paren2">(<span class="code">&lt;- a <span class="paren3">(<span class="code">range 1 c</span>)</span></span>)</span> <span class="paren2">(<span class="code">&lt;- b <span class="paren3">(<span class="code">range 1 a</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">= <span class="paren3">(<span class="code">$ a ^ 2 + b ^ 2</span>)</span>
+       <span class="paren3">(<span class="code">$ c ^ 2</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">= <span class="paren3">(<span class="code">$ a + b + c</span>)</span> 24</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">8 6 10</span>)</span></span>)</span></span></code></pre>
 
 <footer>
   <a href='archives.html'>Archives
