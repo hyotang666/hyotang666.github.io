@@ -1,7 +1,7 @@
 # Common Lisp vs Haskell, Chapter 5
 ## Meta note
 ### 対象読者
-[前章](archives/cl-vs-haskell.4.html)を読了済みの者。
+[前章](cl-vs-haskell.4.html)を読了済みの者。
 
 ## Introduction
 本稿は「すごいH本」の内容をCommon Lispに翻訳しながらCLerがHaskellを学ぶその第5章である。
