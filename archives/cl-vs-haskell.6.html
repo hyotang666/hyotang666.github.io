@@ -1,0 +1,855 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>cl-vs-haskell.6
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>Common Lisp vs Haskell, Chapter 6</h1>
+
+<h2>Meta note</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="archives/cl-vs-haskell.5.html" >前章</a>を読了済みの者。</p>
+
+<h2>Introduction</h2>
+
+<p>本稿は「すごいH本」の内容をCommon Lispに翻訳しながらCLerがHaskellを学ぶその第6章である。
+本章ではHaskellのmoduleを、それに相当するCommon Lispのシステムに翻訳していきながら学習する。</p>
+
+<p>冒頭でCommon Lispのシステムについての簡単な解説があるので、初心者CLerにとっては一助となるかもしれない。</p>
+
+<p>また、中間部ではHaskellの代表的な標準モジュールをCommon Lispに翻訳しているので、そのあたりも初心者CLerの一助となろう。</p>
+
+<p>中級CLerにとっては、冒頭で作成するローカルなパッケージニックネームの導入が興味深い内容となっているのではないかと思われる。</p>
+
+<h1>6</h1>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">List</span></span></code></pre>
+
+<p>Common Lispに於いて、Haskellのモジュールに相当するものは、言語仕様には存在しない。
+Common Lispが提供するのは<code>PACKAGE</code>という名前空間管理機能のみである。
+Common Lispに於いて構造化されたソースファイル群を読み込む機能は、デファクトスタンダードとして、asdfが担う。
+よって、asdfの<code>SYSTEM</code>をHaskellのモジュールと見做せるかと思う。</p>
+
+<p>上記Haskellの<code>import</code>におよそ相当する、ソースコードからモジュールをロードする方法として、Common Lispではシステム定義ファイル（*.asdファイル）を書くこととなる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">in-package <span class="keyword">:asdf</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defsystem</span></i> <span class="string">"my-product"</span>
+  <span class="keyword">:depends-on</span> <span class="paren2">(<span class="code"><span class="string">"data.list"</span></span>)</span>
+  <span class="keyword">:components</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="keyword">:file</span> ...</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上記例では&ldquo;my-product&rdquo;という名前のシステムを定義し、それは&ldquo;data.list&rdquo;というシステムに依存している事を示している。
+すなわち、&ldquo;my-product&rdquo;をロードするためには手始めに&ldquo;data.list&rdquo;をロードしなければならないということを示している。</p>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">:</span>m <span class="atom">+</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">List</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">:</span>m <span class="atom">+</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">List</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">Map</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">Set</span></span></code></pre>
+
+<p>上記で定義したシステムをREPLから呼びだすにはasdfが提供している<code>LOAD-SYSTEM</code>を叩くことになる。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">asdf:load-system <span class="keyword">:my-product</span></span>)</span></span></code></pre>
+
+<p>複数のシステムをまとめてロードしたい場合は<code>LOAD-SYSTEMS</code>を使う。</p>
+
+<pre><code><span class="code">cl-suer&gt; <span class="paren1">(<span class="code">asdf:load-systems <span class="keyword">:data.list</span> <span class="keyword">:data.map</span> <span class="keyword">:data.set</span></span>)</span></span></code></pre>
+
+<p>システムがロードされると、そのシステムが定義している<code>PACKAGE</code>（名前空間）が、現在駆動中のLispイメージ内に構築される。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">find-package <span class="keyword">:alexandria</span></span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">asdf:load-system <span class="keyword">:alexandria</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">find-package <span class="keyword">:alexandria</span></span>)</span>
+#&lt;PACKAGE "ALEXANDRIA.0.DEV"&gt;</span></code></pre>
+
+<pre><code><span class="code"><span class="keyword">import</span> qualified <span class="variable">Data</span><span class="atom">.</span><span class="variable">Map</span>
+<span class="keyword">import</span> qualified <span class="variable">Data</span><span class="atom">.</span><span class="variable">Map</span> as <span class="variable">M</span></span></code></pre>
+
+<p>Common LispはデフォルトでHaskellの<code>import qualified</code>に相当している。
+すなわち、パッケージ名をプリフィックスにつけないとシンボルにアクセスできない。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">iota 3</span>)</span>
+<span class="comment">;; ERROR
+</span>cl-user&gt; <span class="paren1">(<span class="code">alexandria:iota 3</span>)</span>
+<span class="paren1">(<span class="code">0 1 2</span>)</span></span></code></pre>
+
+<p>プリフィックスを付けずに<code>PACKAGE</code>が提供しているシンボルにアクセス出来るようにするためには、<code>USE-PACKAGE</code>や<code>IMPORT</code>を使う。</p>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">List</span> <span class="paren1">(<span class="code">num, sort</span>)</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">import '<span class="paren2">(<span class="code">something:num something:sort</span>)</span></span>)</span></span></code></pre>
+
+<p>ただし、上記コマンド群は現在の<code>PACKAGE</code>を破壊的に変更してしまうので、通常自身のアプリケーションのために自前の<code>PACKAGE</code>を定義して、それを使うこととなる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defpackage</span></i> <span class="keyword">:my-product</span><span class="paren2">(<span class="code"><span class="keyword">:use</span> <span class="keyword">:cl</span> <span class="keyword">:data.list</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:import-from</span> <span class="keyword">:something</span> <span class="keyword">#:num</span> <span class="keyword">#:sort</span></span>)</span>
+  ...</span>)</span>
+<span class="paren1">(<span class="code">in-package <span class="keyword">:my-product</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">List</span> hiding <span class="paren1">(<span class="code">nub</span>)</span></span></code></pre>
+
+<p>Haskellの<code>hiding</code>キーワードに相当する機能は、Common Lispに於いては<code>SHADOW</code>と呼ばれる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defpackage</span></i> hoge<span class="paren2">(<span class="code"><span class="keyword">:use</span> Data.List</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:shadow</span> <span class="keyword">:nub</span></span>)</span></span>)</span></span></code></pre>
+
+<p>さて、Common LispにはHaskellの<code>qualified import</code>の<code>as</code>に相当する機能がない。
+一応<code>PACKAGE</code>はニックネームを持てるのだが、それはグローバルになってしまう。
+パッケージローカルにパッケージのニックネームを付ける機能は仕様には存在しない。
+できたら便利なケースもあろうかと思われるので作ってみよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> qualified-use<span class="paren2">(<span class="code">package &amp;key as</span>)</span>
+  <span class="paren2">(<span class="code">assert as<span class="paren3">(<span class="code"></span>)</span><span class="string">"Missing :AS keyword parameter."</span></span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">eval-when</span></i><span class="paren3">(<span class="code"><span class="keyword">:compile-toplevel</span> <span class="keyword">:load-toplevel</span> <span class="keyword">:execute</span></span>)</span>
+     ,@<span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> symbol <span class="keyword">:being</span> <span class="keyword">:each</span> <span class="keyword">:external-symbol</span> <span class="keyword">:of</span> package
+             <span class="keyword">:for</span> new = <span class="paren4">(<span class="code">intern<span class="paren5">(<span class="code">format nil <span class="string">"~A.~A"</span>as symbol</span>)</span></span>)</span>
+             <span class="keyword">:collect</span> `<span class="paren4">(<span class="code"><i><span class="symbol">define-symbol-macro</span></i> ,new ,symbol</span>)</span>
+             <span class="keyword">:when</span> <span class="paren4">(<span class="code">macro-function symbol</span>)</span>
+             <span class="keyword">:do</span> <span class="paren4">(<span class="code">setf <span class="paren5">(<span class="code">macro-function new</span>)</span><span class="paren5">(<span class="code">macro-function symbol</span>)</span></span>)</span>
+             <span class="keyword">:when</span> <span class="paren4">(<span class="code">and <span class="paren5">(<span class="code">not<span class="paren6">(<span class="code">macro-function symbol</span>)</span></span>)</span>
+                        <span class="paren5">(<span class="code">fboundp symbol</span>)</span></span>)</span>
+             <span class="keyword">:do</span> <span class="paren4">(<span class="code">setf <span class="paren5">(<span class="code">symbol-function new</span>)</span><span class="paren5">(<span class="code">symbol-function symbol</span>)</span></span>)</span>
+             <span class="keyword">:when</span> <span class="paren4">(<span class="code">ignore-errors<span class="paren5">(<span class="code">fdefinition`<span class="paren6">(<span class="code">setf ,symbol</span>)</span></span>)</span></span>)</span>
+             <span class="keyword">:do</span> <span class="paren4">(<span class="code">setf <span class="paren5">(<span class="code">fdefinition`<span class="paren6">(<span class="code">setf ,new</span>)</span></span>)</span><span class="paren5">(<span class="code">fdefinition`<span class="paren6">(<span class="code">setf ,symbol</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>実装は以上。
+少々卑怯なやり方で実現している。</p>
+
+<p>実際のところ、上記<code>QUALIFIED-USE</code>はパッケージのニックネームを作らない。
+単に新しいシンボルをインターンする。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">qualified-use <span class="keyword">:alexandria</span> <span class="keyword">:as</span> <span class="keyword">:alex</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">alex.iota 3</span>)</span>
+<span class="paren1">(<span class="code">0 1 2</span>)</span></span></code></pre>
+
+<p>メリットは</p>
+
+<ul>
+<li>実装が単純</li>
+<li>実装が簡単</li>
+<li>ポータブル</li>
+</ul>
+
+<p>デメリットは</p>
+
+<ul>
+<li>シンボルが（ことと次第では）大量にインターンされる。</li>
+<li>ローカルニックネームを経由して内部シンボルにアクセスすることはできない。</li>
+</ul>
+
+<p>といったあたりか。</p>
+
+<p>既存の言語上に構築するものとしては、現実的な妥協案であろうかと思う。</p>
+
+<h2>6.2</h2>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> words <span class="string">"hey these are the words in this sentence"</span>
+<span class="paren1">[<span class="code"><span class="string">"hey"</span>,<span class="string">"these"</span>,<span class="string">"are"</span>,<span class="string">"the"</span>,<span class="string">"words"</span>,<span class="string">"in"</span>,<span class="string">"this"</span>,<span class="string">"sentence"</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> words <span class="string">"hey these         are      the words in this sentence"</span>
+<span class="paren1">[<span class="code"><span class="string">"hey"</span>,<span class="string">"these"</span>,<span class="string">"are"</span>,<span class="string">"the"</span>,<span class="string">"words"</span>,<span class="string">"in"</span>,<span class="string">"this"</span>,<span class="string">"sentence"</span></span>]</span></span></code></pre>
+
+<p>haskellの<code>words</code>に相当する機能はsplit-sequenceの<code>SPLIT-SEQUENCE</code>がある。
+<code>SPLIT-SEQUENCE</code>は名前の通り、列（SEQUENCE）に対応するものだが、対象が文字列に限定されるならuiopの<code>SPLIT-STRING</code>も使える。
+ただし、空文字列を結果から除去したいなら<code>SPLIT-SEQUENCE</code>の方が望ましい。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">split-sequence:split-sequence <span class="character">#\space</span> <span class="string">"hey these are the words in this sentence"</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"hey"</span> <span class="string">"these"</span> <span class="string">"are"</span> <span class="string">"the"</span> <span class="string">"words"</span> <span class="string">"in"</span> <span class="string">"this"</span> <span class="string">"sentence"</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">uiop:split-string <span class="string">"hey these are the words in this sentence"</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"hey"</span> <span class="string">"these"</span> <span class="string">"are"</span> <span class="string">"the"</span> <span class="string">"words"</span> <span class="string">"in"</span> <span class="string">"this"</span> <span class="string">"sentence"</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">uiop:split-string <span class="string">"hey these    are    the words in this sentence"</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"hey"</span> <span class="string">"these"</span> <span class="string">""</span> <span class="string">""</span> <span class="string">""</span> <span class="string">"are"</span> <span class="string">""</span> <span class="string">""</span> <span class="string">""</span> <span class="string">"the"</span> <span class="string">"words"</span> <span class="string">"in"</span> <span class="string">"this"</span> <span class="string">"sentence"</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">split-sequence:split-sequence <span class="character">#\space</span> <span class="string">"hey these    are    the words in this sentence"</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"hey"</span> <span class="string">"these"</span> <span class="string">""</span> <span class="string">""</span> <span class="string">""</span> <span class="string">"are"</span> <span class="string">""</span> <span class="string">""</span> <span class="string">""</span> <span class="string">"the"</span> <span class="string">"words"</span> <span class="string">"in"</span> <span class="string">"this"</span> <span class="string">"sentence"</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">split-sequence:split-sequence <span class="character">#\space</span> <span class="string">"hey these    are    the words in this sentence"</span> <span class="keyword">:remove-empty-subseqs</span> t</span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"hey"</span> <span class="string">"these"</span> <span class="string">"are"</span> <span class="string">"the"</span> <span class="string">"words"</span> <span class="string">"in"</span> <span class="string">"this"</span> <span class="string">"sentence"</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> group <span class="paren1">[<span class="code">1,1,1,1,2,2,2,2,3,3,2,2,2,5,6,7</span>]</span>
+<span class="paren1">[<span class="code"><span class="paren2">[<span class="code">1,1,1,1</span>]</span>,<span class="paren2">[<span class="code">2,2,2,2</span>]</span>,<span class="paren2">[<span class="code">3,3</span>]</span>,<span class="paren2">[<span class="code">2,2,2</span>]</span>,<span class="paren2">[<span class="code">5</span>]</span>,<span class="paren2">[<span class="code">6</span>]</span>,<span class="paren2">[<span class="code">7</span>]</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> group <span class="paren1">[<span class="code"><span class="string">"boom"</span>,<span class="string">"bip"</span>,<span class="string">"bip"</span>,<span class="string">"boom"</span>,<span class="string">"boom"</span></span>]</span>
+<span class="paren1">[<span class="code"><span class="paren2">[<span class="code"><span class="string">"boom"</span></span>]</span>,<span class="paren2">[<span class="code"><span class="string">"bip"</span>,<span class="string">"bip"</span></span>]</span>,<span class="paren2">[<span class="code"><span class="string">"boom"</span>,<span class="string">"boom"</span></span>]</span></span>]</span></span></code></pre>
+
+<p>Haskellの<code>group</code>に相当するものはicnf-clが提供している。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">incf-cl:group '<span class="paren2">(<span class="code">1 1 1 1 2 2 2 2 3 3 2 2 2 5 6 7</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">1 1 1 1</span>)</span><span class="paren2">(<span class="code">2 2 2 2</span>)</span><span class="paren2">(<span class="code">3 3</span>)</span><span class="paren2">(<span class="code">2 2 2</span>)</span><span class="paren2">(<span class="code">5</span>)</span><span class="paren2">(<span class="code">6</span>)</span><span class="paren2">(<span class="code">7</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">incf-cl:group '<span class="paren2">(<span class="code"><span class="string">"boom"</span> <span class="string">"bip"</span> <span class="string">"bip"</span> <span class="string">"boom"</span> <span class="string">"boom"</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><span class="string">"boom"</span></span>)</span><span class="paren2">(<span class="code"><span class="string">"bip"</span></span>)</span><span class="paren2">(<span class="code"><span class="string">"bip"</span></span>)</span><span class="paren2">(<span class="code"><span class="string">"boom"</span></span>)</span><span class="paren2">(<span class="code"><span class="string">"boom"</span></span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">incf-cl:group '<span class="paren2">(<span class="code"><span class="string">"boom"</span> <span class="string">"bip"</span> <span class="string">"bip"</span> <span class="string">"boom"</span> <span class="string">"boom"</span></span>)</span><span class="keyword">:test</span> #'string=</span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><span class="string">"boom"</span></span>)</span><span class="paren2">(<span class="code"><span class="string">"bip"</span> <span class="string">"bip"</span></span>)</span><span class="paren2">(<span class="code"><span class="string">"boom"</span> <span class="string">"boom"</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> sort <span class="paren1">[<span class="code">5,4,3,7,2,1</span>]</span>
+<span class="paren1">[<span class="code">1,2,3,4,5,7</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> sort <span class="paren1">[<span class="code"><span class="string">"boom"</span>,<span class="string">"bip"</span>,<span class="string">"bip"</span>,<span class="string">"boom"</span>,<span class="string">"boom"</span></span>]</span>
+<span class="paren1">[<span class="code"><span class="string">"bip"</span>,<span class="string">"bip"</span>,<span class="string">"boom"</span>,<span class="string">"boom"</span>,<span class="string">"boom"</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">sort '<span class="paren2">(<span class="code">5 4 3 7 2 1</span>)</span> #'&lt;</span>)</span>
+<span class="paren1">(<span class="code">1 2 3 4 5 7</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">sort '<span class="paren2">(<span class="code"><span class="string">"boom"</span> <span class="string">"bip"</span> <span class="string">"bip"</span> <span class="string">"boom"</span> <span class="string">"boom"</span></span>)</span> #'string&lt;</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">wordDums</span> <span class="keyword">::</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="variable">String,Int</span></span>)</span></span>]</span>
+<span class="function">wordNums</span> <span class="keyword">=</span> map <span class="paren1">(<span class="code"><span class="keyword">\</span>ws <span class="keyword">-&gt;</span> <span class="paren2">(<span class="code">head ws, length ws</span>)</span></span>)</span> <span class="atom">.</span> group <span class="atom">.</span> sort <span class="atom">.</span> words
+<span class="function">ghci</span><span class="atom">&gt;</span> wordNums <span class="string">"wa wa wee wa"</span>
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="string">"wa"</span>,3</span>)</span>,<span class="paren2">(<span class="code"><span class="string">"wee"</span>,1</span>)</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">string</span>)</span>list</span>)</span>word-nums</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> word-nums<span class="paren2">(<span class="code">string</span>)</span>
+  <span class="paren2">(<span class="code">mapcar <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">xs</span>)</span>
+            <span class="paren4">(<span class="code">cons <span class="paren5">(<span class="code">car xs</span>)</span>
+                  <span class="paren5">(<span class="code">length xs</span>)</span></span>)</span></span>)</span>
+          <span class="paren3">(<span class="code">incf-cl:group <span class="paren4">(<span class="code">sort <span class="paren5">(<span class="code">split-sequence:split-sequence <span class="character">#\space</span> string
+                                                              <span class="keyword">:remove-empty-subseqs</span> t</span>)</span>
+                               #'string&lt;</span>)</span>
+                         <span class="keyword">:test</span> #'string=</span>)</span></span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">word-nums <span class="string">"wa wa wee wa"</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><span class="string">"wa"</span> . 3</span>)</span><span class="paren2">(<span class="code"><span class="string">"wee"</span> . 1</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> tails <span class="string">"party"</span>
+<span class="paren1">[<span class="code"><span class="string">"party"</span>,<span class="string">"arty"</span>,<span class="string">"rty"</span>,<span class="string">"ty"</span>,<span class="string">"y"</span>,<span class="string">""</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> tails <span class="paren1">[<span class="code">1,2,3</span>]</span>
+<span class="paren1">[<span class="code"><span class="paren2">[<span class="code">1,2,3</span>]</span>,<span class="paren2">[<span class="code">2,3</span>]</span>,<span class="paren2">[<span class="code">3</span>]</span>,<span class="paren2">[<span class="code"></span>]</span></span>]</span></span></code></pre>
+
+<p>Haskellの<code>tails</code>はCommon Lispの<code>MAPLIST</code>がおよそ相当する。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">maplist <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">list</span>)</span>
+                    <span class="paren3">(<span class="code">coerce list 'string</span>)</span></span>)</span>
+                  <span class="paren2">(<span class="code">coerce <span class="string">"party"</span> 'list</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"party"</span> <span class="string">"arty"</span> <span class="string">"rty"</span> <span class="string">"ty"</span> <span class="string">"y"</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">maplist #'identity '<span class="paren2">(<span class="code">1 2 3</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">1 2 3</span>)</span><span class="paren2">(<span class="code">2 3</span>)</span><span class="paren2">(<span class="code">3</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="string">"hawaii"</span> <span class="atom">`isPrefixOf`</span> <span class="string">"hawaii joe"</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="string">"haha"</span> <span class="atom">`isPrefixOf`</span> <span class="string">"ha"</span>
+<span class="variable">False</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="string">"ha"</span> <span class="atom">`isPrefixOf`</span> <span class="string">"ha"</span>
+<span class="variable">True</span></span></code></pre>
+
+<p>Haskellの<code>isPrefixOf</code>はCommon Lispではuiopの<code>STRING-PREFIX-P</code>が相当する。
+uiopは同様に<code>STRING-SUFFIX-P</code>も提供している。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">uiop:string-prefix-p <span class="string">"hawaii"</span> <span class="string">"hawaii joe"</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">uiop:string-prefix-p <span class="string">"haha"</span> <span class="string">"ha"</span></span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">uiop:string-prefix-p <span class="string">"ha"</span> <span class="string">"ha"</span></span>)</span>
+T</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> any <span class="paren1">(<span class="code"><span class="atom">&gt;</span> 4</span>)</span> <span class="paren1">[<span class="code">1,2,3</span>]</span>
+<span class="variable">False</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> any <span class="paren1">(<span class="code"><span class="atom">==</span><span class="character">'F'</span></span>)</span> <span class="string">"Frank Sobotka"</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> any <span class="paren1">(<span class="code"><span class="keyword">\</span>x <span class="keyword">-&gt;</span> x <span class="atom">&gt;</span> 5 <span class="atom">&amp;&amp;</span> x <span class="atom">&lt;</span> 10</span>)</span><span class="paren1">[<span class="code">1,4,11</span>]</span>
+<span class="variable">False</span></span></code></pre>
+
+<p>Haskellの<code>any</code>はCommon Lispでは<code>SOME</code>に相当する。
+Common Lispは他に同様のものとして<code>EVERY</code>、<code>NOTEVERY</code>、<code>NOTANY</code>を提供している。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">some #`<span class="paren2">(<span class="code">% '&gt; _ 4</span>)</span> '<span class="paren2">(<span class="code">1 2 3</span>)</span></span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">some #`<span class="paren2">(<span class="code">% 'char= <span class="character">#\F</span></span>)</span> <span class="string">"Frank Sobotka"</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">some #`<span class="paren2">(<span class="code">% '&lt; 5 _ 10</span>)</span> '<span class="paren2">(<span class="code">1 4 11</span>)</span></span>)</span>
+NIL</span></code></pre>
+
+<p>Common Lispは前置構文をサポートしているので、<code>&lt;</code>や<code>&gt;</code>も2引数関数ではない点要注意。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">&lt;</span>)</span>
+<span class="comment">;; ERROR
+</span>cl-user&gt; <span class="paren1">(<span class="code">&lt; 1</span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">&lt; 1 2</span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">&lt; 1 2 3</span>)</span>
+T</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="string">"art"</span> <span class="atom">`isInfixOf`</span> <span class="string">"party"</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">1,2</span>]</span> <span class="atom">`isInfixOf`</span> <span class="paren1">[<span class="code">1,3,5</span>]</span>
+<span class="variable">False</span></span></code></pre>
+
+<p>Haskellの<code>isInfixOf</code>はCommon Lispでは<code>SEARCH</code>がそれに相当する。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">search <span class="string">"art"</span> <span class="string">"party"</span></span>)</span>
+1
+cl-user&gt; <span class="paren1">(<span class="code">search '<span class="paren2">(<span class="code">1 2</span>)</span> '<span class="paren2">(<span class="code">1 3 5</span>)</span></span>)</span>
+NIL</span></code></pre>
+
+<h3>caesar</h3>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> ord <span class="character">'a'</span>
+<span class="function">97</span></span></code></pre>
+
+<p>Haskellの<code>ord</code>はこの場合Common Lispの<code>CHAR-CODE</code>に相当する。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">char-code <span class="character">#\a</span></span>)</span>
+97</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> chr 97
+<span class="character">'a'</span></span></code></pre>
+
+<p>Haskellの<code>chr</code>は、Common Lispの<code>CODE-CHAR</code>に相当する。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">code-char 97</span>)</span>
+#\a</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> map ord <span class="string">"abcdefgh"</span>
+<span class="paren1">[<span class="code">97,98,99,100,101,102,103,104</span>]</span></span></code></pre>
+
+<p>上記HaskellコードはCommon Lispでは<code>MAP</code>を使うことで再現できる。
+第一引数に返り値の型を明示しなくてはならない点要注意。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">map 'list #'char-code <span class="string">"abcdefgh"</span></span>)</span>
+<span class="paren1">(<span class="code">97 98 99 100 101 102 103 104</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">encode</span> <span class="keyword">::</span> <span class="variable">Int</span> <span class="keyword">-&gt;</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="variable">String</span>
+<span class="function">encode</span> offset msg <span class="keyword">=</span> map <span class="paren1">(<span class="code"><span class="keyword">\</span>c <span class="keyword">-&gt;</span> chr <span class="atom">$</span> ord c <span class="atom">+</span> offset</span>)</span> msg
+
+<span class="function">ghci</span><span class="atom">&gt;</span> encode 3 <span class="string">"hey mark"</span>
+<span class="string">"kh|#pdun"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> encode 5 <span class="string">"please instruct your men"</span>
+<span class="string">"uqjfxj%nsxywzhy%~tzw%rjs"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> encode 1 <span class="string">"to party hard"</span>
+<span class="string">"up!qbsuz!ibse"</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">fixnum string</span>)</span>string</span>)</span>encode</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> encode <span class="paren2">(<span class="code">offset msg</span>)</span>
+  <span class="paren2">(<span class="code">map 'string <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">c</span>)</span>
+                 <span class="paren4">(<span class="code">code-char <span class="paren5">(<span class="code">+ offset <span class="paren6">(<span class="code">char-code c</span>)</span></span>)</span></span>)</span></span>)</span>
+               msg</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">encode 3 <span class="string">"hey mark"</span></span>)</span>
+"kh|#pdun"
+cl-user&gt; (encode 5 "please instruct your men")
+"uqjfxj%nsxywzhy%~tzw%rjs"
+cl-user&gt; (encode 1 "to party hard")
+"up!qbsuz!ibse"</span></code></pre>
+
+<pre><code><span class="code"><span class="function">decode</span> <span class="keyword">::</span> <span class="variable">Int</span> <span class="keyword">-&gt;</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="variable">String</span>
+<span class="function">decode</span> shift msg <span class="keyword">=</span> encode <span class="paren1">(<span class="code">negate shift</span>)</span> msg
+
+<span class="function">ghci</span><span class="atom">&gt;</span> decode 3 <span class="string">"kh|#pdun"</span>
+<span class="string">"hey mark"</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">fixnum string</span>)</span>string</span>)</span>decode</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> decode <span class="paren2">(<span class="code">shift msg</span>)</span>
+  <span class="paren2">(<span class="code">encode <span class="paren3">(<span class="code">- shift</span>)</span>msg</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">decode 3 <span class="string">"kh|#pdun"</span></span>)</span>
+"hey mark"</span></code></pre>
+
+<h3>first to 40</h3>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> digitToInt <span class="character">'2'</span>
+<span class="function">2</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> digitToInt <span class="character">'F'</span>
+<span class="function">15</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> digitToInt <span class="character">'z'</span>
+;; <span class="variable">ERROR</span></span></code></pre>
+
+<p>Haskellの<code>digitToInt</code>はCommon Lispでは<code>DIGIT-CHAR-P</code>が相当するが、いささか勝手が異なる。
+Common Lispの<code>DIGIT-CHAR-P</code>は第一引数に文字を受け取り、それが数と解釈できるなら解釈された数を返す。
+数と解釈できない場合は<code>NIL</code>を返す。
+数と解釈できるか否かの判定はオプショナルな第二引数による。
+規定値は<code>*READ-BASE*</code>の値が使われる。
+Common Lispでは２進数から３６進数まで対応可能である。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">digit-char-p <span class="character">#\2</span></span>)</span>
+2
+cl-user&gt; <span class="paren1">(<span class="code">digit-char-p <span class="character">#\F</span></span>)</span>
+nil
+cl-user&gt; <span class="paren1">(<span class="code">digit-char-p <span class="character">#\F</span> 16</span>)</span>
+15
+cl-user&gt; <span class="paren1">(<span class="code">digit-char-p <span class="character">#\9</span> 3</span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">digit-char-p <span class="character">#\z</span> 36</span>)</span>
+35</span></code></pre>
+
+<pre><code><span class="code"><span class="function">digitSum</span> <span class="keyword">::</span> <span class="variable">Int</span> <span class="keyword">-&gt;</span> <span class="variable">Int</span>
+<span class="function">digitSum</span> <span class="keyword">=</span> sum <span class="atom">.</span> map digitToInt <span class="atom">.</span> show</span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">fixnum</span>)</span>fixnum</span>)</span>digit-sum</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> digit-sum<span class="paren2">(<span class="code">int</span>)</span>
+  <span class="paren2">(<span class="code">apply #'+ <span class="paren3">(<span class="code">map 'list #'digit-char-p <span class="paren4">(<span class="code">princ-to-string int</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上記コードは中間リストが作られ効率が悪いので、<code>LOOP</code>を使う方が望ましい。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> digit-sum<span class="paren2">(<span class="code">int</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> c <span class="keyword">:across</span> <span class="paren3">(<span class="code">princ-to-string int</span>)</span>
+        <span class="keyword">:sum</span> <span class="paren3">(<span class="code">digit-char-p c</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> find <span class="paren1">(<span class="code"><span class="atom">&gt;</span> 4</span>)</span> <span class="paren1">[<span class="code">3,4,5,6,7</span>]</span>
+<span class="variable">Just</span> 5
+<span class="function">ghci</span><span class="atom">&gt;</span> find odd <span class="paren1">[<span class="code">2,4,6,8,9</span>]</span>
+<span class="variable">Just</span> 9
+<span class="function">ghci</span><span class="atom">&gt;</span> find <span class="paren1">(<span class="code"><span class="atom">==</span><span class="character">'z'</span></span>)</span> <span class="string">"mjolnir"</span>
+<span class="variable">Nothing</span></span></code></pre>
+
+<p>Haskellの<code>find</code>はCommon Lispの<code>FIND-IF</code>に相当する。
+Common Lispは<code>maybe</code>に相当する機能が無く、また、<code>FIND-IF</code>は見つけたものを返す仕様となっているので、<code>FIND-IF</code>は<code>NIL</code>を見つけられない点要注意。
+そのような場合は<code>POSITION-IF</code>が代替として使える。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">find-if #`<span class="paren2">(<span class="code">% '&gt; _ 4</span>)</span> '<span class="paren2">(<span class="code">3 4 5 6 7</span>)</span></span>)</span>
+5
+cl-user&gt; <span class="paren1">(<span class="code">find-if #'oddp '<span class="paren2">(<span class="code">2 4 6 8 9</span>)</span></span>)</span>
+9
+cl-user&gt; <span class="paren1">(<span class="code">find-if #`<span class="paren2">(<span class="code">% 'char= <span class="character">#\z</span></span>)</span> <span class="string">"mjolnir"</span></span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">find-if #'null '<span class="paren2">(<span class="code">1 nil 2</span>)</span></span>)</span>
+NIL
+cl-user&gt; <span class="paren1">(<span class="code">position-if #'null '<span class="paren2">(<span class="code">1 nil 2</span>)</span></span>)</span>
+1</span></code></pre>
+
+<pre><code><span class="code"><span class="function">firstTo</span> <span class="keyword">::</span> <span class="variable">Int</span> <span class="keyword">-&gt;</span> <span class="variable">Maybe</span> <span class="variable">Int</span>
+<span class="function">firstTo</span> n <span class="keyword">=</span> find <span class="paren1">(<span class="code"><span class="keyword">\</span>x <span class="keyword">-&gt;</span> digitSum x <span class="atom">==</span> n</span>)</span><span class="paren1">[<span class="code">1<span class="keyword">..</span></span>]</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> firstTo 40
+<span class="variable">Just</span> 49999
+<span class="function">ghci</span><span class="atom">&gt;</span> firstTo 27
+<span class="variable">Just</span> 999
+<span class="function">ghci</span><span class="atom">&gt;</span> firstTo 1
+<span class="variable">Just</span> 1
+<span class="function">ghci</span><span class="atom">&gt;</span> firstTo 13
+<span class="variable">Just</span> 49</span></code></pre>
+
+<p>Common Lispでは無限リストをサポートしていないので<code>LOOP</code>でなんとかする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">fixnum</span>)</span><span class="paren4">(<span class="code">or null fixnum</span>)</span></span>)</span>first-to</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> first-to<span class="paren2">(<span class="code">n</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 1
+        <span class="keyword">:when</span> <span class="paren3">(<span class="code">= n <span class="paren4">(<span class="code">digit-sum i</span>)</span></span>)</span>
+        <span class="keyword">:return</span> i</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">first-to 40</span>)</span>
+49999
+cl-user&gt; <span class="paren1">(<span class="code">first-to 27</span>)</span>
+999
+cl-user&gt; <span class="paren1">(<span class="code">first-to 1</span>)</span>
+1
+cl-user&gt; <span class="paren1">(<span class="code">first-to 13</span>)</span>
+49</span></code></pre>
+
+<p>Seriesを使うなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> first-to<span class="paren2">(<span class="code">n</span>)</span>
+  <span class="paren2">(<span class="code">series:collect-first <span class="paren3">(<span class="code">series:choose-if <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">i</span>)</span>
+                                            <span class="paren5">(<span class="code">= n <span class="paren6">(<span class="code">digit-sum i</span>)</span></span>)</span></span>)</span>
+                                          <span class="paren4">(<span class="code">series:scan-range <span class="keyword">:from</span> 1 <span class="keyword">:type</span> 'fixnum</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>6.3</h2>
+
+<h3>Mapping</h3>
+
+<pre><code><span class="code"><span class="function">findKey</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Eq</span> k</span>)</span> <span class="atom">=&gt;</span> k <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code">k, v</span>)</span></span>]</span> <span class="keyword">-&gt;</span> v
+<span class="function">findKey</span> key xs <span class="keyword">=</span> snd <span class="atom">.</span> head <span class="atom">.</span> filter <span class="paren1">(<span class="code"><span class="keyword">\</span><span class="paren2">(<span class="code">k,v</span>)</span> <span class="keyword">-&gt;</span> key <span class="atom">==</span> k</span>)</span> <span class="atom">$</span> xs</span></code></pre>
+
+<p>上記<code>findKey</code>に相当するものはCommon LispではALEXANDRIAが提供している<code>ASSOC-VALUE</code>となる。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">alexandria:assoc-value list key</span>)</span></span></code></pre>
+
+<h3>Map</h3>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>fromList <span class="paren1">[<span class="code"><span class="paren2">(<span class="code">3,<span class="string">"shoes"</span></span>)</span>,<span class="paren2">(<span class="code">4,<span class="string">"trees"</span></span>)</span>,<span class="paren2">(<span class="code">9,<span class="string">"bees"</span></span>)</span></span>]</span>
+<span class="function">fromList</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code">3,<span class="string">"shoes"</span></span>)</span>,<span class="paren2">(<span class="code">4,<span class="string">"trees"</span></span>)</span>,<span class="paren2">(<span class="code">9,<span class="string">"bees"</span></span>)</span></span>]</span></span></code></pre>
+
+<p>Haskellに於ける<code>Map</code>はCommon Lispに於ける<code>HASH-TABLE</code>に相当する。
+上記<code>fromList</code>はALEXANDRIAの提供する<code>ALIST-HASH-TABLE</code>に相当する。
+なお、ALEXANDRIAは<code>PLIST-HASH-TABLE</code>も提供している。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">alexandria:alist-hash-table '<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">3 . <span class="string">"shoes"</span></span>)</span><span class="paren3">(<span class="code">3 . <span class="string">"trees"</span></span>)</span><span class="paren3">(<span class="code">9 . <span class="string">"bees"</span></span>)</span></span>)</span></span>)</span>
+#&lt;HASH-TABLE :TEST EQL :COUNT 3 &gt;</span></code></pre>
+
+<p>気をつけなければいけない点として、キーに重複があった場合、最初のキーが優先される点があげられる。
+これはHaskellの<code>fromList</code>とは挙動がことなる。</p>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>fromList <span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="string">"MS"</span>,1</span>)</span>,<span class="paren2">(<span class="code"><span class="string">"MS"</span>,2</span>)</span>,<span class="paren2">(<span class="code"><span class="string">"MS"</span>,3</span>)</span></span>]</span>
+<span class="function">fromList</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="string">"MS"</span>,3</span>)</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">alexandria:alist-hash-table '<span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="string">"MS"</span> . 1</span>)</span><span class="paren3">(<span class="code"><span class="string">"MS"</span> . 2</span>)</span><span class="paren3">(<span class="code"><span class="string">"MS"</span> . 3</span>)</span></span>)</span>
+                                      <span class="keyword">:test</span> #'equal</span>)</span>
+#&lt;HASH-TABLE :TEST EQUAL :COUNT 1&gt;
+cl-user&gt; <span class="paren1">(<span class="code">gethash <span class="string">"MS"</span> *</span>)</span>
+1</span></code></pre>
+
+<pre><code><span class="code"><span class="function">phoneBook</span> <span class="keyword">::</span> <span class="variable">Map</span><span class="atom">.</span><span class="variable">Map</span> <span class="variable">String</span> <span class="variable">String</span>
+<span class="function">phoneBook</span> <span class="keyword">=</span> <span class="variable">Map</span><span class="atom">.</span>fromList <span class="atom">$</span>
+&nbsp;   <span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="string">"betty"</span>, <span class="string">"555-2938"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"bonnie"</span>, <span class="string">"452-2928"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"patsy"</span>, <span class="string">"493-2928"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"lucille"</span>, <span class="string">"205-2928"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"wendy"</span>, <span class="string">"939-8282"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"penny"</span>, <span class="string">"853-2492"</span></span>)</span>
+&nbsp;   </span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">:</span>t <span class="variable">Map</span><span class="atom">.</span>lookup
+<span class="variable">Map</span><span class="atom">.</span>lookup <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Ord</span> k</span>)</span> <span class="atom">=&gt;</span> k <span class="keyword">-&gt;</span> <span class="variable">Map</span><span class="atom">.</span><span class="variable">Map</span> k a <span class="keyword">-&gt;</span> <span class="variable">Maybe</span> a
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>lookup <span class="string">"betty"</span> phoneBook
+<span class="variable">Just</span> <span class="string">"555-2938"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>lookup <span class="string">"grace"</span> phoneBook
+<span class="variable">Nothing</span></span></code></pre>
+
+<p>上記<code>lookup</code>に相当する機能は、Common Lispでは<code>GETHASH</code>になる。
+なお、Common Lispは多値をサポートしているので、<code>GETHASH</code>はキーが見つかったかどうかのフラグを第二返り値として返す。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*phone-book*</span> <span class="paren2">(<span class="code">alexandria:plist-hash-table '<span class="paren3">(<span class="code"><span class="string">"betty"</span> <span class="string">"555-2938"</span> <span class="string">"bonnie"</span> <span class="string">"452-2928"</span> <span class="string">"patsy"</span> <span class="string">"493-2928"</span> <span class="string">"lucille"</span> <span class="string">"205-2928"</span> <span class="string">"wendy"</span> <span class="string">"939-8282"</span> <span class="string">"penny"</span> <span class="string">"853-2492"</span></span>)</span>
+                                                           <span class="keyword">:test</span> #'equal</span>)</span></span>)</span>
+*PHONE-BOOK*
+cl-user&gt; <span class="paren1">(<span class="code">gethash <span class="string">"betty"</span> <span class="special">*phone-book*</span></span>)</span>
+"555-2938"
+T
+cl-user&gt; <span class="paren1">(<span class="code">gethash <span class="string">"grace"</span> <span class="special">*phone-book*</span></span>)</span>
+NIL
+NIL</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">:</span>t <span class="variable">Map</span><span class="atom">.</span>insert
+<span class="variable">Map</span><span class="atom">.</span>insert <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Ord</span> k</span>)</span> <span class="atom">=&gt;</span> k <span class="keyword">-&gt;</span> a <span class="keyword">-&gt;</span> <span class="variable">Map</span><span class="atom">.</span><span class="variable">Map</span> k a <span class="keyword">-&gt;</span> <span class="variable">Map</span><span class="atom">.</span><span class="variable">Map</span> k a
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>lookup <span class="string">"grace"</span> phoneBook
+<span class="variable">Nothing</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="keyword">let</span> newBook <span class="keyword">=</span> <span class="variable">Map</span><span class="atom">.</span>insert <span class="string">"grace"</span> <span class="string">"341-9021"</span> phoneBook
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>lookup <span class="string">"grace"</span> newBook
+<span class="variable">Just</span> <span class="string">"341-9021"</span></span></code></pre>
+
+<p>上記<code>insert</code>に相当するものはCommon Lispにはない。
+どうしても欲しいなら自作するしかない。
+なお、自作にあたってはALEXANDRIAの提供する<code>COPY-HASH-TABLE</code>が便利に使える。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> insert<span class="paren2">(<span class="code">key value hash-table</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">ht<span class="paren5">(<span class="code">alexandria:copy-hash-table hash-table</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">setf<span class="paren4">(<span class="code">gethash key ht</span>)</span>value</span>)</span>
+    ht</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*new-book*</span> <span class="paren2">(<span class="code">insert <span class="string">"grace"</span> <span class="string">"341-9021"</span> <span class="special">*phone-book*</span></span>)</span></span>)</span>
+*NEW-BOOK*
+cl-user&gt; <span class="paren1">(<span class="code">gethash <span class="string">"grace"</span> <span class="special">*new-book*</span></span>)</span>
+"341-9021"
+T</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">:</span>t <span class="variable">Map</span><span class="atom">.</span>size
+<span class="variable">Map</span><span class="atom">.</span>size <span class="keyword">::</span> <span class="variable">Map</span><span class="atom">.</span><span class="variable">Map</span> k v <span class="keyword">-&gt;</span> <span class="variable">Int</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>size phoneBook
+<span class="function">6</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>size newBook
+<span class="function">7</span></span></code></pre>
+
+<p>上記<code>size</code>に相当するものは、Common Lispに於いては<code>HASH-TABLE-COUNT</code>である。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">hash-table-count <span class="special">*phone-book*</span></span>)</span>
+6
+cl-user&gt; <span class="paren1">(<span class="code">hash-table-count <span class="special">*new-book*</span></span>)</span>
+7</span></code></pre>
+
+<pre><code><span class="code"><span class="function">string2digits</span> <span class="keyword">::</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code"><span class="variable">Int</span></span>]</span>
+<span class="function">string2digits</span> <span class="keyword">=</span> map digitToInt <span class="atom">.</span> filter isDigit
+
+<span class="function">ghci</span><span class="atom">&gt;</span> string2digits <span class="string">"948-9282"</span>
+<span class="paren1">[<span class="code">9,4,8,9,2,8,2</span>]</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">string</span>)</span>list</span>)</span>string-to-digits</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> string-to-digits<span class="paren2">(<span class="code">string</span>)</span>
+  <span class="paren2">(<span class="code">mapcar #'digit-char-p <span class="paren3">(<span class="code">remove-if-not #'digit-char-p string</span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">string-to-digits <span class="string">"948-9282"</span></span>)</span>
+<span class="paren1">(<span class="code">9 4 8 9 2 8 2</span>)</span></span></code></pre>
+
+<p>直訳だと中間リストが出来て効率が悪いので、<code>LOOP</code>を使うのが望ましい。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> string-to-digits<span class="paren2">(<span class="code">string</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> char <span class="keyword">:across</span> string
+        <span class="keyword">:when</span> <span class="paren3">(<span class="code">digit-char-p char</span>)</span>
+        <span class="keyword">:collect</span> <span class="keyword">:it</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="keyword">let</span> intBook <span class="keyword">=</span> <span class="variable">Map</span><span class="atom">.</span>map string2digits phoneBook
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">:</span>t intBook
+<span class="function">intBook</span> <span class="keyword">::</span> <span class="variable">Map</span><span class="atom">.</span><span class="variable">Map</span> <span class="variable">String</span> <span class="paren1">[<span class="code"><span class="variable">Int</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>lookup <span class="string">"betty"</span> intBook
+<span class="variable">Just</span> <span class="paren1">[<span class="code">5,5,5,2,9,3,8</span>]</span></span></code></pre>
+
+<p>Common Lispには上記のように<code>HASH-TABLE</code>に対して<code>map</code>する機能は存在しない。
+<code>MAPHASH</code>という関数は存在するが、これは主に副作用のために使われるものだ。
+上記Haskellの<code>Map.map</code>に相当するものはALEXANDRIAの<code>COPY-HASH-TABLE</code>に<code>:KEY</code>キーワード引数を渡すことによって実現できる。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*int-book*</span> <span class="paren2">(<span class="code">alexandria:copy-hash-table <span class="special">*phone-book*</span> <span class="keyword">:key</span> #'string-to-digits</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">gethash <span class="string">"betty"</span> <span class="special">*int-book*</span></span>)</span>
+<span class="paren1">(<span class="code">5 5 5 2 9 3 8</span>)</span>
+T</span></code></pre>
+
+<pre><code><span class="code"><span class="function">phoneBook</span> <span class="keyword">=</span> 
+&nbsp;   <span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="string">"betty"</span>, <span class="string">"555-2938"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"betty"</span>, <span class="string">"342-2492"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"bonnie"</span>, <span class="string">"452-2928"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"patsy"</span>, <span class="string">"493-2928"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"patsy"</span>, <span class="string">"943-2929"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"patsy"</span>, <span class="string">"827-9162"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"lucille"</span>, <span class="string">"205-2928"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"wendy"</span>, <span class="string">"939-8282"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"penny"</span>, <span class="string">"853-2492"</span></span>)</span>
+&nbsp;   ,<span class="paren2">(<span class="code"><span class="string">"penny"</span>, <span class="string">"555-2111"</span></span>)</span>
+&nbsp;   </span>]</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*phone-book*</span> '<span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="string">"betty"</span> . <span class="string">"555-2938"</span></span>)</span>
+                       <span class="paren3">(<span class="code"><span class="string">"betty"</span> . <span class="string">"342-2492"</span></span>)</span>
+                       <span class="paren3">(<span class="code"><span class="string">"bonnie"</span> . <span class="string">"452-2928"</span></span>)</span>
+                       <span class="paren3">(<span class="code"><span class="string">"patsy"</span> . <span class="string">"493-2928"</span></span>)</span>
+                       <span class="paren3">(<span class="code"><span class="string">"patsy"</span> . <span class="string">"943-2929"</span></span>)</span>
+                       <span class="paren3">(<span class="code"><span class="string">"patsy"</span> . <span class="string">"827-9162"</span></span>)</span>
+                       <span class="paren3">(<span class="code"><span class="string">"lucille"</span> . <span class="string">"205-2928"</span></span>)</span>
+                       <span class="paren3">(<span class="code"><span class="string">"wendy"</span> . <span class="string">"939-8282"</span></span>)</span>
+                       <span class="paren3">(<span class="code"><span class="string">"penny"</span> . <span class="string">"853-2492"</span></span>)</span>
+                       <span class="paren3">(<span class="code"><span class="string">"penny"</span> . <span class="string">"555-2111"</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">phoneBookToMap</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Ord</span> k</span>)</span> <span class="atom">=&gt;</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code">k,String</span>)</span></span>]</span> <span class="keyword">-&gt;</span> <span class="variable">Map</span><span class="atom">.</span><span class="variable">Map</span> k <span class="variable">String</span>
+<span class="function">phoneBookToMap</span> xs <span class="keyword">=</span> <span class="variable">Map</span><span class="atom">.</span>fromListWith add xs
+&nbsp;   <span class="keyword">where</span> add number1 number2 <span class="keyword">=</span> number1 <span class="atom">++</span> <span class="string">", "</span> <span class="atom">++</span> number2</span></code></pre>
+
+<p>上記Haskellの<code>Map.fromListWith</code>に相当するものはCommon Lispにはない。
+必要なら自作するしかない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> alist-hash-table-with<span class="paren2">(<span class="code"><i><span class="symbol">function</span></i> alist &amp;rest args</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">ht<span class="paren5">(<span class="code">apply #'make-hash-table args</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren4">(<span class="code">key . value</span>)</span> <span class="keyword">:in</span> alist
+          <span class="keyword">:do</span> <span class="paren4">(<span class="code">multiple-value-bind<span class="paren5">(<span class="code">v exist?</span>)</span><span class="paren5">(<span class="code">gethash key ht</span>)</span>
+                <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> exist?
+                  <span class="paren6">(<span class="code">setf<span class="paren1">(<span class="code">gethash key ht</span>)</span><span class="paren1">(<span class="code">funcall <i><span class="symbol">function</span></i> v value</span>)</span></span>)</span>
+                  <span class="paren6">(<span class="code">setf<span class="paren1">(<span class="code">gethash key ht</span>)</span>value</span>)</span></span>)</span></span>)</span></span>)</span>
+    ht</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">list</span>)</span>hash-table</span>)</span>phone-book-to-map</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> phone-book-to-map<span class="paren2">(<span class="code">xs</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">add</span>)</span><span class="paren4">(<span class="code">alist-hash-table-with add xs <span class="keyword">:test</span> #'equal</span>)</span></span>)</span></span>)</span>
+   <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">n1 n2</span>)</span><span class="paren3">(<span class="code">uiop:strcat n1 <span class="string">", "</span> n2</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>lookup <span class="string">"patsy"</span> <span class="atom">$</span> phoneBookToMap phoneBook
+<span class="string">"827-9162, 943-2929, 493-2928"</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">gethash <span class="string">"patsy"</span> <span class="paren2">(<span class="code">phone-book-to-map <span class="special">*phone-book*</span></span>)</span></span>)</span>
+"493-2928, 943-2928, 827-9162"
+T</span></code></pre>
+
+<pre><code><span class="code"><span class="function">phoneBookToMap</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Ord</span> k</span>)</span> <span class="atom">=&gt;</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code">k, a</span>)</span></span>]</span> <span class="keyword">-&gt;</span> <span class="variable">Map</span><span class="atom">.</span><span class="variable">Map</span> k <span class="paren1">[<span class="code">a</span>]</span>
+<span class="function">phoneBookToMap</span> xs <span class="keyword">=</span> <span class="variable">Map</span><span class="atom">.</span>fromListWith <span class="paren1">(<span class="code"><span class="atom">++</span></span>)</span> <span class="atom">$</span> map <span class="paren1">(<span class="code"><span class="keyword">\</span><span class="paren2">(<span class="code">k,v</span>)</span> <span class="keyword">-&gt;</span> <span class="paren2">(<span class="code">k, <span class="paren3">[<span class="code">v</span>]</span></span>)</span></span>)</span> xs
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>lookup <span class="string">"patsy"</span> <span class="atom">$</span> phoneBookToMap phoneBook
+<span class="paren1">[<span class="code"><span class="string">"827-9162"</span>, <span class="string">"943-2929"</span>, <span class="string">"493-2928"</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">list</span>)</span>hash-table</span>)</span>phone-book-to-map</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> phone-book-to-map<span class="paren2">(<span class="code">alist</span>)</span>
+  <span class="paren2">(<span class="code">alist-hash-table-with #'append <span class="paren3">(<span class="code">mapcar <span class="paren4">(<span class="code">trivia:lambda-match<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">cons k v</span>)</span><span class="paren6">(<span class="code">cons k <span class="paren1">(<span class="code">list v</span>)</span></span>)</span></span>)</span></span>)</span>
+                                          alist</span>)</span>
+                         <span class="keyword">:test</span> #'equal</span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">gethash <span class="string">"patsy"</span> <span class="paren2">(<span class="code">phone-book-to-map <span class="special">*phone-book*</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"493-2928"</span> <span class="string">"943-2929"</span> <span class="string">"827-9162"</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>fromListWith max <span class="paren1">[<span class="code"><span class="paren2">(<span class="code">2,3</span>)</span>,<span class="paren2">(<span class="code">2,5</span>)</span>,<span class="paren2">(<span class="code">2,100</span>)</span>,<span class="paren2">(<span class="code">3,29</span>)</span>,<span class="paren2">(<span class="code">3,22</span>)</span>,<span class="paren2">(<span class="code">3,11</span>)</span>,<span class="paren2">(<span class="code">4,22</span>)</span>,<span class="paren2">(<span class="code">4,15</span>)</span></span>]</span>
+<span class="function">fromList</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code">2,100</span>)</span>,<span class="paren2">(<span class="code">3,29</span>)</span>,<span class="paren2">(<span class="code">4,22</span>)</span></span>]</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Map</span><span class="atom">.</span>fromListWith <span class="paren1">(<span class="code"><span class="atom">+</span></span>)</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code">2,3</span>)</span>,<span class="paren2">(<span class="code">2,5</span>)</span>,<span class="paren2">(<span class="code">2,100</span>)</span>,<span class="paren2">(<span class="code">3,29</span>)</span>,<span class="paren2">(<span class="code">3,22</span>)</span>,<span class="paren2">(<span class="code">3,11</span>)</span>,<span class="paren2">(<span class="code">4,22</span>)</span>,<span class="paren2">(<span class="code">4,15</span>)</span></span>]</span>
+<span class="function">fromList</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code">2,108</span>)</span>,<span class="paren2">(<span class="code">3,62</span>)</span>,<span class="paren2">(<span class="code">4,37</span>)</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">alist-hash-table-with #'max '<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">2 . 3</span>)</span><span class="paren3">(<span class="code">2 . 5</span>)</span><span class="paren3">(<span class="code">2 . 100</span>)</span><span class="paren3">(<span class="code">3 . 29</span>)</span><span class="paren3">(<span class="code">3 . 22</span>)</span><span class="paren3">(<span class="code">3 . 11</span>)</span><span class="paren3">(<span class="code">4 . 22</span>)</span><span class="paren3">(<span class="code">4 . 15</span>)</span></span>)</span></span>)</span>
+#&lt;HASH-TABLE :TEST EQL :COUNT 3&gt;
+cl-user&gt; <span class="paren1">(<span class="code">alexandria:hash-table-alist *</span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">4 . 22</span>)</span><span class="paren2">(<span class="code">3 . 29</span>)</span><span class="paren2">(<span class="code">2 . 100</span>)</span></span>)</span></span></code></pre>
+
+<p>Common Lispの<code>HASH-TABLE</code>は通常中身は見えない。
+必要なら<code>PRINT-OBJECT</code>メソッドを書けばいい。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> print-object<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">ht hash-table</span>)</span>stream</span>)</span>
+  <span class="paren2">(<span class="code">print-unreadable-object<span class="paren3">(<span class="code">ht stream <span class="keyword">:type</span> t</span>)</span>
+    <span class="paren3">(<span class="code">maphash <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">k v</span>)</span>
+               <span class="paren5">(<span class="code">format stream <span class="string">"(~W . ~W)"</span>k v</span>)</span></span>)</span>
+             ht</span>)</span></span>)</span>
+  ht</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">alist-hash-table-with #'+ '<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">2 . 3</span>)</span><span class="paren3">(<span class="code">2 . 5</span>)</span><span class="paren3">(<span class="code">2 . 100</span>)</span><span class="paren3">(<span class="code">3 . 29</span>)</span><span class="paren3">(<span class="code">3 . 22</span>)</span><span class="paren3">(<span class="code">3 . 11</span>)</span><span class="paren3">(<span class="code">4 . 22</span>)</span><span class="paren3">(<span class="code">4 . 15</span>)</span></span>)</span></span>)</span>
+#&lt;HASH-TABLE <span class="paren1">(<span class="code">2 . 108</span>)</span><span class="paren1">(<span class="code">3 . 62</span>)</span><span class="paren1">(<span class="code">4 . 37</span>)</span>&gt;</span></code></pre>
+
+<h2>6.4</h2>
+
+<h3>Making module</h3>
+
+<pre><code><span class="code"><span class="keyword">module</span> <span class="variable">Geometry</span>
+<span class="paren1">(<span class="code"> sphereVolume
+, sphereArea
+, cubeVolume
+, cubeArea
+, cuboidArea
+, cuboidVolume
+</span>)</span> <span class="keyword">where</span>
+
+<span class="function">sphereVolume</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">sphereVolume</span> radius <span class="keyword">=</span> <span class="paren1">(<span class="code">4<span class="atom">.</span>0 <span class="atom">/</span> 3<span class="atom">.</span>0</span>)</span> <span class="atom">*</span> pi <span class="atom">*</span> <span class="paren1">(<span class="code">radius <span class="atom">^</span> 3</span>)</span>
+
+<span class="function">sphereArea</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">spehreArea</span> radius <span class="keyword">=</span> 4 <span class="atom">*</span> pi <span class="atom">*</span> <span class="paren1">(<span class="code">radius <span class="atom">^</span> 2</span>)</span>
+
+<span class="function">cubeVolume</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">cubeVolume</span> side <span class="keyword">=</span> cuboidVolume side side side
+
+<span class="function">cubeArea</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">cubeArea</span> side <span class="keyword">=</span> cuboidArea side side side
+
+<span class="function">cuboidVolume</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">cuboidVolume</span> a b c <span class="keyword">=</span> rectArea a b <span class="atom">*</span> c
+
+<span class="function">cuboidArea</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">cuboidArea</span> a b c <span class="keyword">=</span> rectArea a b <span class="atom">*</span> 2 <span class="atom">+</span> rectArea a c <span class="atom">*</span> 2 <span class="atom">+</span> rectArea c b <span class="atom">*</span> 2
+
+<span class="function">rectArea</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">rectArea</span> a b <span class="keyword">=</span> a <span class="atom">*</span> b</span></code></pre>
+
+<p>上記Haskellコード冒頭の<code>module</code>キーワードは、Common Lispに於いては<code>DEFPACKAGE</code>に相当すると言える。
+<code>DEFPACKAGE</code>の<code>:EXPORT</code>節は機能ごとに複数個に分割し、コメントを加えておくのが望ましい。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defpackage</span></i> <span class="keyword">:geometry</span><span class="paren2">(<span class="code"><span class="keyword">:use</span> <span class="keyword">:cl</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:export</span> <span class="comment">; SPHERE
+</span>           <span class="keyword">#:sphere-volume</span> <span class="keyword">#:sphere-area</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:export</span> <span class="comment">; CUBE
+</span>           <span class="keyword">#:cube-volume</span> <span class="keyword">#:cube-Area</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:export</span> <span class="comment">; CUBOID
+</span>           <span class="keyword">#:cuboid-volume</span> <span class="keyword">#:cuboid-area</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">in-package <span class="keyword">:geometry</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float</span>)</span>float</span>)</span>sphere-volume</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> sphere-volume<span class="paren2">(<span class="code">radius</span>)</span>
+  <span class="paren2">(<span class="code">* <span class="paren3">(<span class="code">/ 4.0 3.0</span>)</span> pi <span class="paren3">(<span class="code">expt radius 3</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float</span>)</span>float</span>)</span>sphere-area</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> sphere-area<span class="paren2">(<span class="code">radius</span>)</span>
+  <span class="paren2">(<span class="code">* 4 pi <span class="paren3">(<span class="code">expt radius 2</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float</span>)</span>float</span>)</span>cube-volume</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> cube-volume<span class="paren2">(<span class="code">side</span>)</span>
+  <span class="paren2">(<span class="code">coboid-valume side side side</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">decliam<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float</span>)</span>float</span>)</span>cobe-area</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> cube-area<span class="paren2">(<span class="code">side</span>)</span>
+  <span class="paren2">(<span class="code">cuboid-area side side side</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float float float</span>)</span>float</span>)</span>cuboid-volume</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> cuboid-volume<span class="paren2">(<span class="code">a b c</span>)</span>
+  <span class="paren2">(<span class="code">rect-area a <span class="paren3">(<span class="code">* b c</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float float float</span>)</span>float</span>)</span>cuboid-area</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> cuboid-area<span class="paren2">(<span class="code">a b c</span>)</span>
+  <span class="paren2">(<span class="code">+ <span class="paren3">(<span class="code">rect-area a <span class="paren4">(<span class="code">* b 2</span>)</span></span>)</span>
+     <span class="paren3">(<span class="code">rect-area a <span class="paren4">(<span class="code">* c 2</span>)</span></span>)</span>
+     <span class="paren3">(<span class="code">rect-area c <span class="paren4">(<span class="code">* b 2</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float float</span>)</span>float</span>)</span>rect-area</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> rect-area<span class="paren2">(<span class="code">a b</span>)</span>
+  <span class="paren2">(<span class="code">* a b</span>)</span></span>)</span></span></code></pre>
+
+<h3>Hierarchical module</h3>
+
+<pre><code><span class="code"><span class="atom">#</span> <span class="variable">Sphere</span><span class="atom">.</span>hs
+<span class="keyword">module</span> <span class="variable">Geometry</span><span class="atom">.</span><span class="variable">Sphere</span>
+<span class="paren1">(<span class="code"> volume
+, area
+</span>)</span> <span class="keyword">where</span>
+
+<span class="function">volume</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">volume</span> radius <span class="keyword">=</span> <span class="paren1">(<span class="code">4<span class="atom">.</span>0 <span class="atom">/</span> 3<span class="atom">.</span>0</span>)</span> <span class="atom">*</span> pi <span class="atom">*</span> <span class="paren1">(<span class="code">radius <span class="atom">^</span> 3</span>)</span>
+
+<span class="function">area</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">area</span> radius <span class="keyword">=</span> 4 <span class="atom">*</span> pi <span class="atom">*</span> <span class="paren1">(<span class="code">radius <span class="atom">^</span> 2</span>)</span>
+
+<span class="atom">#</span> <span class="variable">Cuboid</span><span class="atom">.</span>hs
+<span class="keyword">module</span> <span class="variable">Geometry</span><span class="atom">.</span><span class="variable">Cuboid</span>
+<span class="paren1">(<span class="code"> volume
+, area
+</span>)</span> <span class="keyword">where</span>
+
+<span class="function">volume</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">volume</span> a b c <span class="keyword">=</span> rectArea a b <span class="atom">*</span> c
+
+<span class="function">area</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">area</span> a b c <span class="keyword">=</span> rectArea a b <span class="atom">*</span> 2 <span class="atom">+</span> rectArea a c <span class="atom">*</span> 2 <span class="atom">+</span> rectArea c b <span class="atom">*</span> 2
+
+<span class="atom">#</span> <span class="variable">Cube</span><span class="atom">.</span>hs
+<span class="keyword">module</span> <span class="variable">Geometry</span><span class="atom">.</span><span class="variable">Cube</span>
+<span class="paren1">(<span class="code"> volume
+, area
+</span>)</span> <span class="keyword">where</span>
+
+<span class="keyword">import</span> qualified <span class="variable">Geometry</span><span class="atom">.</span><span class="variable">Cuboid</span> as <span class="variable">Cuboid</span>
+
+<span class="function">volume</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">volume</span> side <span class="keyword">=</span> <span class="variable">Cuboid</span><span class="atom">.</span>volume side side side
+
+<span class="function">area</span> <span class="keyword">::</span> <span class="variable">Float</span> <span class="keyword">-&gt;</span> <span class="variable">Float</span>
+<span class="function">area</span> side <span class="keyword">=</span> <span class="variable">Cuboid</span><span class="atom">.</span>area side side side</span></code></pre>
+
+<pre><code><span class="code"><span class="comment">;; geometry.asd
+</span><span class="paren1">(<span class="code">in-package <span class="keyword">:asdf</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defsystem</span></i> <span class="string">"geometry"</span>
+  <span class="keyword">:components</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="keyword">:file</span> <span class="string">"sphere"</span></span>)</span>
+               <span class="paren3">(<span class="code"><span class="keyword">:file</span> <span class="string">"cuboid"</span></span>)</span>
+               <span class="paren3">(<span class="code"><span class="keyword">:file</span> <span class="string">"cube"</span> <span class="keyword">:depends-on</span> <span class="paren4">(<span class="code"><span class="string">"cuboid"</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;; sphere.lisp
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defpackage</span></i> <span class="keyword">:geometry.sphere</span><span class="paren2">(<span class="code"><span class="keyword">:use</span> <span class="keyword">:cl</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:export</span> <span class="keyword">#:volume</span> <span class="keyword">#:area</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">in-package <span class="keyword">:geometry.sphere</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float</span>)</span>float</span>)</span>volume</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> volume<span class="paren2">(<span class="code">radius</span>)</span>
+  <span class="paren2">(<span class="code">* #.<span class="paren3">(<span class="code">/ 4.0 3.0</span>)</span> pi <span class="paren3">(<span class="code">expt radius 3</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float</span>)</span>float</span>)</span>area</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> area<span class="paren2">(<span class="code">radius</span>)</span>
+  <span class="paren2">(<span class="code">* 4 pi <span class="paren3">(<span class="code">expt radius 2</span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;; cuboid.lisp
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defpackage</span></i> <span class="keyword">:geometry.cuboid</span><span class="paren2">(<span class="code"><span class="keyword">:use</span> <span class="keyword">:cl</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:export</span> <span class="keyword">#:volume</span> <span class="keyword">#:area</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">in-package <span class="keyword">:geometry.cuboid</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float float float</span>)</span>float</span>)</span>volume</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> volume<span class="paren2">(<span class="code">a b c</span>)</span>
+  <span class="paren2">(<span class="code">* <span class="paren3">(<span class="code">rect-area a b</span>)</span>
+     c</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float float float</span>)</span>float</span>)</span>area</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> area<span class="paren2">(<span class="code">a b c</span>)</span>
+  <span class="paren2">(<span class="code">+ <span class="paren3">(<span class="code">rect-area a <span class="paren4">(<span class="code">* b 2</span>)</span></span>)</span>
+     <span class="paren3">(<span class="code">rect-area a <span class="paren4">(<span class="code">* c 2</span>)</span></span>)</span>
+     <span class="paren3">(<span class="code">rect-area c <span class="paren4">(<span class="code">* b 2</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float float</span>)</span>float</span>)</span>rect-area</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> rect-area<span class="paren2">(<span class="code">a b</span>)</span>
+  <span class="paren2">(<span class="code">* a b</span>)</span></span>)</span>
+
+<span class="comment">;; cube.lisp
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defpackage</span></i> <span class="keyword">:geometry.cube</span><span class="paren2">(<span class="code"><span class="keyword">:use</span> <span class="keyword">:cl</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:export</span> <span class="keyword">#:volume</span> <span class="keyword">#:area</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">in-package <span class="keyword">:geometry.cube</span></span>)</span>
+
+<span class="paren1">(<span class="code">qualified-use <span class="keyword">:geometry.cuboid</span> <span class="keyword">:as</span> <span class="keyword">:cuboid</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float</span>)</span>float</span>)</span>volume</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> volume<span class="paren2">(<span class="code">side</span>)</span>
+  <span class="paren2">(<span class="code">cuboid.volume side side side</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">float</span>)</span>float</span>)</span>area</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> area<span class="paren2">(<span class="code">side</span>)</span>
+  <span class="paren2">(<span class="code">cuboid.area side side side</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">Geometry</span><span class="atom">.</span><span class="variable">Sphere</span>
+<span class="atom">##</span> or
+<span class="keyword">import</span> qualified <span class="variable">Geometry</span><span class="atom">.</span><span class="variable">Sphere</span> as <span class="variable">Sphere</span>
+<span class="keyword">import</span> qualified <span class="variable">Geometry</span><span class="atom">.</span><span class="variable">Cuboid</span> as <span class="variable">Cuboid</span>
+<span class="keyword">import</span> qualified <span class="variable">Geometry</span><span class="atom">.</span><span class="variable">Cube</span> as <span class="variable">Cube</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">asdf:load-system <span class="keyword">:geometry</span></span>)</span>
+<span class="paren1">(<span class="code">use-package <span class="keyword">:geometry.sphere</span></span>)</span>
+<span class="comment">;; or
+</span><span class="paren1">(<span class="code">qualified-use <span class="keyword">:geometry.sphere</span> <span class="keyword">:as</span> <span class="keyword">:sphere</span></span>)</span>
+<span class="paren1">(<span class="code">qualified-use <span class="keyword">:geometry.cuboid</span> <span class="keyword">:as</span> <span class="keyword">:cuboid</span></span>)</span>
+<span class="paren1">(<span class="code">aualified-use <span class="keyword">:geometry.cube</span> <span class="keyword">:as</span> <span class="keyword">:cube</span></span>)</span></span></code></pre>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
