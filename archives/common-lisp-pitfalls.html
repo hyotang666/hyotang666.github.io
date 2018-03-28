@@ -40,6 +40,16 @@
 <p>なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。</p>
 
+<h2>LIST*</h2>
+
+<p>無引数で呼び出した場合の挙動に関しては仕様上触れられていない。
+<code>NIL</code>が返る処理系とエラーになる処理系とがある。</p>
+
+<pre><code><span class="code">#+<span class="paren1">(<span class="code">or clisp sbcl ccl</span>)</span>
+<span class="paren1">(<span class="code">list*</span>)</span> =&gt; ERROR
+#+ecl
+<span class="paren1">(<span class="code">list*</span>)</span> =&gt; NIL</span></code></pre>
+
 <h2>*PRINT-LENGTH*</h2>
 
 <p>プリティプリンタ周りの実装は可搬的でないケースが多い。
