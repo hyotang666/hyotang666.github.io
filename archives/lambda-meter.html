@@ -1,0 +1,157 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>lambda-meter
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>Profiling issue in SBCL.</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<p>関数のプロファイルに力を入れているSBCLユーザ。</p>
+
+<h2>Introduction</h2>
+
+<p>SBCLには強力な、プロファイル用のオペレータ群が存在する。
+これは充分強力で、通常不満を覚えることはない。
+すなわち、通常でない場合には不満を覚えることもあるという意味だ。
+本稿では筆者が出会った「通常でない場合」とその不満点、解決策として開発した成果物/その使い方、使用上の注意点、今後の課題、最後に実装に際しての裏話などについて述べる。</p>
+
+<h2>Issue</h2>
+
+<p>筆者がやりたかったのは「「関数を返す関数」が返した関数のプロファイルを取る」である。
+ここではわかり易さのため、「関数を返す関数」のことを「ファクトリ」、ファクトリが返した関数のことを「インスタンス」と呼ぶこととする。
+すなわち、筆者がやりたかったことは「インスタンスのプロファイルを取る」である。
+<code>SB-PROFILE:PROFILE</code>はファクトリのプロファイルこそ取れるものの、インスタンスのプロファイルを取ることは出来ない。</p>
+
+<h2>LAMBDA-METER</h2>
+
+<p>そこで、それを可能たらしむる小さなライブラリを作った。
+名を<a href="https://github.com/hyotang666/lambda-meter" ><code>LAMBDA-METER</code></a> という。</p>
+
+<p>使用に際してはリードテーブルの変更が推奨される。
+<code>LAMBDA-METER</code>は<a href="https://github.com/melisgl/named-readtables" ><code>NAMED-READTABLES</code></a> をサポートしているので、それを使うか、さもなくば<code>ENABLE</code>関数で<code>*READTABLE*</code>を変更させればよい。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">named-readtables:in-readtable lambda-meter:syntax</span>)</span>
+<span class="comment">;; or
+</span><span class="paren1">(<span class="code">lambda-meter:enable</span>)</span></span></code></pre>
+
+<p>さて、関数を返す関数の例といえば<code>ADDER</code>だろう。
+以下のような関数である。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> adder<span class="paren2">(<span class="code">x</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">y</span>)</span>
+    <span class="paren3">(<span class="code">+ x y</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>ファクトリ関数<code>ADDER</code>が返すインスタンスのプロファイルを取りたい場合、以下のような一行を追加するだけで良い。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> adder<span class="paren2">(<span class="code">x</span>)</span>
+  #M adder  <span class="comment">; &lt;--- This!
+</span>  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">y</span>)</span>
+    <span class="paren3">(<span class="code">+ x y</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>LAMBDA-METER</code>が提供するディスパッチリーダマクロは唯一<code>#M</code>である。
+これは<code>#+</code>、<code>#-</code>ファミリーと同様にS式を２つ消費する。</p>
+
+<p>ひとつ目はインスタンスに紐付けられるIDで、これはシンボルでなければならない。
+評価はされない。</p>
+
+<p>ふたつ目はプロファイルされるべき関数オブジェクトを生成するフォームである。
+よって上記例は以下のように書いても機能する。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> adder<span class="paren2">(<span class="code">x</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">flet</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">adder<span class="paren5">(<span class="code">y</span>)</span>
+          <span class="paren5">(<span class="code">+ x y</span>)</span></span>)</span></span>)</span>
+    #M <span class="keyword">#:adder</span> #'adder</span>)</span></span>)</span></span></code></pre>
+
+<p>こうするだけで、後は<code>SB-PROFILE</code>が提供するAPI群を普通に使えばよい。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> 2+ <span class="paren2">(<span class="code">adder 2</span>)</span></span>)</span>
+2+
+
+* <span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> 3+ <span class="paren2">(<span class="code">adder 3</span>)</span></span>)</span>
+3+
+
+* <span class="paren1">(<span class="code">funcall 2+ 2</span>)</span>
+4
+
+* <span class="paren1">(<span class="code">funcall 3+ 2</span>)</span>
+5
+
+* <span class="paren1">(<span class="code">sb-profile:report</span>)</span>
+
+  seconds  |     gc    | consed | calls |  sec/call  |  name
+---------------------------------------------------
+     0.000 |     0.000 |      0 |     2 |   0.000000 | ADDER
+---------------------------------------------------
+     0.000 |     0.000 |      0 |     2 |   0.000000 | Total
+
+estimated total profiling overhead: 0.00 seconds
+overhead estimation parameters:
+  3.2000003e-8s/call, 9.855999e-6s total profiling, 4.4159997e-6s internal profiling</span></code></pre>
+
+<h2>NOTE</h2>
+
+<p>前節の例ではファクトリ自体のプロファイルは取っていなかったので、IDは単にファクトリの名前を使っていたが、ファクトリ自体のプロファイルも取りたい場合、名前の衝突を避ける必要がある。</p>
+
+<p>好きな名前を使えば良いが、ここではアンインターンドシンボルを使うことを推奨しておく。
+（根拠は、1.余計な名前を考えなくてよい。2.ファクトリ名と充分区別がつく。3.パッケージを汚さない。等である。）</p>
+
+<p>ただ、IDにファクトリ名以外のシンボルを使う場合、一つだけ注意点がある。
+<code>SB-PROFILE:UNPROFILE</code>がエラーを投げるようになってしまうのだ。
+この問題に対処するため、<code>LAMBDA-METER</code>は独自の<code>UNPROFILE</code>を提供している。
+「独自の」と言っても、中身は単なる<code>SB-PROFILE:UNPROFILE</code>へのラッパに過ぎない。
+APIは<code>SB-PROFILE:UNPROFILE</code>と全く同じなので、学習コストは皆無である。</p>
+
+<h2>Task?</h2>
+
+<p>現行の実装では各インスタンスは全て同一のIDで管理されている。
+上記の例で言えば<code>2+</code>を呼ぼうが<code>3+</code>を呼ぼうが「<code>ADDER</code>が呼ばれた」と数えている。
+将来的には、もしかしたら、各インスタンス毎にプロファイルを取り分けたいと思うことがあるかもしれない。</p>
+
+<p>リーダマクロが<code>#M</code>なのは&ldquo;Meter&rdquo;の頭文字から。
+本当は&ldquo;Profile&rdquo;から採りたかったのだが<code>#P</code>は既にパスネームに使われてしまっているので。
+<a href="https://github.com/m2ym/cl-annot" ><code>CL-ANNOT</code></a> を採用して<code>@profile</code>とかしたほうがスマートだったかもしれない。
+需要があるようならプラグインとして提供するようにしてもいいかもしれない。
+現時点では自分しか使わないのでこれでよしとしている。</p>
+
+<p>&ldquo;Meter&rdquo;という言葉は、ライブラリ<a href="http://quickdocs.org/metering/" ><code>METERING</code></a> から。
+<code>METERING</code>はポータブルなプロファイラーで、<a href="https://github.com/slime/slime" ><code>SLIME</code></a> が持っているパッケージを独立させたものらしい。</p>
+
+<h2>sb-profile</h2>
+
+<p>割と素朴な実装だったので<a href="https://github.com/sbcl/sbcl/blob/master/src/code/profile.lisp" >ソース</a> を読むのはそこまで苦痛ではなかった。
+グローバルにハッシュテーブルがポツンとあり、そこに関数名をキーに<code>PROFILE-INFO</code>オブジェクトをバリューにして登録する。
+プロファイルされる関数は、パッケージをアンロックして<code>FDEFINITION</code>を書き換える。
+新しい<code>FDEFINITION</code>は単なるラッパで、処理時間やコンシングに関する内部状態を管理しつつ本来の関数を呼びだす。</p>
+
+<p><code>RESET</code>はハッシュテーブルをマップしていくだけ。</p>
+
+<p><code>REPORT</code>はソートが含まれるが、適したオブジェクトさえハッシュテーブルに入っていればノータッチでおｋ。</p>
+
+<p><code>UNPROFILE</code>はラッパを捨てて<code>FDEFINITION</code>に本来の関数を登録し直すだけ。
+ちなみにこれがエラーの原因。</p>
+
+<h2>Conclusion</h2>
+
+<p>関数を返す関数を実装することは、頻度としてはあまりない事と思う。
+ましてや返された関数のプロファイルを取りたいと思うことをや。</p>
+
+<p>しかしながら、<a href="https://github.com/m2ym/optima" ><code>OPTIMA</code></a> や<a href="https://github.com/nikodemus/esrap" ><code>ESRAP</code></a> の例に見られる通り、遅延評価やカリーイングを採用したHaskellに代表されるような関数型言語で実装されたアルゴリズムをCommon Lispに輸入しようという場合、いきおいファクトリが大量に必要になる場合もある。
+それで充分速度が出ていれば（プロファイルを取る必要がなければ）問題とはならないのだが、そうでない場合には<code>LAMBDA-METER</code>が助けとなろう。</p>
+
+<p>そうでなくとも、例えば<a href="https://github.com/fukamachi/clack" ><code>CLACK</code></a> を使っているユーザなど、特定のクロージャ（無名関数）のプロファイルを取りたい場合は他にも考えられるだろう。</p>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
