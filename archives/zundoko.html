@@ -1,0 +1,204 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>zundoko
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>Generalized zundoko function in Common Lisp</h1>
+
+<h2>Meta Info</h2>
+
+<h3>対象読者</h3>
+
+<p>広く暇を持て余したプログラマ。</p>
+
+<h2>Zundoko function version 1.</h2>
+
+<p><a href="https://twitter.com/kumiromilk/status/707437861881180160" >ズンドコ関数</a> をCommon Lispで書いてみました。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> zundoko<span class="paren2">(<span class="code">&amp;optional<span class="paren3">(<span class="code">memory 0</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">= #B11110 memory</span>)</span>
+    <span class="paren3">(<span class="code">Prin1 <span class="keyword">:kiyoshi!</span></span>)</span>
+    <span class="paren3">(<span class="code">zundoko<span class="paren4">(<span class="code">shift memory<span class="paren5">(<span class="code">print-zundoko<span class="paren6">(<span class="code">random 2</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> print-zundoko<span class="paren2">(<span class="code">n</span>)</span>
+  <span class="paren2">(<span class="code">ecase n
+    <span class="paren3">(<span class="code">1 <span class="paren4">(<span class="code">prin1 <span class="keyword">:zun</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">0 <span class="paren4">(<span class="code">PRIN1 <span class="keyword">:doko</span></span>)</span></span>)</span></span>)</span>
+  n</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> shift<span class="paren2">(<span class="code">acc it</span>)</span>
+  <span class="paren2">(<span class="code">ldb<span class="paren3">(<span class="code">byte 5 0</span>)</span><span class="paren3">(<span class="code">dpb it<span class="paren4">(<span class="code">byte 1 0</span>)</span><span class="paren4">(<span class="code">ash acc 1</span>)</span></span>)</span></span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">zundoko</span>)</span>
+:DOKO:DOKO:ZUN:DOKO:DOKO:ZUN:ZUN:ZUN:ZUN:ZUN:ZUN:ZUN:DOKO:KIYOSHI!
+:KIYOSHI!</span></code></pre>
+
+<p>出力されるのは「:ZUN」と「:DOKO」のみなので、これは０と１、２つの数があれば表すのに充分であるということです。</p>
+
+<p>Common Lispで２進数を書く場合、<code>#B</code>ディスパッチマクロを使ってリテラルに書くことが出来ます。
+<code>30</code>というマジックナンバーが書かれているより、メモリの状態が分かりやすかろうと思われます。</p>
+
+<p>Common Lispは仮想ビットベクタをサポートしています。
+仮想ビットベクタとは、正数を事実上のビットベクタと見なす、というものです。
+いにしえのC言語では、<code>char</code>で変数を宣言して、それをビットベクタと見なし、各種フラグを格納するのに使うということがありました。
+丁度それと似たようなものです。</p>
+
+<p>そしてCommon LispはBIGNUMをサポートする言語でもあります。
+すなわち、メモリが許す限り、いくらでも大きな正数を持てます。
+それはつまり、メモリが許す限り、事実上無限のビットベクタがあると見なすことができるということでもあります。</p>
+
+<p>おかげでちょっと厄介なのが、ビットシフトして、オーバーフローを起こすことが出来ないという点です。
+それをシミュレートしているのが関数<code>SHIFT</code>です。</p>
+
+<h2>Zundoko function version 2.</h2>
+
+<p>前節のバージョンでは、キヨシのズンドコ節は表わせますが、ドリフのズンドコ節は表わせません。
+（すなわち、「ズンズンズンズンドコ」でなく「ズンズンズンズンズンズンドコ」と出力したら「志村！」と出力する。）</p>
+
+<p>早速対応しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> shift<span class="paren2">(<span class="code">acc it &amp;key<span class="paren3">(<span class="code">max <span class="paren4">(<span class="code">integer-length acc</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">ldb<span class="paren3">(<span class="code">byte max 0</span>)</span><span class="paren3">(<span class="code">dpb it<span class="paren4">(<span class="code">byte 1 0</span>)</span><span class="paren4">(<span class="code">ash acc 1</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> zundoko<span class="paren2">(<span class="code">result finally &amp;optional<span class="paren3">(<span class="code">memory 0</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">= result memory</span>)</span>
+    <span class="paren3">(<span class="code">prin1 finally</span>)</span>
+    <span class="paren3">(<span class="code">zundoko result finally <span class="paren4">(<span class="code">shift memory <span class="paren5">(<span class="code">print-zundoko<span class="paren6">(<span class="code">random 2</span>)</span></span>)</span>
+                                   <span class="keyword">:max</span><span class="paren5">(<span class="code">integer-length result</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">zundoko #B1111110 <span class="keyword">:shimura</span></span>)</span>
+:DOKO:DOKO:DOKO:ZUN:DOKO:ZUN:ZUN:DOKO:ZUN:DOKO:DOKO:DOKO:ZUN:DOKO:DOKO:ZUN:DOKO:DOKO:DOKO:ZUN:DOKO:ZUN:DOKO:DOKO:ZUN:DOKO:DOKO:ZUN:ZUN:ZUN:DOKO:ZUN:ZUN:DOKO:DOKO:ZUN:DOKO:DOKO:DO:DOKO:ZUN:ZUN:ZUN:DOKO:DOKO:ZUN:ZUN:DOKO:ZUN:DOKO:ZUN:DOKO:DOKO:DOKO:DOKO:ZUN:DOKO:DOKO:ZUN:DOKO:ZUN:DOKO:ZUN:ZUN:DOKO:DOKO:ZUN:ZUN:ZUN:ZUN:ZUN:ZUN:DOKO:SHIMURA
+:SHIMURA</span></code></pre>
+
+<h2>Zundoko function version 3.</h2>
+
+<p>前節のバージョンでキヨシのズンドコ節のみならずドリフのズンドコ節にも対応できるようになりましたが、これでは広末涼子の大好きを表すことが出来ません。
+（すなわち、「とっても」と「大好きよ」をランダムに出力し、「とってもとってもとってもとってもとってもとっても大好きよ」の出力が得られたら「ダーリンILoveYouダーリン」と出力する。）</p>
+
+<p>早速対応しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> zundoko <span class="paren2">(<span class="code">sequence &amp;optional finally</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">length<span class="paren5">(<span class="code">length sequence</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">vector<span class="paren5">(<span class="code">coerce <span class="paren6">(<span class="code">remove-duplicates sequence</span>)</span> 'vector</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">result 0</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">MAIN<span class="paren6">(<span class="code">memory</span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">= result memory</span>)</span>
+                <span class="paren1">(<span class="code">when finally <span class="paren2">(<span class="code">write finally</span>)</span>NIL</span>)</span>
+                <span class="paren1">(<span class="code">MAIN<span class="paren2">(<span class="code">shift memory <span class="paren3">(<span class="code">PRINT-ZUNDOKO<span class="paren4">(<span class="code">random 2</span>)</span></span>)</span>
+                            <span class="keyword">:max</span> length</span>)</span></span>)</span></span>)</span></span>)</span>
+            <span class="paren5">(<span class="code">PRINT-ZUNDOKO<span class="paren6">(<span class="code">n</span>)</span>
+              <span class="paren6">(<span class="code">write<span class="paren1">(<span class="code">aref vector n</span>)</span></span>)</span>
+              n</span>)</span>
+            <span class="paren5">(<span class="code">SETUP<span class="paren6">(<span class="code"></span>)</span>
+              <span class="paren6">(<span class="code">map nil <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren2">(<span class="code">elt</span>)</span>
+                         <span class="paren2">(<span class="code">setf result <span class="paren3">(<span class="code">shift result <span class="paren4">(<span class="code">position elt vector</span>)</span>
+                                             <span class="keyword">:max</span> length</span>)</span></span>)</span></span>)</span>
+                   sequence</span>)</span></span>)</span>
+            <span class="paren5">(<span class="code">START<span class="paren6">(<span class="code"></span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:with</span> acc = 0
+                    <span class="keyword">:repeat</span> length
+                    <span class="keyword">:do</span> <span class="paren1">(<span class="code">setf acc <span class="paren2">(<span class="code">shift acc <span class="paren3">(<span class="code">PRINT-ZUNDOKO<span class="paren4">(<span class="code">random 2</span>)</span></span>)</span>
+                                         <span class="keyword">:max</span> length</span>)</span></span>)</span>
+                    <span class="keyword">:finally</span> <span class="paren1">(<span class="code">return acc</span>)</span></span>)</span></span>)</span>
+          </span>)</span>
+      <span class="paren4">(<span class="code">SETUP</span>)</span>
+      <span class="paren4">(<span class="code">MAIN <span class="paren5">(<span class="code">START</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">zundoko '<span class="paren2">(<span class="code">とっても とっても とっても とっても とっても とっても 大好きよ</span>)</span> '<span class="keyword">#:ダーリンILoveYouダーリン</span></span>)</span>
+大好きよ大好きよ大好きよとってもとっても大好きよ大好きよとってもとってもとっても大好きよ大好きよとっても大好きよとっても大好きよ大好きよとってもとってもとっても大好きよ大好きよとっても大好きよとってもとってもとっても大好きよとっても大好きよ大好きよとっても大好きよ大好きよとってもとっても大好きよとってもとってもとってもとってもとってもとっても大好きよ#:ダーリンILOVEYOUダーリン
+NIL</span></code></pre>
+
+<h2>Zundoko function version 4.</h2>
+
+<p>前節のバージョンでは広末涼子の大好きまで表わすことが出来るようになりましたが、まだ足りません。
+今のままではアントニオ猪木の締めを表すことが出来ません。
+（すなわち、「１！」、「２！」、「３！」をランダムに出力し、「１！２！３！」と出力されたら「ダーッ！」と出力する。）</p>
+
+<p>早速対応しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> shift<span class="paren2">(<span class="code">memory num &amp;key <span class="paren3">(<span class="code">max <span class="paren4">(<span class="code">integer-length memory</span>)</span></span>)</span> <span class="paren3">(<span class="code">unit 0</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">ldb<span class="paren3">(<span class="code">byte <span class="paren4">(<span class="code">* max unit</span>)</span> 0</span>)</span><span class="paren3">(<span class="code">dpb num<span class="paren4">(<span class="code">byte unit 0</span>)</span><span class="paren4">(<span class="code">ash memory unit</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> zundoko <span class="paren2">(<span class="code">sequence &amp;optional finally</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">length<span class="paren5">(<span class="code">length sequence</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">vector<span class="paren5">(<span class="code">remove-duplicates<span class="paren6">(<span class="code">coerce sequence 'vector</span>)</span></span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">byte<span class="paren5">(<span class="code">length vector</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">result 0</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">MAIN<span class="paren6">(<span class="code">memory</span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">= result memory</span>)</span>
+                <span class="paren1">(<span class="code">when finally <span class="paren2">(<span class="code">write finally</span>)</span>NIL</span>)</span>
+                <span class="paren1">(<span class="code">MAIN<span class="paren2">(<span class="code">shift memory <span class="paren3">(<span class="code">PRINT-ZUNDOKO<span class="paren4">(<span class="code">random byte</span>)</span></span>)</span>
+                            <span class="keyword">:max</span> length <span class="keyword">:unit</span> byte</span>)</span></span>)</span></span>)</span></span>)</span>
+            <span class="paren5">(<span class="code">PRINT-ZUNDOKO<span class="paren6">(<span class="code">n</span>)</span>
+              <span class="paren6">(<span class="code">write<span class="paren1">(<span class="code">aref vector n</span>)</span></span>)</span>
+              n</span>)</span>
+            <span class="paren5">(<span class="code">SETUP<span class="paren6">(<span class="code"></span>)</span>
+              <span class="paren6">(<span class="code">map nil <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren2">(<span class="code">elt</span>)</span>
+                         <span class="paren2">(<span class="code">setf result <span class="paren3">(<span class="code">shift result <span class="paren4">(<span class="code">position elt vector</span>)</span>
+                                             <span class="keyword">:max</span> length <span class="keyword">:unit</span> byte</span>)</span></span>)</span></span>)</span>
+                   sequence</span>)</span></span>)</span>
+            <span class="paren5">(<span class="code">START<span class="paren6">(<span class="code"></span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:with</span> acc = 0
+                    <span class="keyword">:repeat</span> length
+                    <span class="keyword">:do</span> <span class="paren1">(<span class="code">setf acc <span class="paren2">(<span class="code">shift acc <span class="paren3">(<span class="code">PRINT-ZUNDOKO<span class="paren4">(<span class="code">random byte</span>)</span></span>)</span>
+                                         <span class="keyword">:max</span> length <span class="keyword">:unit</span> byte</span>)</span></span>)</span>
+                    <span class="keyword">:finally</span> <span class="paren1">(<span class="code">return acc</span>)</span></span>)</span></span>)</span>
+          </span>)</span>
+      <span class="paren4">(<span class="code">SETUP</span>)</span>
+      <span class="paren4">(<span class="code">MAIN <span class="paren5">(<span class="code">START</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">zundoko <span class="string">"123"</span> <span class="string">"だーっ！"</span></span>)</span>
+#\3#\2#\2#\3#\2#\1#\2#\1#\3#\2#\2#\1#\2#\2#\2#\1#\2#\3"だーっ！"
+NIL</span></code></pre>
+
+<p>これで今話題の<a href="https://renidentia991.bitbucket.io/pptp.html" >ポプテピピック</a> も引数を渡すだけで再現できますね！</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> *|pop'n destruction|* <span class="string">"
+　　　　　　　　　　　　　　　　　　　　　　　　　-------　､　ｒへ------､
+　　　　　　　　　　　　　　　　　　 ＿__､+''</span><span class="string">\"</span><span class="string">~　八 　　　　　~''＜ つ　　　＼
+　　　　　　　　　　　　　　 _､+''</span><span class="string">\"</span><span class="string">~　 ./ ,:　　　　＾ 　 丶　　　　　ヽく＿＿　∧
+　　　　　　 , -r-　　　　 / 　 　 　 / / -､　　　　'´￣!＼‘,　‘:,　 |　　　 ＼/
+　　　　　／ .∧　　 ＼..ﾞ|/＿,,.｡*'/ /|,/＼＿_／^ヽ /,,_　`! 　 ',　|
+　　　 ／　　　∧　　　 ＼　〈〉.　,　.|　ｙ''</span><span class="string">\"</span><span class="string">ヽ______ 7´⌒ヽ _|　　ト;′
+　　 〈　　　　　 ∧ （竹） .∨...　｜｜ ,r　ヽ 三三/　　‘:, Y!　 .|,′
+　　　∨ 　 　 　 ∧　　　　∨...　|　.|八 °,!三三{.　° ﾉ 八　/---､
+.　　　 ∨ 　 　 　 ∧　　　　∨....∨（.＾ 　　 ､_,､_, `　　　,.ｨ^!./＿　　',
+　　　　 ∨　　 ／三ﾐメ、　　∨　冫≧=‐------‐ｧ=≦/ .|/　　 } 　 !
+.　　　 　 ∨三三三三圦__.＼＼/　＼|ｲ `''＜:＼/:::::／　　|　　（＿__）
+　　　 〈〉　　 ノ　ゞ三ｼ.　＼　＼;　　 { /　　　 ｀¨ﾍ⌒こフ　.∨ 〔､､､_）
+　　　　　　　）　　　 　 　 　 ＼八　　`^i､_ __　　　 ＼＼　　 .∨ ｀¨´
+　　　　 ＜ﾍ＿/三＼＿／｜＼､.＼　/::/　 ）　　　　 `'´　＿ ,∨､
+　　　　|＼三三三三:／　　|.　　＼/^ゞク≦---‐=≦::::::「:::::::::|::::/
+　　　　　　　　 　 　 　 　 　 　 　 /:::::::/:::::::/:::::::::;′:::::::::|::::::::::|:人"</span></span>)</span>
+
+* <span class="paren1">(<span class="code">zundoko '<span class="paren2">(<span class="code">ポ プ テ ピピック</span>)</span> *|pop'n destruction|*</span>)</span>
+プピピックポポププテポピピックピピックピピックプポピピックテプポピピックポテプテポピピックピピックピピックピピックピピックポピピックピピックピピックピピックテテピピックポプピピックプポピピックピピックピピックピピックポポピピックピピックポテポピピックポテププピピックポテポピピックポプピピックポテポポテピピックプテピピックテポポプポテテポピピックプポププテプポテプポポテテピピックピピックポテププテププピピックプポピピックテプテテプテポテププテプピピックポププポプテピピック"
+　　　　　　　　　　　　　　　　　　　　　　　　　-------　､　ｒへ------､
+　　　　　　　　　　　　　　　　　　 ＿__､+''\"~　八 　　　　　~''＜ つ　　　＼
+　　　　　　　　　　　　　　 _､+''\"~　 ./ ,:　　　　＾ 　 丶　　　　　ヽく＿＿　∧
+　　　　　　 , -r-　　　　 / 　 　 　 / / -､　　　　'´￣!＼‘,　‘:,　 |　　　 ＼/
+　　　　　／ .∧　　 ＼..ﾞ|/＿,,.｡*'/ /|,/＼＿_／^ヽ /,,_　`! 　 ',　|
+　　　 ／　　　∧　　　 ＼　〈〉.　,　.|　ｙ''\"ヽ______ 7´⌒ヽ _|　　ト<span class="comment">;′
+</span>　　 〈　　　　　 ∧ （竹） .∨...　｜｜ ,r　ヽ 三三/　　‘:, Y!　 .|,′
+　　　∨ 　 　 　 ∧　　　　∨...　|　.|八 °,!三三{.　° ﾉ 八　/---､
+.　　　 ∨ 　 　 　 ∧　　　　∨....∨（.＾ 　　 ､_,､_, `　　　,.ｨ^!./＿　　',
+　　　　 ∨　　 ／三ﾐメ、　　∨　冫≧=‐------‐ｧ=≦/ .|/　　 } 　 !
+.　　　 　 ∨三三三三圦__.＼＼/　＼|ｲ `''＜:＼/:::::／　　|　　（＿__）
+　　　 〈〉　　 ノ　ゞ三ｼ.　＼　＼<span class="comment">;　　 { /　　　 ｀¨ﾍ⌒こフ　.∨ 〔､､､_）
+</span>　　　　　　　）　　　 　 　 　 ＼八　　`^i､_ __　　　 ＼＼　　 .∨ ｀¨´
+　　　　 ＜ﾍ＿/三＼＿／｜＼､.＼　/::/　 ）　　　　 `'´　＿ ,∨､
+　　　　|＼三三三三:／　　|.　　＼/^ゞク≦---‐=≦::::::「:::::::::|::::/
+　　　　　　　　 　 　 　 　 　 　 　 /:::::::/:::::::/:::::::::;′:::::::::|::::::::::|:人"</span></code></pre>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
