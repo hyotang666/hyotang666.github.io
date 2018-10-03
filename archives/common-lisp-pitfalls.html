@@ -40,6 +40,17 @@
 <p>なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。</p>
 
+<h2>MACROEXPAND-1 with &amp;WHOLE</h2>
+
+<p>マクロ展開関数が<code>&amp;WHOLE</code>ラムダリストキーワードで受けたフォームを返した場合、直感的には展開が行われていないので第二返り値が<code>NIL</code>になりそうなものだが、<code>T</code>となる。
+仕様では、引数のフォームがマクロフォームであれば第二返り値は<code>T</code>となる。</p>
+
+<blockquote>
+<p>If form is a macro form, then the expansion is a macro expansion and expanded-p is true.</p>
+</blockquote>
+
+<p>第二返り値の名前が<code>EXPANDED-P</code>であることが、誤解の原因と言える。</p>
+
 <h2>LIST*</h2>
 
 <p>無引数で呼び出した場合の挙動に関しては仕様上触れられていない。
