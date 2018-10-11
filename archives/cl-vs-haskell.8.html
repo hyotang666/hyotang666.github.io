@@ -1,0 +1,536 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>cl-vs-haskell.8
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>Common Lisp vs Haskell, Chapter 8</h1>
+
+<h2>Meta note</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="cl-vs-haskell.7.html" >前章</a>を読了済みの者。</p>
+
+<h2>Introduction</h2>
+
+<p>本稿は「すごいH本」の内容をCommon Lispに翻訳しながらCLerがHaskellを学ぶその第8章である。
+本章ではHaskellに於けるIOアクションを、Common Lispに翻訳しながら学習していく。</p>
+
+<p>初級CLerにとっては冒頭にあるroswell周りの内容が興味深いものとなろう。</p>
+
+<p>中級以上の者にとっては特に得られる物がないと思われる。
+サクッと読み飛ばして、どうぞ。</p>
+
+<p>本稿で実装するモナド周りのコマンドは、その振る舞いのみをそれっぽく真似ただけのものでしかないことを予め言っておく。
+よりそれっぽい実装は１３章で行う。</p>
+
+<h1>8</h1>
+
+<h2>8.2</h2>
+
+<h3>Hello world</h3>
+
+<pre><code><span class="code"><span class="atom">#</span> helloworld<span class="atom">.</span>hs
+<span class="function">main</span> <span class="keyword">=</span> putStrLn <span class="string">"Hello, world"</span>
+<span class="atom">#</span> shell
+<span class="atom">$</span> ghc <span class="comment">--make helloworld</span>
+<span class="atom">$</span> <span class="atom">./</span>helloworld
+<span class="function">hello,</span> world</span></code></pre>
+
+<p>実行形式ファイルを作る機能だが、Common Lispはそのための仕様を持たない。
+これは、Common Lispが、かつてはLispマシンなども持っていた事と無関係ではないと思う（憶測）。
+Common Lispに於けるREPLは、いわば、UNIXの世界に於けるシェルのようなものだ。
+（だから筆者は個人的にCommon Lispが比較されるべきなのはPerlやrubyであるよりはbashやdashであるべきなのではないかと思っている。）
+不幸なことにLispマシンは今や絶滅（？）し、LispはOSを抽象化したシェルそのものの立場から、シェルから呼び出されるプログラムという立場になってしまった。</p>
+
+<p>UNIXの世界に充分慣れ親しんだ人がLispを学び始めて不便に思うことの一つが、このシェルとの連携に不向きという点だろう。
+とはいえ、それが全く出来ないというわけではない。
+各処理系は独自に実行形式ファイルを吐く機能を提供しているし、roswellが抽象化レイヤーを提供してくれている。</p>
+
+<pre><code><span class="code"># shell
+$ ros init hello
+<span class="comment">;; hello.ros
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code">&amp;rest argv</span>)</span>
+  <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignorable argv</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">write-line <span class="string">"Hello, world"</span></span>)</span></span>)</span>
+# shell
+$ ./hello.ros
+hello, world</span></code></pre>
+
+<p>上記の呼び出しは非常に遅い。
+必要なら、以下のようにしてイメージをダンプしておくべきだろう。</p>
+
+<pre><code><span class="code">$ ros build hello.ros
+# ./hello
+hello, world</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">:</span>t putStrLn
+<span class="function">putStrLn</span> <span class="keyword">::</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="variable">IO</span> <span class="paren1">(<span class="code"></span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">:</span>t putStrLn <span class="string">"hello, world"</span>
+<span class="function">putStrLn</span> <span class="string">"hello, world"</span> <span class="keyword">::</span> <span class="variable">IO</span> <span class="paren1">(<span class="code"></span>)</span></span></code></pre>
+
+<p>Haskellの<code>putStrLn</code>は、Common Lispに於ける<code>WRITE-LINE</code>におよそ等しい。
+だが、大きな違いがあり、それは<code>putStrLn</code>は関数を返す関数である点だ。
+再現したいなら自作する必要がある。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">type-of #'write-line</span>)</span>
+FUNCTION
+cl-user&gt; <span class="paren1">(<span class="code">describe #'write-line</span>)</span>
+<span class="comment">;; #&lt;FUNCTION WRITE-LINE&gt;
+</span><span class="comment">;;   [compiled function]
+</span><span class="comment">;; Lambda-list: (STRING &amp;OPTIONAL (STREAM *STANDARD-OUTPUT*) &amp;KEY
+</span><span class="comment">;;                      (START 0) END)
+</span><span class="comment">;; Declared type: (FUNCTION
+</span><span class="comment">;;                 (STRING &amp;OPTIONAL (OR STREAM BOOLEAN) &amp;KEY
+</span><span class="comment">;;                         (:START (MOD 536870909))
+</span><span class="comment">;;                         (:END (OR NULL (MOD 536870909))))
+</span><span class="comment">;;                 (VALUES STRING &amp;OPTIONAL))
+</span><span class="comment">;; Derived type: (FUNCTION
+</span><span class="comment">;;                (STRING &amp;OPTIONAL (OR STREAM BOOLEAN) &amp;KEY (:START T)
+</span><span class="comment">;;                        (:END T))
+</span><span class="comment">;;                (VALUES STRING &amp;OPTIONAL))
+</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> put-string-line<span class="paren2">(<span class="code">string</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span><span class="paren3">(<span class="code">write-line string</span>)</span><span class="paren3">(<span class="code">values</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>8.3</h2>
+
+<h3>IO actions</h3>
+
+<pre><code><span class="code"><span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   putStrLn <span class="string">"Hello, what's your name?"</span>
+&nbsp;   name <span class="keyword">&lt;-</span> getLine
+&nbsp;   putStrLn <span class="paren1">(<span class="code"><span class="string">"Hey "</span> <span class="atom">++</span> name <span class="atom">++</span> <span class="string">", you rock!"</span></span>)</span></span></code></pre>
+
+<p>Haskellに於ける<code>do</code>は、Common Lispに於ける<code>PROGN</code>におよそ相当すると言えよう。
+しかしながら前節の<code>putStrLn</code>と同様の違いがあり、すなわち、<code>do</code>は関数を返すが<code>PROGN</code>は処理を行う。
+再現にこだわらないのであれば、上記Haskellコードは以下のように翻訳できる。
+なお、<code>DEFUN</code>は暗黙裏に<code>PROGN</code>に展開される。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code">&amp;rest argv</span>)</span>
+  <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignorable argv</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">write-line <span class="string">"Hello, what's your name?"</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">name<span class="paren5">(<span class="code">read-line</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">format t <span class="string">"Hey ~A, you rock!~%"</span> name</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>Haskellに於ける<code>getLine</code>は、Common Lispに於ける<code>READ-LINE</code>におよそ相当する。
+前節同様、違いは関数を返すか、処理をするか、である。
+Haskellに倣うなら、自作するしか無い。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> get-line<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span><span class="paren3">(<span class="code">read-line</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>再現にこだわるなら、<code>do</code>を作らねばならない。
+<code>DO</code>だと名前が衝突してしまうので、ここでは<code>ACTION</code>とした。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> action<span class="paren2">(<span class="code">&amp;rest exp*</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">exp* &amp;optional acc</span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp exp*</span>)</span>
+              <span class="paren6">(<span class="code">nreverse acc</span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">eq '&lt;- <span class="paren2">(<span class="code">second exp*</span>)</span></span>)</span>
+                `<span class="paren1">(<span class="code">,@<span class="paren2">(<span class="code">nreverse acc</span>)</span>
+                   <span class="paren2">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">,<span class="paren5">(<span class="code">first exp*</span>)</span><span class="paren5">(<span class="code">FUNCALL ,<span class="paren6">(<span class="code">third exp*</span>)</span></span>)</span></span>)</span></span>)</span>
+                     ,@<span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">nthcdr 3 exp*</span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren1">(<span class="code">rec <span class="paren2">(<span class="code">cdr exp*</span>)</span><span class="paren2">(<span class="code">cons `<span class="paren3">(<span class="code">FUNCALL ,<span class="paren4">(<span class="code">first exp*</span>)</span></span>)</span>acc</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          </span>)</span>
+    `<span class="paren3">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren4">(<span class="code"></span>)</span>,@<span class="paren4">(<span class="code">rec exp*</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書ける。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">symbol-function 'main</span>)</span>
+      <span class="paren2">(<span class="code">action <span class="paren3">(<span class="code">put-string-line <span class="string">"Hello, what's your name?"</span></span>)</span>
+              name &lt;- <span class="paren3">(<span class="code">get-line</span>)</span>
+              <span class="paren3">(<span class="code">put-string-line <span class="paren4">(<span class="code">uiop:strcat <span class="string">"Hey "</span> name <span class="string">", you rock!"</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>なんならそれ用のマクロを用意してもいい。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">defaction</span></i><span class="paren2">(<span class="code">name &amp;body body</span>)</span>
+  <span class="paren2">(<span class="code">check-type name symbol</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">PROGN</span></i> <span class="paren3">(<span class="code">SETF <span class="paren4">(<span class="code">SYMBOL-FUNCTION ',name</span>)</span>
+                <span class="paren4">(<span class="code">ACTION ,@body</span>)</span></span>)</span>
+          ',name</span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書ける。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main
+   <span class="paren2">(<span class="code">put-string-line <span class="string">"Hello, what's your name?"</span></span>)</span>
+   name &lt;- <span class="paren2">(<span class="code">get-line</span>)</span>
+   <span class="paren2">(<span class="code">put-string-line <span class="paren3">(<span class="code">uiop:strcat <span class="string">"Hey "</span> name <span class="string">", you rock!"</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Let in IO action</h3>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">Char</span>
+
+<span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   putStrLn <span class="string">"What's your first name?"</span>
+&nbsp;   firstName <span class="keyword">&lt;-</span> getLine
+&nbsp;   putStrLn <span class="string">"What's your last name?"</span>
+&nbsp;   lastNmae <span class="keyword">&lt;-</span> getLine
+&nbsp;   <span class="keyword">let</span> bigFirstName <span class="keyword">=</span> map toUpper firstName
+&nbsp;       bigLastName <span class="keyword">=</span> map toUpper lastName
+&nbsp;   putStrLn <span class="atom">$</span> <span class="string">"hey "</span> <span class="atom">++</span> bigFirstName <span class="atom">++</span> <span class="string">" "</span> <span class="atom">++</span> bigLastName <span class="atom">++</span> <span class="string">", how are you?"</span></span></code></pre>
+
+<p>再現にこだわらないなら以下のように翻訳できる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code">&amp;rest argv</span>)</span>
+  <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignorable argv</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">first-name <span class="paren5">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren6">(<span class="code">write-line <span class="string">"What's your first name?"</span></span>)</span>
+                           <span class="paren6">(<span class="code">read-line</span>)</span></span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">last-name <span class="paren5">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren6">(<span class="code">write-line <span class="string">"What's your last name?"</span></span>)</span>
+                          <span class="paren6">(<span class="code">read-line</span>)</span></span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">big-first-name <span class="paren5">(<span class="code">string-upcase first-name</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">big-last-name <span class="paren5">(<span class="code">string-upcase last-name</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">format t <span class="string">"hey ~A ~A, how are you?~%"</span> big-first-name big-last-name</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>LET</code>キーワードの実装は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> action<span class="paren2">(<span class="code">&amp;rest exp*</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">exp* &amp;optional acc</span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp exp*</span>)</span>
+              <span class="paren6">(<span class="code">nreverse acc</span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">cond</span></i>
+                <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">eq '<i><span class="symbol">let</span></i> <span class="paren3">(<span class="code">first exp*</span>)</span></span>)</span>
+                 `<span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><i><span class="symbol">LET*</span></i>,<span class="paren4">(<span class="code">second exp*</span>)</span>
+                    ,@<span class="paren4">(<span class="code">rec <span class="paren5">(<span class="code">nthcdr 2 exp*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">eq '&lt;- <span class="paren3">(<span class="code">second exp*</span>)</span></span>)</span>
+                 `<span class="paren2">(<span class="code">,@<span class="paren3">(<span class="code">nreverse acc</span>)</span>
+                    <span class="paren3">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">first exp*</span>)</span><span class="paren6">(<span class="code">FUNCALL ,<span class="paren1">(<span class="code">third exp*</span>)</span></span>)</span></span>)</span></span>)</span>
+                      ,@<span class="paren4">(<span class="code">rec <span class="paren5">(<span class="code">nthcdr 3 exp*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren1">(<span class="code">T <span class="paren2">(<span class="code">rec <span class="paren3">(<span class="code">cdr exp*</span>)</span><span class="paren3">(<span class="code">cons `<span class="paren4">(<span class="code">FUNCALL ,<span class="paren5">(<span class="code">first exp*</span>)</span></span>)</span>acc</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          </span>)</span>
+    `<span class="paren3">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren4">(<span class="code"></span>)</span>,@<span class="paren4">(<span class="code">rec exp*</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のよう書ける。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main
+   <span class="paren2">(<span class="code">put-string-line <span class="string">"What's your first name?"</span></span>)</span>
+   first-name &lt;- <span class="paren2">(<span class="code">get-line</span>)</span>
+   <span class="paren2">(<span class="code">put-string-line <span class="string">"What's your last name?"</span></span>)</span>
+   last-name &lt;- <span class="paren2">(<span class="code">get-line</span>)</span>
+   <i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">big-first-name<span class="paren4">(<span class="code">string-upcase first-name</span>)</span></span>)</span>
+        <span class="paren3">(<span class="code">big-last-name <span class="paren4">(<span class="code">string-upcase last-name</span>)</span></span>)</span></span>)</span>
+   <span class="paren2">(<span class="code">put-string-line<span class="paren3">(<span class="code">uiop:strcat <span class="string">"hey "</span> big-first-name <span class="string">" "</span> big-last-name <span class="string">", how are you?"</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>reverse</h3>
+
+<pre><code><span class="code"><span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   line <span class="keyword">&lt;-</span> getLine
+&nbsp;   <span class="keyword">if</span> null line
+&nbsp;       <span class="keyword">then</span> return <span class="paren1">(<span class="code"></span>)</span>
+&nbsp;       <span class="keyword">else</span> <span class="keyword">do</span>
+&nbsp;           putStrLn <span class="atom">$</span> reverseWords line
+&nbsp;           main
+
+<span class="function">reverseWords</span> <span class="keyword">::</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="variable">String</span>
+<span class="function">reverseWords</span> <span class="keyword">=</span> unwords <span class="atom">.</span> map reverse <span class="atom">.</span> words</span></code></pre>
+
+<p>再現しないなら以下のように翻訳できる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code">&amp;rest argv</span>)</span>
+  <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignorable argv</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">line<span class="paren5">(<span class="code">read-line</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">unless<span class="paren4">(<span class="code">string= <span class="string">""</span> line</span>)</span>
+      <span class="paren4">(<span class="code">write-line <span class="paren5">(<span class="code">reverse-words line</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">main</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">string</span>)</span>string</span>)</span>reverse-words</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> reverse-words<span class="paren2">(<span class="code">line</span>)</span>
+  <span class="paren2">(<span class="code">format nil <span class="string">"~{~A~^ ~}"</span><span class="paren3">(<span class="code">mapcar #'reverse <span class="paren4">(<span class="code">uiop:split-string line</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>Haskellに於ける<code>return</code>は、Common Lispに於ける<code>CONSTANTLY</code>のようなものに見える。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> .return<span class="paren2">(<span class="code">value</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span>value</span>)</span></span>)</span></span></code></pre>
+
+<p>再現にこだわるなら、再帰を実現するために以下のような変更を要する。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">defaction</span></i><span class="paren2">(<span class="code">name &amp;body body</span>)</span>
+  <span class="paren2">(<span class="code">check-type name symbol</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">PROGN</span></i> <span class="paren3">(<span class="code">SETF <span class="paren4">(<span class="code">SYMBOL-FUNCTION <span class="paren5">(<span class="code"><i><span class="symbol">DEFUN</span></i> ,name<span class="paren6">(<span class="code"></span>)</span></span>)</span></span>)</span>
+                <span class="paren4">(<span class="code">ACTION ,@body</span>)</span></span>)</span>
+          ',name</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> may-call<span class="paren2">(<span class="code">arg</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">functionp arg</span>)</span>
+    <span class="paren3">(<span class="code">funcall arg</span>)</span>
+    arg</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> action<span class="paren2">(<span class="code">&amp;rest exp*</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">exp* &amp;optional acc</span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp exp*</span>)</span>
+              <span class="paren6">(<span class="code">nreverse acc</span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">cond</span></i>
+                <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">eq '<i><span class="symbol">let</span></i> <span class="paren3">(<span class="code">first exp*</span>)</span></span>)</span>
+                 `<span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><i><span class="symbol">LET*</span></i>,<span class="paren4">(<span class="code">second exp*</span>)</span>
+                    ,@<span class="paren4">(<span class="code">rec <span class="paren5">(<span class="code">nthcdr 2 exp*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">eq '&lt;- <span class="paren3">(<span class="code">second exp*</span>)</span></span>)</span>
+                 `<span class="paren2">(<span class="code">,@<span class="paren3">(<span class="code">nreverse acc</span>)</span>
+                    <span class="paren3">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">first exp*</span>)</span><span class="paren6">(<span class="code">MAY-CALL ,<span class="paren1">(<span class="code">third exp*</span>)</span></span>)</span></span>)</span></span>)</span>
+                      ,@<span class="paren4">(<span class="code">rec <span class="paren5">(<span class="code">nthcdr 3 exp*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren1">(<span class="code">T <span class="paren2">(<span class="code">rec <span class="paren3">(<span class="code">cdr exp*</span>)</span><span class="paren3">(<span class="code">cons `<span class="paren4">(<span class="code">MAY-CALL ,<span class="paren5">(<span class="code">first exp*</span>)</span></span>)</span>acc</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          </span>)</span>
+    `<span class="paren3">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren4">(<span class="code"></span>)</span>,@<span class="paren4">(<span class="code">rec exp*</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書ける。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main
+   line &lt;- <span class="paren2">(<span class="code">get-line</span>)</span>
+   <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">string= <span class="string">""</span> line</span>)</span>
+     <span class="paren3">(<span class="code">.return nil</span>)</span>
+     <span class="paren3">(<span class="code">action <span class="paren4">(<span class="code">put-string-line <span class="paren5">(<span class="code">reverse-words line</span>)</span></span>)</span>
+             <span class="paren4">(<span class="code">main</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>8.4</h2>
+
+<h3>putStr</h3>
+
+<pre><code><span class="code"><span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   putStr <span class="string">"Hey, "</span>
+&nbsp;   putStr <span class="string">"I'm "</span>
+&nbsp;   putStrLn <span class="string">"Andy!"</span></span></code></pre>
+
+<p>Haskellの<code>putStr</code>はCommon Lispに於ける<code>WRITE-STRING</code>におよそ相当する。
+Haskell風に再現するなら以下のようになる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> put-string <span class="paren2">(<span class="code">string</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span><span class="paren3">(<span class="code">write-string string</span>)</span><span class="paren3">(<span class="code">force-output</span>)</span><span class="paren3">(<span class="code">values</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main
+  <span class="paren2">(<span class="code">put-string <span class="string">"Hey "</span></span>)</span>
+  <span class="paren2">(<span class="code">put-string <span class="string">"I'm "</span></span>)</span>
+  <span class="paren2">(<span class="code">put-string-line <span class="string">"Andy!"</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>putChar</h3>
+
+<pre><code><span class="code"><span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   putChar <span class="character">'t'</span>
+&nbsp;   putChar <span class="character">'e'</span>
+&nbsp;   putChar <span class="character">'h'</span></span></code></pre>
+
+<p>Haskellの<code>putChar</code>はCommon Lispに於ける<code>WRITE-CHAR</code>におよそ相当する。
+Haskell風に再現するなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> put-char<span class="paren2">(<span class="code">char</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span><span class="paren3">(<span class="code">write-char char</span>)</span><span class="paren3">(<span class="code">values</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>print</h3>
+
+<pre><code><span class="code"><span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   print <span class="variable">True</span>
+&nbsp;   print 2
+&nbsp;   print <span class="string">"haha"</span>
+&nbsp;   print 3<span class="atom">.</span>2
+&nbsp;   print <span class="paren1">[<span class="code">3,4,3</span>]</span></span></code></pre>
+
+<p>Haskellの<code>print</code>はCommon Lispに於ける<code>PRINT</code>とおよそ等価である。
+Haskell風に再現するなら以下の通り。
+名前が衝突するので、<code>.</code>が付いていある点要注意。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> .print <span class="paren2">(<span class="code">arg</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span><span class="paren3">(<span class="code">print arg</span>)</span><span class="paren3">(<span class="code">values</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main
+  <span class="paren2">(<span class="code">.print t</span>)</span>
+  <span class="paren2">(<span class="code">.print 2</span>)</span>
+  <span class="paren2">(<span class="code">.print <span class="string">"haha"</span></span>)</span>
+  <span class="paren2">(<span class="code">.print 3.2</span>)</span>
+  <span class="paren2">(<span class="code">.print '<span class="paren3">(<span class="code">3 4 3</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>when</h3>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">Control</span><span class="atom">.</span><span class="variable">Monad</span>
+
+<span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   input <span class="keyword">&lt;-</span> getLine
+&nbsp;   when <span class="paren1">(<span class="code">input <span class="atom">==</span> <span class="string">"SWORDFISH"</span></span>)</span> <span class="atom">$</span> <span class="keyword">do</span>
+&nbsp;       putStrLn input</span></code></pre>
+
+<p>Haskellの<code>when</code>はCommon Lispに於ける<code>WHEN</code>におよそ相当する。
+大きな違いは、Haskellの<code>when</code>が関数であるのに対し、Common Lispの<code>WHEN</code>は通常マクロである点だ。</p>
+
+<p>再現にこだわらないなら上記Haskellコードは以下のように翻訳できる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">input<span class="paren5">(<span class="code">read-line</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">when<span class="paren4">(<span class="code">string= <span class="string">"SWORDFISH"</span> input</span>)</span>
+      <span class="paren4">(<span class="code">write-line input</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>再現にこだわるなら以下のように書くこととなる。
+<code>MAY-CALL</code>を導入したおかげで、既存コードに変更はいらない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main
+  input &lt;- <span class="paren2">(<span class="code">get-line</span>)</span>
+  <span class="paren2">(<span class="code">when <span class="paren3">(<span class="code">string= input <span class="string">"SWORDFISH"</span></span>)</span>
+    <span class="paren3">(<span class="code">put-string-line input</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>sequence</h3>
+
+<pre><code><span class="code"><span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   rs <span class="keyword">&lt;-</span> sequence <span class="paren1">[<span class="code">getLine, getLine, getLine</span>]</span>
+&nbsp;   print rs</span></code></pre>
+
+<p>再現しないなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rs<span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:repeat</span> 3 <span class="keyword">:collect</span> <span class="paren6">(<span class="code">read-line</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">print rs</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>再現にこだわるなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> .sequence<span class="paren2">(<span class="code">ios</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span>
+    <span class="paren3">(<span class="code">mapcar #'funcall ios</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main
+  rs &lt;- <span class="paren2">(<span class="code">.sequence <span class="paren3">(<span class="code">list <span class="paren4">(<span class="code">get-line</span>)</span><span class="paren4">(<span class="code">get-line</span>)</span><span class="paren4">(<span class="code">get-line</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">print rs</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> sequence <span class="atom">$</span> map print <span class="paren1">[<span class="code">1,2,3,4,5</span>]</span>
+<span class="function">1</span>
+<span class="function">2</span>
+<span class="function">3</span>
+<span class="function">4</span>
+<span class="function">5</span>
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code"></span>)</span>,<span class="paren2">(<span class="code"></span>)</span>,<span class="paren2">(<span class="code"></span>)</span>,<span class="paren2">(<span class="code"></span>)</span>,<span class="paren2">(<span class="code"></span>)</span></span>]</span></span></code></pre>
+
+<p>HaskellのIOアクションはREPLに打ち込むと呼び出されるが、Common Lisp版にはそのような機能が無いので明示的に<code>FUNCALL</code>を呼ぶ必要がある。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">funcall <span class="paren2">(<span class="code">.sequence <span class="paren3">(<span class="code">mapcar #'.print '<span class="paren4">(<span class="code">1 2 3 4 5</span>)</span></span>)</span></span>)</span></span>)</span>
+
+1
+2
+3
+4
+5
+<span class="paren1">(<span class="code">NIL NIL NIL NIL NIL</span>)</span></span></code></pre>
+
+<h3>mapM</h3>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> mapM print <span class="paren1">[<span class="code">1,2,3</span>]</span>
+<span class="function">1</span>
+<span class="function">2</span>
+<span class="function">3</span>
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code"></span>)</span>,<span class="paren2">(<span class="code"></span>)</span>,<span class="paren2">(<span class="code"></span>)</span></span>]</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> mapM_ print <span class="paren1">[<span class="code">1,2,3</span>]</span>
+<span class="function">1</span>
+<span class="function">2</span>
+<span class="function">3</span></span></code></pre>
+
+<p>再現にこだわらないなら、Haskellの<code>mapM</code>はCommon Lispの<code>MAPCAR</code>におよそ相当し、Haskellの<code>mapM_</code>はCommon Lispの<code>MAPC</code>におよそ相当する。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">mapcar #'print '<span class="paren2">(<span class="code">1 2 3</span>)</span></span>)</span>
+1
+2
+3
+<span class="paren1">(<span class="code">1 2 3</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">mapc #'print '<span class="paren2">(<span class="code">1 2 3</span>)</span></span>)</span>
+1
+2
+3
+<span class="paren1">(<span class="code">1 2 3</span>)</span></span></code></pre>
+
+<p><code>MAPCAR</code>はリストの<code>CAR</code>部に働き、結果を格納する新しいリストを作って返す。
+上記例では<code>(1 2 3)</code>が返っているが、これはCommon Lispの<code>PRINT</code>は引数を返すという仕様の性である。</p>
+
+<p><code>MAPC</code>はリストの<code>CAR</code>部に働き、第一リストを返す。
+上記例で<code>(1 2 3)</code>が返っているのは<code>MAPC</code>の受け取っった引数が<code>(1 2 3)</code>だからである。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">mapcar <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">x y</span>)</span><span class="paren3">(<span class="code">print <span class="paren4">(<span class="code">+ x y</span>)</span></span>)</span></span>)</span>'<span class="paren2">(<span class="code">1 2 3</span>)</span>'<span class="paren2">(<span class="code">4 5 6</span>)</span></span>)</span>
+5
+7
+9
+<span class="paren1">(<span class="code">5 7 9</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">mapc <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">x y</span>)</span><span class="paren3">(<span class="code">print <span class="paren4">(<span class="code">+ x y</span>)</span></span>)</span></span>)</span>'<span class="paren2">(<span class="code">1 2 3</span>)</span>'<span class="paren2">(<span class="code">4 5 6</span>)</span></span>)</span>
+5
+7
+9
+<span class="paren1">(<span class="code">1 2 3</span>)</span></span></code></pre>
+
+<p>再現にこだわるなら以下のようにすることとなる。
+なお、名前はCommon Lispの<code>MAPCAR</code>、<code>MAPC</code>、<code>MAPLIST</code>、<code>MAPL</code>にちなんだ。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> mapmonad <span class="paren2">(<span class="code">io arg*</span>)</span>
+  <span class="paren2">(<span class="code">.sequence <span class="paren3">(<span class="code">mapcar io arg*</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> mapm <span class="paren2">(<span class="code">io arg*</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span>
+    <span class="paren3">(<span class="code">map nil <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">arg</span>)</span><span class="paren5">(<span class="code">funcall<span class="paren6">(<span class="code">funcall io arg</span>)</span></span>)</span></span>)</span>arg*</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>forever</h3>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">Control</span><span class="atom">.</span><span class="variable">Monad</span>
+<span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">Char</span>
+
+<span class="function">main</span> <span class="keyword">=</span> forever <span class="atom">$</span> <span class="keyword">do</span>
+&nbsp;   putStr <span class="string">"Give me some input: "</span>
+&nbsp;   l <span class="keyword">&lt;-</span> getLine
+&nbsp;   putStrLn <span class="atom">$</span> map toUpper l</span></code></pre>
+
+<p>再現にこだわらないなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> l = <span class="paren3">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren4">(<span class="code">write-string <span class="string">"Give me some input: "</span></span>)</span>
+                        <span class="paren4">(<span class="code">force-output</span>)</span>
+                        <span class="paren4">(<span class="code">read-line</span>)</span></span>)</span>
+        <span class="keyword">:do</span> <span class="paren3">(<span class="code">write-line <span class="paren4">(<span class="code">string-upcase l</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>再現にこだわるなら以下のようにする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> forever <span class="paren2">(<span class="code">io</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span><span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="paren4">(<span class="code">funcall io</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main
+  <span class="paren2">(<span class="code">forever <span class="paren3">(<span class="code">action <span class="paren4">(<span class="code">put-string <span class="string">"Give me some input: "</span></span>)</span>
+                   l &lt;- <span class="paren4">(<span class="code">get-line</span>)</span>
+                   <span class="paren4">(<span class="code">put-string-line <span class="paren5">(<span class="code">string-upcase l</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>forM</h3>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">Control</span><span class="atom">.</span><span class="variable">Monad</span>
+
+<span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   colors <span class="keyword">&lt;-</span> forM <span class="paren1">[<span class="code">1,2,3,4</span>]</span> <span class="atom">$</span> <span class="keyword">\</span>a <span class="keyword">-&gt;</span> <span class="keyword">do</span>
+&nbsp;       putStrLn <span class="atom">$</span> <span class="string">"Which color do you associate with the number "</span>
+&nbsp;                  <span class="atom">++</span> show a <span class="atom">++</span> <span class="string">"?"</span>
+&nbsp;       color <span class="keyword">&lt;-</span> getLine
+&nbsp;       return color
+&nbsp;   putStrLn <span class="string">"The colors that you associate with 1, 2, 3 and 4 are: "</span>
+&nbsp;   mapM putStrLn colors</span></code></pre>
+
+<p>再現にこだわらないなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">colors <span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> a <span class="keyword">:in</span> '<span class="paren6">(<span class="code">1 2 3 4</span>)</span>
+                     <span class="keyword">:collect</span> <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">uiop:format! t <span class="string">"Which color do you associate with the number ~D?~%"</span> a</span>)</span>
+                                     <span class="paren1">(<span class="code">read-line</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">write-line <span class="string">"The colors that you associate with 1, 2, 3 and 4 are: "</span></span>)</span>
+    <span class="paren3">(<span class="code">mapc #'write-line colors</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>再現にこだわるなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> for-monad<span class="paren2">(<span class="code">args io</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span>
+    <span class="paren3">(<span class="code">mapcar <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">x</span>)</span><span class="paren5">(<span class="code">funcall<span class="paren6">(<span class="code">funcall io x</span>)</span></span>)</span></span>)</span> args</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main
+  colors &lt;- <span class="paren2">(<span class="code">for-monad '<span class="paren3">(<span class="code">1 2 3 4</span>)</span>
+              <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">a</span>)</span>
+                <span class="paren4">(<span class="code">action <span class="paren5">(<span class="code">put-string-line <span class="paren6">(<span class="code">uiop:strcat <span class="string">"Which color do you associate with the number "</span> <span class="paren1">(<span class="code">princ-to-string a</span>)</span> <span class="string">"?"</span></span>)</span></span>)</span>
+                        color &lt;- <span class="paren5">(<span class="code">get-line</span>)</span>
+                        <span class="paren5">(<span class="code">.return color</span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">put-string-line <span class="string">"The colors that you associate with 1, 2, 3 and 4 are: "</span></span>)</span>
+  <span class="paren2">(<span class="code">mapm #'put-string-line colors</span>)</span></span>)</span></span></code></pre>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>

@@ -40,6 +40,24 @@
 <p>なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。</p>
 
+<h2>IMPORT, EXPORT, UNEXPORT, SHADOWING-IMPORT, SHADOW</h2>
+
+<p>第一引数はあくまでリストである。
+便宜的にシンボル自身も受け付けるが、あくまで基本はリストである。</p>
+
+<p>筆者はこれを反対に覚えてしまいハマった。
+具体的には<code>NIL</code>を<code>IMPORT</code>しようしたが<code>IMPORT</code>されなかった。
+<code>NIL</code>を裸で渡した場合、「シンボルのリストを受け付けたが、中身は空であった」と解釈される。
+<code>NIL</code>を操作したい場合、必ずリストに括って渡さなければならない。</p>
+
+<h2>CONSTANTP with &amp;WHOLE</h2>
+
+<p><code>CONSTANTP</code>は受け取った引数がマクロフォームであった場合、マクロ展開を行う可能性がある。
+この点は仕様上明示的に処理系依存とされている。</p>
+
+<p>もしマクロフォームが<code>&amp;WHOLE</code>ラムダリストキーワードで受けたフォームを返した場合、無限マクロ展開に陥る。
+これを回避するためには<code>*MACROEXPAND-HOOK*</code>を束縛し、条件によって大域脱出（<code>GO</code>、<code>RETURN-FROM</code>、<code>THROW</code>）を行えばよい。</p>
+
 <h2>MACROEXPAND-1 with &amp;WHOLE</h2>
 
 <p>マクロ展開関数が<code>&amp;WHOLE</code>ラムダリストキーワードで受けたフォームを返した場合、直感的には展開が行われていないので第二返り値が<code>NIL</code>になりそうなものだが、<code>T</code>となる。
