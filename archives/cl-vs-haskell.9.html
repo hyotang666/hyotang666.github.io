@@ -1,0 +1,815 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>cl-vs-haskell.9
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>Common Lisp vs Haskell, Chapter 9</h1>
+
+<h2>Meta note</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="cl-vs-haskell.8.html" >前章</a>を読了済みの者。</p>
+
+<h2>Introduction</h2>
+
+<p>本稿は「すごいH本」の内容をCommon Lispに翻訳しながらCLerがHaskellを学ぶその第9章である。
+本章ではHaskellに於けるファイル操作、乱数生成、コマンドライン引数の取り扱いを、Common Lispに翻訳しながら学習していく。</p>
+
+<p>初心者CLerにとっては幾つか導入される簡単なマクロの実装が参考になるかと思われる。
+また、途中比較的大きな関数が出てくるのだが、そこは行番号を振って丁寧に解説してあるので、そこも参考になるかもしれない。</p>
+
+<p>中級以上のCLerにとっては、特別興味深い点はなかろうと思われるので、読み飛ばして、どうぞ。</p>
+
+<p>比較的長文なので、お暇なときにでも、たっぷりのコーヒーとチョコレートを用意してお読みくだされば幸い。</p>
+
+<h1>9</h1>
+
+<h2>9.1</h2>
+
+<h3>input redirect</h3>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">Control</span><span class="atom">.</span><span class="variable">Monad</span>
+<span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">Char</span>
+
+<span class="function">main</span> <span class="keyword">=</span> forever <span class="atom">$</span> <span class="keyword">do</span>
+&nbsp;   l <span class="keyword">&lt;-</span> getLine
+&nbsp;   putStrLn <span class="atom">$</span> map toUpper l</span></code></pre>
+
+<p>再現にこだわらずに作るなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="paren3">(<span class="code">write-line<span class="paren4">(<span class="code">string-upcase<span class="paren5">(<span class="code">read-line</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>こだわるなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main
+  <span class="paren2">(<span class="code">forever<span class="paren3">(<span class="code">action l &lt;- <span class="paren4">(<span class="code">get-line</span>)</span>
+                  <span class="paren4">(<span class="code">put-string-line<span class="paren5">(<span class="code">string-upcase l</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>input stream</h3>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">Char</span>
+
+<span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   contents <span class="keyword">&lt;-</span> getContents
+&nbsp;   putStr <span class="atom">$</span> map toUpper contents</span></code></pre>
+
+<p>こだわらないなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> contents = <span class="paren3">(<span class="code">read-line nil nil</span>)</span>
+        <span class="keyword">:while</span> contents
+        <span class="keyword">:do</span> <span class="paren3">(<span class="code">write-line<span class="paren4">(<span class="code">string-upcase contents</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>さて、こだわった場合の実装だが、これはどう作ったら良いのかさっぱり分からない。
+<code>getContetns</code>は標準入力から<code>EOF</code>まで入力を読み込むアクションだという。
+それだけなら簡単だ。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> get-contents<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> char = <span class="paren4">(<span class="code">read-char nil nil</span>)</span>
+          <span class="keyword">:while</span> char
+          <span class="keyword">:collect</span> char <span class="keyword">:into</span> result
+          <span class="keyword">:finally</span> <span class="paren4">(<span class="code">return <span class="paren5">(<span class="code">coerce result 'string</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>ところが、それは遅延IOだという。</p>
+
+<blockquote>
+<p>getContentsの結果がcontentsに束縛されとき、それは本当の文字列ではなく、最終的には文字列に評価されるプロミス（promise）としてメモリ上に置かれます。contentsにtoUpperをマップするとき、それもまた入力の結果に関数をマップするというプロミスになります。最終的にputStrが呼ばれると、これがさっきのプロミスに対して「やあ、大文字化された行が必要なんだ！」と言います。そのプロミスはまだ入力の行を何も持っていないので、contentsに対し「端末からの入力の状況はどうなってる？」と問い合わせます。それでようやくgetContentsは実際に端末から入力して、何か入力をくれといってきたコードに生成したものを渡すのです。受け取ったコードは渡されたものにtoUpperをマップし、その結果をputStrに渡して、画面に行が出力されます。さらに続けてputStrは「ヘイ、次の行をくれ！カモン！」と言います。これが入力がなくなるまで、つまりEOF文字が入力されるまで繰り返されます。</p>
+</blockquote>
+
+<p>上記引用の中で、特に筆者が理解出来ないのが、行単位でデータのやり取りが行われる点である。
+また暗黙裏の繰り返しが誰の責任で行われているのかという点も分からない。
+遅延評価まわりやHaskellの実装についての論文をちゃんと読めば分かるようにもなるだろうが、そこまでやる気はないので、以降本節に関しては再現にこだわらず読み飛ばして行くものとする。</p>
+
+<p>さて、 Haskellの<code>getContents</code>関数を実装する代わりに、ここでは<code>DO-CONTENTS</code>マクロを作ろう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> do-contents<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">var &amp;optional<span class="paren4">(<span class="code">reader '#'read</span>)</span><span class="paren4">(<span class="code">stream '<span class="special">*standard-input*</span></span>)</span></span>)</span>&amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">LOOP</span></i> <span class="keyword">:FOR</span> ,var = <span class="paren3">(<span class="code">FUNCALL ,reader ,stream NIL</span>)</span>
+         <span class="keyword">:WHILE</span> ,var
+         <span class="keyword">:DO</span> ,@<span class="paren3">(<span class="code">mapcar<span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">form</span>)</span>
+                        `<span class="paren5">(<span class="code">MAY-CALL ,form</span>)</span></span>)</span>
+                      body</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで上記Haskellコードは以下のように翻訳できる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main
+  <span class="paren2">(<span class="code">do-contents<span class="paren3">(<span class="code">contents #'read-line</span>)</span>
+    <span class="paren3">(<span class="code">put-string<span class="paren4">(<span class="code">string-upcase contents</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   contents <span class="keyword">&lt;-</span> getContents
+&nbsp;   putStr <span class="paren1">(<span class="code">shortLinesOnly contents</span>)</span>
+
+<span class="function">shortLinesOnly</span> <span class="keyword">::</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="variable">String</span>
+<span class="function">shortLinesOnly</span> <span class="keyword">=</span> unlines <span class="atom">.</span> filter <span class="paren1">(<span class="code"><span class="keyword">\</span>line <span class="keyword">-&gt;</span> length line <span class="atom">&lt;</span> 10</span>)</span> <span class="atom">.</span> lines</span></code></pre>
+
+<p>Haskellに於ける<code>lines</code>、<code>unlines</code>はCommon Lispには存在しない。
+必要なら自作せねばならない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> lines<span class="paren2">(<span class="code">string</span>)</span>
+  <span class="paren2">(<span class="code">uiop:split-string string <span class="keyword">:separator</span> #.<span class="paren3">(<span class="code">string <span class="character">#\newline</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> unlines<span class="paren2">(<span class="code">string*</span>)</span>
+  <span class="paren2">(<span class="code">format nil <span class="string">"~{~A~^~%~}"</span>string*</span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書ける。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> contents = <span class="paren3">(<span class="code">read-line nil nil</span>)</span>
+        <span class="keyword">:while</span> contents
+        <span class="keyword">:do</span> <span class="paren3">(<span class="code">write-string <span class="paren4">(<span class="code">short-lines-only contents</span>)</span></span>)</span>
+        <span class="paren3">(<span class="code">force-output</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">string</span>)</span>string</span>)</span>short-lines-only</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> short-lines-only <span class="paren2">(<span class="code">string</span>)</span>
+  <span class="paren2">(<span class="code">unlines <span class="paren3">(<span class="code">remove-if-not <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">line</span>)</span>
+                            <span class="paren5">(<span class="code">&lt; <span class="paren6">(<span class="code">length line</span>)</span>10</span>)</span></span>)</span>
+                          <span class="paren4">(<span class="code">lines string</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>先の<code>DO-CONTENTS</code>マクロを使うなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">do-contents<span class="paren3">(<span class="code">contents #'read-line</span>)</span>
+    <span class="paren3">(<span class="code">put-string <span class="paren4">(<span class="code">short-lines-only contents</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>convert</h3>
+
+<pre><code><span class="code"><span class="function">main</span> <span class="keyword">=</span> interact shortLinesOnly
+
+<span class="function">shortLinesOnly</span> <span class="keyword">::</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="variable">String</span>
+<span class="function">shortLinesOnly</span> <span class="keyword">=</span> unlines <span class="atom">.</span> filter <span class="paren1">(<span class="code"><span class="keyword">\</span>line <span class="keyword">-&gt;</span> length line <span class="atom">&lt;</span> 10</span>)</span> <span class="atom">.</span> lines</span></code></pre>
+
+<p>Haskellに於ける<code>interact</code>はCommon Lispに存在しない。
+必要なら自作するしかない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> interact <span class="paren2">(<span class="code">&amp;optional<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i> #'identity</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> content = <span class="paren4">(<span class="code">read-line nil nil</span>)</span>
+          <span class="keyword">:while</span> content
+          <span class="keyword">:do</span> <span class="paren4">(<span class="code">write-line<span class="paren5">(<span class="code">funcall <i><span class="symbol">function</span></i> content</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書ける。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main <span class="paren2">(<span class="code">interact #'short-lines-only</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">respondPalindromes</span> <span class="keyword">::</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="variable">String</span>
+<span class="function">respondPalindromes</span> <span class="keyword">=</span> 
+&nbsp;   unlines <span class="atom">.</span>
+&nbsp;   map <span class="paren1">(<span class="code"><span class="keyword">\</span>xs <span class="keyword">-&gt;</span> <span class="keyword">if</span> isPal xs <span class="keyword">then</span> <span class="string">"palindrome"</span> <span class="keyword">else</span> <span class="string">"not a palindrome"</span></span>)</span> <span class="atom">.</span>
+&nbsp;   lines
+
+<span class="function">isPal</span> <span class="keyword">::</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="variable">Bool</span>
+<span class="function">isPal</span> xs <span class="keyword">=</span> xs <span class="atom">==</span> reverse xs</span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">string</span>)</span>string</span>)</span>respond-palindromes</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> respond-palindromes<span class="paren2">(<span class="code">string</span>)</span>
+  <span class="paren2">(<span class="code">unlines <span class="paren3">(<span class="code">mapcar <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">xs</span>)</span>
+                     <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">palindromep xs</span>)</span>
+                       <span class="string">"palindrome"</span>
+                       <span class="string">"not a palindrome"</span></span>)</span></span>)</span>
+                   <span class="paren4">(<span class="code">lines string</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">string</span>)</span>boolean</span>)</span>palindromep</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> palindromep<span class="paren2">(<span class="code">string</span>)</span>
+  <span class="paren2">(<span class="code">string= string <span class="paren3">(<span class="code">reverse string</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main <span class="paren2">(<span class="code">interact #'respond-palindromes</span>)</span></span>)</span></span></code></pre>
+
+<h3>file</h3>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">System</span><span class="atom">.</span><span class="variable">IO</span>
+
+<span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   handle <span class="keyword">&lt;-</span> openFile <span class="string">"baabaa.txt"</span> <span class="variable">ReadMode</span>
+&nbsp;   contents <span class="keyword">&lt;-</span> hGetContents handle
+&nbsp;   putStr contents
+&nbsp;   hClose handle</span></code></pre>
+
+<p>Haskellに於ける<code>openFile</code>、<code>hClose</code>は各々Common Lispに於ける<code>OPEN</code>、<code>CLOSE</code>におよそ等しい。
+違いはこれまでと同様に、関数を返すか処理を行うかである。
+必要なら自作するしか無い。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> open-file<span class="paren2">(<span class="code">path direction</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span>
+    <span class="paren3">(<span class="code">open path <span class="keyword">:direction</span> direction</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> h-close<span class="paren2">(<span class="code">handle</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span><span class="paren3">(<span class="code">close handle</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上記Haskellコードを直訳するなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main
+  handle &lt;- <span class="paren2">(<span class="code">open-file <span class="string">"baabaa.txt"</span> <span class="keyword">:input</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*standard-input*</span> handle</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">do-contents<span class="paren4">(<span class="code">contents #'read-line</span>)</span>
+      <span class="paren4">(<span class="code">put-string-line contents</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">h-close handle</span>)</span></span>)</span></span></code></pre>
+
+<p>再現にこだわらないなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-open-file</span></i><span class="paren3">(<span class="code"><span class="special">*standard-input*</span> <span class="string">"baabaa.txt"</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> line = <span class="paren4">(<span class="code">read-line nil nil</span>)</span>
+          <span class="keyword">:while</span> line
+          <span class="keyword">:do</span> <span class="paren4">(<span class="code">write-line line</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>Common Lispに於いて<code>OPEN</code>や<code>CLOSE</code>は上級者向けのコマンドである。
+というのも、上記のように通常は<code>WITH-OPEN-FILE</code>マクロを使うものだからである。</p>
+
+<p>ちなみに、折衷案として以下のようにも書ける。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-open-file</span></i><span class="paren3">(<span class="code"><span class="special">*standard-input*</span> <span class="string">"baabaa.txt"</span></span>)</span>
+    <span class="paren3">(<span class="code">funcall<span class="paren4">(<span class="code">interact</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>INTERACT</code>が返すIOアクションを<code>WITH-OPEN-FILE</code>のスコープ内で<code>FUNCALL</code>を用いて強引に呼び出している。
+明示的な<code>FUNCALL</code>が不細工に見えるかもしれないが、上記のどのコードよりも短い。</p>
+
+<pre><code><span class="code"><span class="keyword">type</span> <span class="variable">FilePath</span> <span class="keyword">=</span> <span class="variable">String</span></span></code></pre>
+
+<p>Haskellに於いて<code>FilePath</code>は<code>String</code>へのシノニムのようだが、Common Lispにはそれそのものを表す型<code>PATHNAME</code>がある。
+型<code>PATHNAME</code>は型<code>STRING</code>とは明確に区別される。
+しかしながらファイルパスを受け付ける関数の多くは文字列でも機能するように仕様で決まっている。
+そこで、仕様書では<code>PATHNAME</code>と<code>STRING</code>とを統合した用語<code>PATHNAME-DESIGNATOR</code>というものがしばしば仮引数の名前などに使われる。
+残念ながら<code>PATHNAME-DESIGNATOR</code>は仕様書で使われる用語でしかなく、そのような型は言語仕様には存在しない。
+あれば便利なのでこれらを提供するライブラリがある。
+名をTrivial-typesという。
+よって、Haskellの<code>FilePath</code>はCommon Lispに於いては<code>TRIVIAL-TYPES:PATHNAME-DESIGNATOR</code>が最も望ましいと言える。</p>
+
+<pre><code>data IOMode = ReadMode | WriteMode | AppendMode | ReadWriteMode</code></pre>
+
+<p>Haskellに於ける型<code>IOMode</code>はCommon Lispでは<code>OPEN</code>への引数、ひいては<code>WITH-OPEN-FILE</code>への引数として組み合わせて使うこととなる。</p>
+
+<p>Haskellの<code>ReadMode</code>は以下のようにしてCommon Lispで再現できる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">open <span class="string">"path"</span></span>)</span></span></code></pre>
+
+<p>Haskellの<code>WriteMode</code>は以下のようにしてCommon Lispで再現できる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">open path<span class="string">" :direction :output :if-does-not-exist :create :if-exists :supersede)</span></span></span></span></code></pre>
+
+<p>Haskellの<code>AppendMode</code>は以下のようにしてCommon Lispで再現できる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">open <span class="string">"path"</span> <span class="keyword">:direction</span> <span class="keyword">:output</span> <span class="keyword">:if-exists</span> <span class="keyword">:append</span> <span class="keyword">:if-does-not-exist</span> <span class="keyword">:create</span></span>)</span></span></code></pre>
+
+<p>Haskellの<code>ReadWriteMode</code>は以下のようにしてCommon Lispで再現できる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">open <span class="string">"path"</span> <span class="keyword">:direction</span> <span class="keyword">:io</span> <span class="keyword">:if-does-not-exist</span> <span class="keyword">:create</span></span>)</span></span></code></pre>
+
+<p>Haskell風に再現するなら自作するしかない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defdata</span></i> io-mode<span class="paren2">(<span class="code"></span>)</span>
+  <span class="keyword">:read-mode</span> <span class="keyword">:write-mode</span> <span class="keyword">:append-mode</span> <span class="keyword">:read-write-mode</span></span>)</span></span></code></pre>
+
+<p><code>IO-MODE</code>を作った以上は、上記<code>OPEN-FILE</code>も作りなおさねばなるまい。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> open-file<span class="paren2">(<span class="code">path mode</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span>
+    <span class="paren3">(<span class="code">apply #'open path <span class="paren4">(<span class="code">ecase mode
+                         <span class="paren5">(<span class="code"><span class="keyword">:read-mode</span></span>)</span>
+                         <span class="paren5">(<span class="code"><span class="keyword">:write-mode</span> `<span class="paren6">(<span class="code"><span class="keyword">:direction</span> <span class="keyword">:output</span> <span class="keyword">:if-does-not-exist</span> <span class="keyword">:create</span> <span class="keyword">:if-exists</span> <span class="keyword">:supersede</span></span>)</span></span>)</span>
+                         <span class="paren5">(<span class="code"><span class="keyword">:append-mode</span> `<span class="paren6">(<span class="code"><span class="keyword">:direction</span> <span class="keyword">:output</span> <span class="keyword">:if-exists</span> <span class="keyword">:append</span> <span class="keyword">:if-does-not-exist</span> <span class="keyword">:create</span></span>)</span></span>)</span>
+                         <span class="paren5">(<span class="code"><span class="keyword">:read-write-mode</span> `<span class="paren6">(<span class="code"><span class="keyword">:direction</span> <span class="keyword">:io</span> <span class="keyword">:if-does-not-exist</span> <span class="keyword">:create</span> <span class="keyword">:if-exists</span> <span class="keyword">:supersede</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>withFile</h3>
+
+<pre><code><span class="code"><span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   withFile <span class="string">"baabaa.txt"</span> <span class="variable">ReadMode</span> <span class="atom">$</span> <span class="keyword">\</span>handle <span class="keyword">-&gt;</span> <span class="keyword">do</span>
+&nbsp;       contents <span class="keyword">&lt;-</span> hGetContents handle
+&nbsp;       putStr contents</span></code></pre>
+
+<p>Haskellの<code>withFile</code>はCommon Lispの<code>WITH-OPEN-FILE</code>におよそ等しい。
+違いは関数を返すが処理を行うかである。
+再現にこだわるなら自作するしかない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">trivial-types:pathname-designator
+                        io-mode
+                        <i><span class="symbol">function</span></i></span>)</span>
+                       <i><span class="symbol">function</span></i></span>)</span>
+              <i><span class="symbol">with-file</span></i></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> <i><span class="symbol">with-file</span></i><span class="paren2">(<span class="code">file-path io-mode <i><span class="symbol">function</span></i></span>)</span>
+  <span class="paren2">(<span class="code">coerce `<span class="paren3">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren4">(<span class="code"></span>)</span>
+             <span class="paren4">(<span class="code"><i><span class="symbol">WITH-OPEN-FILE</span></i><span class="paren5">(<span class="code"><span class="special">*TERMINAL-IO*</span> ,file-path
+                             ,@<span class="paren6">(<span class="code">ecase io-mode
+                                 <span class="paren1">(<span class="code"><span class="keyword">:read-mode</span></span>)</span>
+                                 <span class="paren1">(<span class="code"><span class="keyword">:write-mode</span> `<span class="paren2">(<span class="code"><span class="keyword">:DIRECTION</span> <span class="keyword">:OUTPUT</span> <span class="keyword">:IF-DOES-NOT-EXIST</span> <span class="keyword">:CREATE</span> <span class="keyword">:IF-EXISTS</span> <span class="keyword">:SUPERSEDE</span></span>)</span></span>)</span>
+                                 <span class="paren1">(<span class="code"><span class="keyword">:append-mode</span> `<span class="paren2">(<span class="code"><span class="keyword">:DIRECTION</span> <span class="keyword">:OUTPUT</span> <span class="keyword">:IF-EXISTS</span> <span class="keyword">:APPEND</span> <span class="keyword">:IF-DOES-NOT-EXIST</span> <span class="keyword">:CREATE</span></span>)</span></span>)</span>
+                                 <span class="paren1">(<span class="code"><span class="keyword">:read-write-mode</span> `<span class="paren2">(<span class="code"><span class="keyword">:DIRECTION</span> <span class="keyword">:IO</span> <span class="keyword">:IF-DOES-NOT-EXIST</span> <span class="keyword">:CREATE</span> <span class="keyword">:IF-EXISTS</span> <span class="keyword">:SUPERSEDE</span></span>)</span></span>)</span></span>)</span></span>)</span>
+               <span class="paren5">(<span class="code">FUNCALL<span class="paren6">(<span class="code">FUNCALL ,<i><span class="symbol">function</span></i> <span class="special">*TERMINAL-IO*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          '<i><span class="symbol">function</span></i></span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書ける。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-file</span></i> <span class="string">"baabaa.txt"</span> <span class="keyword">:read-mode</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">handle</span>)</span>
+      <span class="paren4">(<span class="code">action <span class="paren5">(<span class="code">do-contents<span class="paren6">(<span class="code">contents #'read-line handle</span>)</span>
+                <span class="paren6">(<span class="code">put-string contents</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>bracket</h3>
+
+<pre><code><span class="code"><span class="function">withFile</span> <span class="keyword">::</span> <span class="variable">FilePath</span> <span class="keyword">-&gt;</span> <span class="variable">IOMode</span> <span class="keyword">-&gt;</span> <span class="paren1">(<span class="code"><span class="variable">Handle</span> <span class="keyword">-&gt;</span> <span class="variable">IO</span> a</span>)</span> <span class="keyword">-&gt;</span> <span class="variable">IO</span> a
+<span class="function">withFile</span> name mode f <span class="keyword">=</span> bracket <span class="paren1">(<span class="code">openFile name mode</span>)</span>
+&nbsp;   <span class="paren1">(<span class="code"><span class="keyword">\</span>handle <span class="keyword">-&gt;</span> hClose handle</span>)</span>
+&nbsp;   <span class="paren1">(<span class="code"><span class="keyword">\</span>handle <span class="keyword">-&gt;</span> f handle</span>)</span></span></code></pre>
+
+<p>Haskellに於ける<code>bracket</code>はCommon Lispに於ける<code>UNWIND-PROTECT</code>におよそ等しい。
+大きな違いは<code>bracket</code>が関数であるのに対し、<code>UNWIND-PROTECT</code>は特殊形式である点だろう。
+<code>WITH-OPEN-FILE</code>はもちろん<code>UNWIND-PROTECT</code>上に実装されている。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">macroexpand-1 '<span class="paren2">(<span class="code"><i><span class="symbol">with-open-file</span></i><span class="paren3">(<span class="code">s file-path</span>)</span><span class="paren3">(<span class="code">read-line s</span>)</span></span>)</span></span>)</span>
+#+expanded
+<span class="paren1">(<span class="code"><i><span class="symbol">LET</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">S <span class="paren4">(<span class="code">OPEN FILE-PATH</span>)</span></span>)</span>
+      <span class="paren3">(<span class="code"><span class="keyword">#:G1</span> T</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">UNWIND-PROTECT</span></i> <span class="paren3">(<span class="code"><i><span class="symbol">MULTIPLE-VALUE-PROG1</span></i> <span class="paren4">(<span class="code"><i><span class="symbol">PROGN</span></i> <span class="paren5">(<span class="code">READ-LINE S</span>)</span></span>)</span>
+                                        <span class="paren4">(<span class="code"><i><span class="symbol">SETQ</span></i> <span class="keyword">#:G1</span> NIL</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">WHEN S <span class="paren4">(<span class="code">CLOSE S <span class="keyword">:ABORT</span> <span class="keyword">#:G1</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>関数版が欲しいなら実装するしかない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code"><i><span class="symbol">function</span></i> <i><span class="symbol">function</span></i> <i><span class="symbol">function</span></i></span>)</span><i><span class="symbol">function</span></i></span>)</span>bracket</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> bracket<span class="paren2">(<span class="code">prologue epilogue body</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code"></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code">handle</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">unwind-protect</span></i><span class="paren5">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren6">(<span class="code">setf handle<span class="paren1">(<span class="code">funcall prologue</span>)</span></span>)</span>
+                            <span class="paren6">(<span class="code">funcall<span class="paren1">(<span class="code">funcall body handle</span>)</span></span>)</span></span>)</span>
+      <span class="paren5">(<span class="code">funcall<span class="paren6">(<span class="code">funcall epilogue handle</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで<code>WITH-FILE</code>の実装を以下のようにできる。</p>
+
+<pre><code>(defun with-file(name mode f)
+  (bracket (open-file name mode)
+           (lambda(handle)(h-close handle))
+           (lambda(handle)(funcall f handle))))</code></pre>
+
+<h3>handle</h3>
+
+<p>Haskellで<code>handle</code>と呼ばれているものは、Common Lispでは<code>STREAM</code>と呼ばれている。</p>
+
+<p>Haskellで、例えば<code>getContents</code>が標準入出力に振る舞うのに対し、<code>hGetContents</code>は受け取った<code>handle</code>に対し振る舞う。
+翻ってCommon Lispでは、例えば<code>READ-LINE</code>はオプショナルに<code>STREAM</code>を引数に取る。
+引数の規定値は<code>*STANDARD-INPUT*</code>であり、<code>*STANDARD-INPUT*</code>の規定値は標準入力である。
+例えば<code>(read-line)</code>とすれば、標準入力から一行読み込むが、<code>(read-line stream)</code>とすれば渡された<code>stream</code>から一行読み込むこととなる。</p>
+
+<p>また、Common Lispではスペシャル変数の動的束縛をよく用いる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">let</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="special">*standard-input*</span> stream</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">read-line</span>)</span></span>)</span></span></code></pre>
+
+<p>上記コードではスペシャル変数<code>*STANDARD-INPUT*</code>の値を動的に<code>stream</code>の値に束縛し、そのコンテクスト下で<code>READ-LINE</code>が呼ばれる。
+<code>READ-LINE</code>は引数が指定されていないので、規定値である<code>*STANDARD-INPUT*</code>から一行読み込むのだが、その<code>*STANDARD-INPUT*</code>は<code>stream</code>に束縛されているので、結果的に<code>stream</code>から一行読み込むこととなる。</p>
+
+<p>このため、Common LispではHaskellの様に標準入出力に振る舞うものと<code>handle</code>を受け取るものと２つの関数を用意する必要がない。
+それが良いことなのか悪いことなのかについてはここでは議論しない。</p>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">System</span><span class="atom">.</span><span class="variable">IO</span>
+
+<span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   contents <span class="keyword">&lt;-</span> readFile <span class="string">"baabaa.txt"</span>
+&nbsp;   putStr contents</span></code></pre>
+
+<p>Haskellの<code>readFile</code>はCommon Lispには存在しない。
+こだわらずに作るなら、自作する代わりにuiopの<code>READ-FILE-STRING</code>が利用できよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">write-string <span class="paren3">(<span class="code">uiop:read-file-string <span class="string">"baabaa.txt"</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">System</span><span class="atom">.</span><span class="variable">IO</span>
+<span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">Char</span>
+
+<span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   contents <span class="keyword">&lt;-</span> readFile <span class="string">"baabaa.txt"</span>
+&nbsp;   writeFile <span class="string">"baabaacaps.txt"</span> <span class="paren1">(<span class="code">map toUpper contents</span>)</span></span></code></pre>
+
+<p>Haskellの<code>writeFile</code>に相当するものはCommon Lispには存在しない。
+素のCommon Lispで書くなら上記Haskellコードは以下のようになるだろう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">witn-open-file<span class="paren3">(<span class="code"><span class="special">*standard-input*</span> <span class="string">"baabaa.txt"</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-open-file</span></i><span class="paren4">(<span class="code"><span class="special">*standard-output*</span> <span class="string">"baabaacaps.txt"</span>
+                    <span class="keyword">:direction</span> <span class="keyword">:output</span>
+                    <span class="keyword">:if-does-not-exist</span> <span class="keyword">:create</span>
+                    <span class="keyword">:if-exists</span> <span class="keyword">:supersede</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> line = <span class="paren5">(<span class="code">read-line</span>)</span>
+            <span class="keyword">:while</span> line
+            <span class="keyword">:do</span> <span class="paren5">(<span class="code">write-line<span class="paren6">(<span class="code">string-upcase line</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>Haskellのコードは非常にシンプルで美しいものとなっている。
+繰り返しが暗黙裏に行われている点が愁眉であろう。
+これを遅延評価の無いCommon Lispで再現するのは難しい。
+よってマクロにして隠蔽してしまおう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-write-file</span></i><span class="paren2">(<span class="code">path &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">WITH-OPEN-FILE</span></i><span class="paren3">(<span class="code"><span class="special">*STANDARD-OUTPUT*</span> ,path <span class="keyword">:DIRECTION</span> <span class="keyword">:OUTPUT</span>
+                   <span class="keyword">:IF-EXISTS</span> <span class="keyword">:SUPERSEDE</span> <span class="keyword">:IF-DOES-NOT-EXIST</span> <span class="keyword">:CREATE</span></span>)</span>
+     ,@body</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-append-file</span></i><span class="paren2">(<span class="code">path &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">WITH-OPEN-FILE</span></i><span class="paren3">(<span class="code"><span class="special">*STANDARD-OUTPUT*</span> ,path <span class="keyword">:DIRECTION</span> <span class="keyword">:OUTPUT</span>
+                   <span class="keyword">:IF-EXISTS</span> <span class="keyword">:APPEND</span> <span class="keyword">:IF-DOES-NOT-EXIST</span> <span class="keyword">:CREATE</span></span>)</span>
+     ,@body</span>)</span></span>)</span></span></code></pre>
+
+<p>これで、これまで作ってきたものと組み合わせて以下のように書ける。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-write-file</span></i> <span class="string">"baabaacaps.txt"</span>
+    <span class="paren3">(<span class="code">write-string<span class="paren4">(<span class="code">string-upcase<span class="paren5">(<span class="code">uiop:read-file-string <span class="string">"baabaa.txt"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>todo list</h3>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">System</span><span class="atom">.</span><span class="variable">IO</span>
+<span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   todoItem <span class="keyword">&lt;-</span> getLine
+&nbsp;   appendFile <span class="string">"todo.txt"</span> <span class="paren1">(<span class="code">todoItem <span class="atom">++</span> <span class="string">"</span><span class="string">\n</span><span class="string">"</span></span>)</span></span></code></pre>
+
+<p>素のCommon Lispで書くなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-open-file</span></i><span class="paren3">(<span class="code"><span class="special">*standard-output*</span> <span class="string">"todo.txt"</span>
+                  <span class="keyword">:direction</span> <span class="keyword">:output</span>
+                  <span class="keyword">:if-does-not-exist</span> <span class="keyword">:create</span>
+                  <span class="keyword">:if-exists</span> <span class="keyword">:append</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> line = <span class="paren4">(<span class="code">read-line nil nil</span>)</span>
+          <span class="keyword">:while</span> line
+          <span class="paren4">(<span class="code">write-line line</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これまで作ってきたものを駆使するなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-append-file</span></i> <span class="string">"todo.txt"</span>
+    <span class="paren3">(<span class="code">funcall<span class="paren4">(<span class="code">interact</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>delete</h3>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">System</span><span class="atom">.</span><span class="variable">IO</span>
+<span class="keyword">import</span> <span class="variable">System</span><span class="atom">.</span><span class="variable">Directory</span>
+<span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">List</span>
+
+<span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   contents <span class="keyword">&lt;-</span> readFile <span class="string">"todo.txt"</span>
+&nbsp;   <span class="keyword">let</span> todoTasks <span class="keyword">=</span> lines contents
+&nbsp;       numberedTasks <span class="keyword">=</span> zipWith <span class="paren1">(<span class="code"><span class="keyword">\</span>n line <span class="keyword">-&gt;</span> show n <span class="atom">++</span> <span class="string">" - "</span> <span class="atom">++</span> line</span>)</span>
+&nbsp;                                   <span class="paren1">[<span class="code">0<span class="keyword">..</span></span>]</span> todoTasks
+&nbsp;   putStrLn <span class="string">"There are your TO-DO items:"</span>
+&nbsp;   mapM_ putStrLn numberedTasks
+&nbsp;   putStrLn <span class="string">"Which one do you want to delete?"</span>
+&nbsp;   numberString <span class="keyword">&lt;-</span> getLine
+&nbsp;   <span class="keyword">let</span> number <span class="keyword">=</span> read numberString
+&nbsp;       newTodoItems <span class="keyword">=</span> unlines <span class="atom">$</span> delete <span class="paren1">(<span class="code">todoTasks <span class="atom">!!</span> number</span>)</span> todoTasks
+&nbsp;   <span class="paren1">(<span class="code">tempName, tempHandle</span>)</span> <span class="keyword">&lt;-</span> openTempFile <span class="string">"."</span> <span class="string">"temp"</span>
+&nbsp;   hPutStr tempHandle newTodoItems
+&nbsp;   hClose tempHandle
+&nbsp;   removeFile <span class="string">"todo.txt"</span>
+&nbsp;   renameFile tempName <span class="string">"todo.txt"</span></span></code></pre>
+
+<pre><code><span class="code">0<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main<span class="paren2">(<span class="code"></span>)</span>
+1  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">lines<span class="paren5">(<span class="code">delete <span class="string">""</span><span class="paren6">(<span class="code">uiop:read-file-lines <span class="string">"baabaa.txt"</span></span>)</span><span class="keyword">:test</span> #'string=</span>)</span></span>)</span>
+2        <span class="paren4">(<span class="code">alist<span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+3                    <span class="keyword">:for</span> line <span class="keyword">:in</span> lines
+4                    <span class="keyword">:collect</span> <span class="paren6">(<span class="code">list i line</span>)</span></span>)</span></span>)</span>
+5        <span class="paren4">(<span class="code">number<span class="paren5">(<span class="code">prompt-for:prompt-for `<span class="paren6">(<span class="code">mod ,<span class="paren1">(<span class="code">length lines</span>)</span></span>)</span>
+6                           <span class="string">"There are your TO-DO items:~%~:{~3D - ~A~%~}~%~
+7                           Which one do you want to delete?~%&gt;&gt; "</span> alist</span>)</span></span>)</span>
+8        <span class="paren4">(<span class="code">temp-name<span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> name = <span class="paren6">(<span class="code">symbol-name<span class="paren1">(<span class="code">gensym</span>)</span></span>)</span>
+9                        <span class="keyword">:unless</span> <span class="paren6">(<span class="code">probe-file name</span>)</span>
+10                        <span class="keyword">:return</span> name</span>)</span></span>)</span></span>)</span>
+11    <span class="paren3">(<span class="code"><i><span class="symbol">with-write-file</span></i> temp-name
+12      <span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren5">(<span class="code">i line</span>)</span> <span class="keyword">:in</span> alist
+13            <span class="keyword">:unless</span> <span class="paren5">(<span class="code">= number i</span>)</span>
+14            <span class="keyword">:do</span> <span class="paren5">(<span class="code">write-line line</span>)</span></span>)</span></span>)</span>
+15    <span class="paren3">(<span class="code">delete-file <span class="string">"todo.txt"</span></span>)</span>
+16    <span class="paren3">(<span class="code">rename-file temp-name <span class="string">"todo.txt"</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>少々規模が大きいので解説する。
+まず、<code>UIOP:READ-FILE-LINES</code>で指定されたファイルの行のリストを得る。（１）
+念の為、空行を消しておく。（１、<code>DELETE</code>）
+<code>REMOVE</code>を使わず<code>DELETE</code>を使っているのは<code>UIOP:READ-FILE-LINES</code>がフレッシュなリストを返すからだ。
+破壊的に編集しても他に影響を及ぼさない。
+変数<code>ALIST</code>に束縛されるリストの要素は、後のことを考えて<code>CONS</code>ではなく<code>LIST</code>で括られている。（４）
+<code>PROMPT-FOR</code>はCLtL2に出てきた架空の関数を実際に作ってみた拙作ライブラリである。（５）
+第一引数にリストを受け取った場合、それはCompound-type-specifierと解釈され、ユーザの入力がそれを満たさない場合、クレームを出力し再入力を促す。
+ここでは`<code>(mod ,(length lines))</code>が渡されている。（５）
+仮に行数が３だった場合、ユーザの入力が０、１、２のいずれかでない限り再入力を促すこととなる。
+<code>PROMPT-FOR</code>の第二引数はFormat-controlである。
+ここでは（４）で<code>LIST</code>を使って要素をくくったおかげで<code>~:{ ... ~}</code>というFormat-directiveを使うことが出来る。
+Haskellの<code>openTempFile</code>に相当する機能はCommon Lispには無いので、<code>GENSYM</code>を利用する。（８）
+<code>GENSYM</code>により生成されたシンボルの名前を<code>SYMBOL-NAME</code>で取り出し（８）、<code>PROBE-FILE</code>で同名のファイルが存在するか確認し（９）、存在しないようならその名前を返す（１０）。
+後は<code>WITH-WRITE-FILE</code>に<code>TEMP-NAME</code>を渡し（１１）、<code>ALIST</code>を<code>LOOP</code>し（１２）、ユーザが指定した行番号と異なるなら（１３）出力する（１４）。
+後はHaskellと変わらないので説明はいらないだろう。</p>
+
+<p>ところで、tempファイルに書き出してから安全にリネームすることはよくあることだろう。
+マクロで隠蔽してしまおう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-safe-write-file</span></i><span class="paren2">(<span class="code">file &amp;body body</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">temp<span class="paren5">(<span class="code">gensym <span class="string">"TEMP"</span></span>)</span></span>)</span></span>)</span>
+    `<span class="paren3">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,temp<span class="paren6">(<span class="code"><i><span class="symbol">LOOP</span></i> <span class="keyword">:FOR</span> NAME = <span class="paren1">(<span class="code">SYMBOL-NAME<span class="paren2">(<span class="code">GENSYM</span>)</span></span>)</span>
+                      <span class="keyword">:UNLESS</span><span class="paren1">(<span class="code">PROBE-FILE NAME</span>)</span>
+                      <span class="keyword">:RETURN</span> NAME</span>)</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">HANDLER-BIND<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">ERROR<span class="paren1">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren2">(<span class="code">C</span>)</span><span class="paren2">(<span class="code">DECLARE<span class="paren3">(<span class="code">IGNORE C</span>)</span></span>)</span>
+                             <span class="paren2">(<span class="code">WHEN<span class="paren3">(<span class="code">PROBE-FILE ,tmep</span>)</span>
+                               <span class="paren3">(<span class="code">DELETE-FILE ,temp</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+         <span class="paren5">(<span class="code"><i><span class="symbol">WITH-WRITE-FILE</span></i> ,temp ,@body</span>)</span>
+         <span class="paren5">(<span class="code">WHEN<span class="paren6">(<span class="code">PROBE-FILE ,file</span>)</span>
+           <span class="paren6">(<span class="code">DELETE-FILE ,file</span>)</span></span>)</span>
+         <span class="paren5">(<span class="code">RENAME-FILE ,temp ,file</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>cleanup</h3>
+
+<p>Haskellの<code>bracketOnError</code>はCommon Lispに於ける<code>HANDLER-BIND</code>に近しい。</p>
+
+<p>実装するなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> bracket-on-error<span class="paren2">(<span class="code">arg handler body</span>)</span>
+  <span class="paren2">(<span class="code">handler-bind<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">error<span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren6">(<span class="code">c</span>)</span>
+                        <span class="paren6">(<span class="code">declare<span class="paren1">(<span class="code">ignore c</span>)</span></span>)</span>
+                        <span class="paren6">(<span class="code">funcall handler arg</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">funcall body arg</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>9.4</h2>
+
+<h3>command line arguments</h3>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">System</span><span class="atom">.</span><span class="variable">Environment</span>
+<span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">List</span>
+
+<span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   args <span class="keyword">&lt;-</span> getArgs
+&nbsp;   progName <span class="keyword">&lt;-</span> getProgName
+&nbsp;   putStrLn <span class="string">"The arguments are:"</span>
+&nbsp;   mapM putStrLn args
+&nbsp;   putStrLn <span class="string">"The program name is:"</span>
+&nbsp;   putStrLn progName</span></code></pre>
+
+<p>Haskellの<code>getArgs</code>に相当する機能はCommon Lispにはない。
+しかしながらRoswellスクリプトとして書いているなら、Roswellが面倒を見てくれる。
+Rosスクリプトのmain関数は<code>&amp;REST</code>でコマンドライン引数を受け取るようになっている。</p>
+
+<p>Haskellの<code>getProgName</code>に相当する機能はCommon Lispにはない。
+対応するライブラリ等についても筆者は知らない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code">&amp;rest argv</span>)</span>
+  <span class="paren2">(<span class="code">format t <span class="string">"The arguments are:~%~{~A~%~}"</span>argv</span>)</span></span>)</span></span></code></pre>
+
+<h2>9.5</h2>
+
+<h3>Multi task task list</h3>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">System</span><span class="atom">.</span><span class="variable">Environment</span>
+<span class="keyword">import</span> <span class="variable">System</span><span class="atom">.</span><span class="variable">Directory</span>
+<span class="keyword">import</span> <span class="variable">System</span><span class="atom">.</span><span class="variable">IO</span>
+<span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">List</span>
+
+<span class="function">dispatch</span> <span class="keyword">::</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code"><span class="variable">String</span></span>]</span> <span class="keyword">-&gt;</span> <span class="variable">IO</span><span class="paren1">(<span class="code"></span>)</span>
+<span class="function">dispatch</span> <span class="string">"add"</span> <span class="keyword">=</span> add
+<span class="function">dispatch</span> <span class="string">"view"</span> <span class="keyword">=</span> view
+<span class="function">dispatch</span> <span class="string">"remove"</span> <span class="keyword">=</span> remove
+
+<span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   <span class="paren1">(<span class="code">command<span class="variable">:</span>argList</span>)</span> <span class="keyword">&lt;-</span> getArgs
+&nbsp;   dispatch command argList</span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> dispatch<span class="paren2">(<span class="code">command</span>)</span>
+  <span class="paren2">(<span class="code">trivia:match command
+    <span class="paren3">(<span class="code"><span class="string">"add"</span> #'add</span>)</span>
+    <span class="paren3">(<span class="code"><span class="string">"view"</span> #'view</span>)</span>
+    <span class="paren3">(<span class="code"><span class="string">"remove"</span> #'.remove</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code">&amp;rest argv</span>)</span>
+  <span class="paren2">(<span class="code">apply <span class="paren3">(<span class="code">dispatch <span class="paren4">(<span class="code">car argv</span>)</span></span>)</span><span class="paren3">(<span class="code">cdr argv</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">add</span> <span class="keyword">::</span> <span class="paren1">[<span class="code"><span class="variable">String</span></span>]</span> <span class="keyword">-&gt;</span> <span class="variable">IO</span> <span class="paren1">(<span class="code"></span>)</span>
+<span class="function">add</span> <span class="paren1">[<span class="code">fileName, todoItem</span>]</span> <span class="keyword">=</span> appendFile fileName <span class="paren1">(<span class="code">todoItem <span class="atom">++</span> <span class="string">"</span><span class="string">\n</span><span class="string">"</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">string string</span>)</span>t</span>)</span>add</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> add <span class="paren2">(<span class="code">file-name todo-item</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-append-file</span></i> file-name
+    <span class="paren3">(<span class="code">write-line todo-item</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">view</span> <span class="keyword">::</span> <span class="paren1">[<span class="code"><span class="variable">String</span></span>]</span> <span class="keyword">-&gt;</span> <span class="variable">IO</span> <span class="paren1">(<span class="code"></span>)</span>
+<span class="function">view</span> <span class="paren1">[<span class="code">fileName</span>]</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   contents <span class="keyword">&lt;-</span> readFile fileName
+&nbsp;   <span class="keyword">let</span> todoTasks <span class="keyword">=</span> lines contents
+&nbsp;       numberedTasks <span class="keyword">=</span> zipWith <span class="paren1">(<span class="code"><span class="keyword">\</span>n line <span class="keyword">-&gt;</span> show n <span class="atom">++</span> <span class="string">" - "</span> <span class="atom">++</span> line</span>)</span>
+&nbsp;                       <span class="paren1">[<span class="code">0<span class="keyword">..</span></span>]</span> todoTasks
+&nbsp;   putStr <span class="atom">$</span> unlines numberedTasks</span></code></pre>
+
+<p>素のCommon Lispで書くなら以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">string</span>)</span>null</span>)</span>view</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> view<span class="paren2">(<span class="code">file</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-open-file</span></i><span class="paren3">(<span class="code"><span class="special">*standard-input*</span> file</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+          <span class="keyword">:for</span> line = <span class="paren4">(<span class="code">read-line nil nil</span>)</span>
+          <span class="keyword">:while</span> line
+          <span class="keyword">:do</span> <span class="paren4">(<span class="code">format t <span class="string">"~&amp;~3D - ~A"</span>i line</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>再現にこだわるなら、<code>DEFACTION</code>マクロに手を入れて以下のようにしよう。
+なお、後方互換性がなくなるので要注意。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">defaction</span></i><span class="paren2">(<span class="code">name lambda-list &amp;body body</span>)</span>
+  <span class="paren2">(<span class="code">check-type name symbol</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">PROGN</span></i> <span class="paren3">(<span class="code">SETF <span class="paren4">(<span class="code">SYMBOL-FUNCTION ',name</span>)</span>
+                <span class="paren4">(<span class="code"><i><span class="symbol">LAMBDA</span></i> ,lambda-list
+                  <span class="paren5">(<span class="code">FUNCALL<span class="paren6">(<span class="code">ACTION ,@body</span>)</span></span>)</span></span>)</span></span>)</span>
+          ',name</span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書ける。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> view<span class="paren2">(<span class="code">file</span>)</span>
+  <i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">todo-tasks<span class="paren4">(<span class="code">uiop:read-file-lines file</span>)</span></span>)</span>
+       <span class="paren3">(<span class="code">numbered-tasks <span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+                             <span class="keyword">:for</span> line <span class="keyword">:in</span> todo-tasks
+                             <span class="keyword">:collect</span> <span class="paren5">(<span class="code">format nil <span class="string">"~3D - ~A"</span>i line</span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">put-string<span class="paren3">(<span class="code">unlines numbered-tasks</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>なお、SERIESを使って以下のように書いてもいい。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> view<span class="paren2">(<span class="code">file</span>)</span>
+  <span class="paren2">(<span class="code">series:collect-ignore
+    <span class="paren3">(<span class="code">series:map-fn 'null <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">i l</span>)</span><span class="paren5">(<span class="code">format t <span class="string">"~&amp;~D - ~A"</span>i l</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">series:scan-range <span class="keyword">:from</span> 0</span>)</span>
+      <span class="paren4">(<span class="code">series:scan-file file #'read-line</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">remove</span> <span class="keyword">::</span> <span class="paren1">[<span class="code"><span class="variable">String</span></span>]</span> <span class="keyword">-&gt;</span> <span class="variable">IO</span> <span class="paren1">(<span class="code"></span>)</span>
+<span class="function">remove</span> <span class="paren1">[<span class="code">fileName, numberString</span>]</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   contents <span class="keyword">&lt;-</span> readFile fileName
+&nbsp;   <span class="keyword">let</span> todoTasks <span class="keyword">=</span> lines contents
+&nbsp;       numberedTasks <span class="keyword">=</span> zipWith <span class="paren1">(<span class="code"><span class="keyword">\</span>n line <span class="keyword">-&gt;</span> show n <span class="atom">++</span> <span class="string">" - "</span> <span class="atom">++</span> line</span>)</span>
+&nbsp;                       <span class="paren1">[<span class="code">0<span class="keyword">..</span></span>]</span> todoTasks
+&nbsp;   putStrLn <span class="string">"There are your TO-DO items:"</span>
+&nbsp;   mapM_ putStrLn numberedTasks
+&nbsp;   <span class="keyword">let</span> number <span class="keyword">=</span> read numberString
+&nbsp;       newTodoItems <span class="keyword">=</span> unlines <span class="atom">$</span> delete <span class="paren1">(<span class="code">todoTasks <span class="atom">!!</span> number</span>)</span> todoTasks
+&nbsp;   bracketOnError <span class="paren1">(<span class="code">openTempFile <span class="string">"."</span> <span class="string">"temp"</span></span>)</span>
+&nbsp;       <span class="paren1">(<span class="code"><span class="keyword">\</span><span class="paren2">(<span class="code">tempName, tempHandle</span>)</span> <span class="keyword">-&gt;</span> <span class="keyword">do</span>
+&nbsp;           hClose tempHandle
+&nbsp;           removeFile tempName</span>)</span>
+&nbsp;       <span class="paren1">(<span class="code"><span class="keyword">\</span><span class="paren2">(<span class="code">tempName, tempHandle</span>)</span> <span class="keyword">-&gt;</span> <span class="keyword">do</span>
+&nbsp;           hPutStr tempHandle newTodoItems
+&nbsp;           hClose tempHandle
+&nbsp;           removeFile <span class="string">"todo.txt"</span>
+&nbsp;           renameFile tempName <span class="string">"todo.txt"</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">string string</span>)</span>t</span>)</span>.remove</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> .remove <span class="paren2">(<span class="code">file-name number-string</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">todo-tasks<span class="paren5">(<span class="code">uiop:read-file-lines file-name</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">numbered-tasks <span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> line <span class="keyword">:in</span> todo-tasks
+                              <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+                              <span class="keyword">:collect</span> <span class="paren6">(<span class="code">list i line</span>)</span></span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">number<span class="paren5">(<span class="code">parse-integer number-string</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">new-todo-items<span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> task <span class="keyword">:in</span> todo-tasks
+                             <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+                             <span class="keyword">:unless</span> <span class="paren6">(<span class="code">= i number</span>)</span>
+                             <span class="keyword">:collect</span> task</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">format t <span class="string">"There are your TO-DO items:~%~{~D - ~A~%~}"</span> numbered-tasks</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-safe-write-file</span></i> <span class="string">"todo.txt"</span>
+      <span class="paren4">(<span class="code">mapc #'write-line new-todo-items</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>9.6</h2>
+
+<h3>random</h3>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> random <span class="paren1">(<span class="code">mkStdGen 100</span>)</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Int,</span> <span class="variable">StdGen</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="atom">-</span>1352021624,651872571 1655838864</span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> random <span class="paren1">(<span class="code">mdStdGen 100</span>)</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Int,</span> <span class="variable">StdGen</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="atom">-</span>1352021624,651872571 1655838864</span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> random <span class="paren1">(<span class="code">mkStdGen 949494</span>)</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Int,</span> <span class="variable">StdGen</span></span>)</span>
+<span class="paren1">(<span class="code">539963926, 466647808 1655838864</span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> random <span class="paren1">(<span class="code">mkStdGen 949488</span>)</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Float,</span> <span class="variable">StdGen</span></span>)</span>
+<span class="paren1">(<span class="code">0<span class="atom">.</span>8938442, 1597344447 1655838864</span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> random <span class="paren1">(<span class="code">mkStdGen 949488</span>)</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Bool,</span> <span class="variable">StdGen</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="variable">False,</span> 1485632275 40692</span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> random <span class="paren1">(<span class="code">mkStdGen 949488</span>)</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Integer,</span> <span class="variable">StdGen</span></span>)</span>
+<span class="paren1">(<span class="code">1691547873, 1597344447 1655838864</span>)</span></span></code></pre>
+
+<p>Common Lispの<code>RANDOM</code>関数は０から第一引数に指定された数までのランダムな値を返す。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">random 1000</span>)</span>
+504</span></code></pre>
+
+<p>Common Lispの<code>RANDOM</code>関数は第二引数にランダムシードを受け付ける。
+その規定値は<code>*random-state*</code>で、本引数は破壊的に変更される。</p>
+
+<p>ランダムシードを作るには<code>MAKE-RANDOM-STATE</code>を使う。
+<code>MAKE-RANDOM-STATE</code>はオプショナルに引数を取り、それが<code>T</code>ならフレッシュな<code>RANDOM-STATE</code>オブジェクトを返す。
+それが<code>NIL</code>なら<code>*random-state*</code>のコピーを返す。
+それが<code>RANDOM-STATE</code>ならそのコピーを返す。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">random 100<span class="paren2">(<span class="code">make-random-state</span>)</span></span>)</span>
+44
+cl-user&gt; <span class="paren1">(<span class="code">random 100<span class="paren2">(<span class="code">make-random-state</span>)</span></span>)</span>
+44
+cl-user&gt; <span class="paren1">(<span class="code">random 100<span class="paren2">(<span class="code">make-random-state t</span>)</span></span>)</span>
+29</span></code></pre>
+
+<p>なお、<code>RANDOM</code>の引数は整数かfloatが受け付け可能である。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">random 100.0<span class="paren2">(<span class="code">make-random-state</span>)</span></span>)</span>
+81.15838
+cl-user&gt; <span class="paren1">(<span class="code">random 100.0d0<span class="paren2">(<span class="code">make-random-state</span>)</span></span>)</span>
+67.00164098613853d0</span></code></pre>
+
+<pre><code><span class="code"><span class="function">threeCoins</span> <span class="keyword">::</span> <span class="variable">StdGen</span> <span class="keyword">-&gt;</span> <span class="paren1">(<span class="code"><span class="variable">Bool,</span> <span class="variable">Bool,</span> <span class="variable">Bool</span></span>)</span>
+<span class="function">threeCoins</span> gen <span class="keyword">=</span>
+&nbsp;   <span class="keyword">let</span> <span class="paren1">(<span class="code">firstCoin, newGen</span>)</span> <span class="keyword">=</span> random gen
+&nbsp;       <span class="paren1">(<span class="code">secondCoin, newGen'</span>)</span> <span class="keyword">=</span> <span class="paren1">(<span class="code">random newGen</span>)</span>
+&nbsp;       <span class="paren1">(<span class="code">thirdCoin, newGen''</span>)</span> <span class="keyword">=</span> <span class="paren1">(<span class="code">random newGen'</span>)</span>
+&nbsp;   <span class="keyword">in</span> <span class="paren1">(<span class="code">firstCoin, secondCoin, thirdCoin</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">random-state</span>)</span>list</span>)</span>three-coins</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> three-coins<span class="paren2">(<span class="code">state</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*random-state*</span> <span class="paren5">(<span class="code">make-random-state state</span>)</span></span>)</span></span>)</span>
+    `<span class="paren3">(<span class="code">,<span class="paren4">(<span class="code">oddp<span class="paren5">(<span class="code">random 100</span>)</span></span>)</span>
+      ,<span class="paren4">(<span class="code">oddp<span class="paren5">(<span class="code">random 100</span>)</span></span>)</span>
+      ,<span class="paren4">(<span class="code">oddp<span class="paren5">(<span class="code">random 100</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>More randoms</h3>
+
+<pre><code><span class="code"><span class="function">randoms'</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">RandomGen</span> g, <span class="variable">Random</span> a</span>)</span> <span class="atom">=&gt;</span> g <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code">a</span>]</span>
+<span class="function">randoms'</span> gen <span class="keyword">=</span> <span class="keyword">let</span> <span class="paren1">(<span class="code">value, newGen</span>)</span> <span class="keyword">=</span> random gen <span class="keyword">in</span> value<span class="variable">:</span>randoms' newGen</span></code></pre>
+
+<p>Haskellの<code>randoms</code>に相当する機能をCommon Lispで作るのは難しい。
+というのもCommon Lispは遅延評価をする言語ではないからだ。
+SERIESを使えば、無限に乱数を生成するSERIESオブジェクトを返す関数を作ることも可能だろう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> randoms <span class="paren2">(<span class="code">&amp;optional<span class="paren3">(<span class="code">state <span class="special">*random-state*</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">series:scan-fn 'fixnum
+    <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code"></span>)</span><span class="paren4">(<span class="code">random most-positive-fixnum state</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">x</span>)</span>
+      <span class="paren4">(<span class="code">declare<span class="paren5">(<span class="code">ignore x</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">random most-positive-fixnum state</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>どこかで区切ってとり出さねばならないなら、それごと統合して一関数にしてしまうのが簡単だ。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> randoms <span class="paren2">(<span class="code">num &amp;optional <span class="paren3">(<span class="code"><span class="special">*random-state*</span> <span class="special">*random-state*</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:repeat</span> num <span class="keyword">:collect</span> <span class="paren3">(<span class="code">random most-positive-fixnum</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> randomR <span class="paren1">(<span class="code">1,6</span>)</span> <span class="paren1">(<span class="code">mkStdGen 359353</span>)</span>
+<span class="paren1">(<span class="code">6, 1494289578 40692</span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> randomR <span class="paren1">(<span class="code">1,6</span>)</span> <span class="paren1">(<span class="code">mkStdGen 35935335</span>)</span>
+<span class="paren1">(<span class="code">3, 1250031057 40692</span>)</span></span></code></pre>
+
+<p>Haskellに於ける<code>randomR</code>はCommon Lispには存在しない。
+必要なら自作するしか無い。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> random-range<span class="paren2">(<span class="code">min max &amp;optional<span class="paren3">(<span class="code"><span class="special">*random-state*</span> <span class="special">*random-state*</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">+ min <span class="paren3">(<span class="code">random <span class="paren4">(<span class="code">1+<span class="paren5">(<span class="code">- max min</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> take 10 <span class="atom">$</span> randomRs <span class="paren1">(<span class="code"><span class="character">'a'</span>,<span class="character">'z'</span></span>)</span> <span class="paren1">(<span class="code">mkStdGen 3</span>)</span> <span class="keyword">::</span> <span class="paren1">[<span class="code"><span class="variable">Char</span></span>]</span>
+<span class="string">"ndkxbvmomg"</span></span></code></pre>
+
+<p>Haskellの<code>randomRs</code>もまたCommon Lispには無い。
+作るなら、取り出しと統合して以下のようにするのがよろしかろう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> random-ranges<span class="paren2">(<span class="code">length min max
+                           &amp;optional<span class="paren3">(<span class="code"><span class="special">*random-state*</span> <span class="special">*random-state*</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:repeat</span> length <span class="keyword">:collect</span> <span class="paren3">(<span class="code">random-range min max</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>文字列にしたいなら以下のようにするしかない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">map 'string #'code-char<span class="paren2">(<span class="code">random-ranges 10 <span class="paren3">(<span class="code">char-code <span class="character">#\a</span></span>)</span><span class="paren3">(<span class="code">char-code <span class="character">#\z</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>9.7</h2>
+
+<h3>bytestring</h3>
+
+<pre><code><span class="code"><span class="keyword">import</span> qualified <span class="variable">Data</span><span class="atom">.</span><span class="variable">ByteString</span><span class="atom">.</span><span class="variable">Lazy</span> as <span class="variable">B</span>
+<span class="keyword">import</span> qualified <span class="variable">Data</span><span class="atom">.</span><span class="variable">ByteString</span> as <span class="variable">S</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">B</span><span class="atom">.</span>pack <span class="paren1">[<span class="code">99,97,110</span>]</span>
+<span class="variable">Chunk</span> <span class="string">"can"</span> <span class="variable">Empty</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">B</span><span class="atom">.</span>pack <span class="paren1">[<span class="code">98<span class="keyword">..</span>120</span>]</span>
+<span class="variable">Chunk</span> <span class="string">"bcdefghijklmnopqrstuvwx"</span> <span class="variable">Empty</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="keyword">let</span> by <span class="keyword">=</span> <span class="variable">B</span><span class="atom">.</span>pack <span class="paren1">[<span class="code">98,111,114,116</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> by
+<span class="variable">Chunk</span> <span class="string">"bort"</span> <span class="variable">Empty</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">B</span><span class="atom">.</span>unpack by
+<span class="paren1">[<span class="code">98,111,114,116</span>]</span></span></code></pre>
+
+<p>Common Lispは遅延評価をする言語ではないので、Haskellの<code>bytestring</code>に相当するものがそもそもない。
+なお、バイトベクタと文字列との変換にはbabelを使う。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> by <span class="paren2">(<span class="code">make-array 4 <span class="keyword">:element-type</span> '<span class="paren3">(<span class="code">unsigned-byte 8</span>)</span>
+                                  <span class="keyword">:initial-contents</span> '<span class="paren3">(<span class="code">98 111 114 116</span>)</span></span>)</span></span>)</span>
+BY
+cl-user&gt; <span class="paren1">(<span class="code">babel:octets-to-string *</span>)</span>
+"bort"
+cl-user&gt; by
+#<span class="paren1">(<span class="code">98 111 114 116</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">babel:string-to-octets <span class="string">"hoge"</span></span>)</span>
+#<span class="paren1">(<span class="code">104 111 103 101</span>)</span></span></code></pre>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
