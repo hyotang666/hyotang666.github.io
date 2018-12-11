@@ -1,0 +1,714 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>cl-vs-haskell.11
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>Common Lisp vs Haskell, Chapter 11</h1>
+
+<h2>Meta note</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="cl-vs-haskell.10.html" >前章</a>を読了済みの者。</p>
+
+<h2>Introduction</h2>
+
+<p>本稿は「すごいH本」の内容をCommon Lispに翻訳しながらCLerがHaskellを学ぶその第11章である。</p>
+
+<p>本章では<a href="cl-vs-haskell.7.html" >７章</a>で作ったDSLに手を入れ、Applicativeの実装を行い、学んでいく。</p>
+
+<p>初級者にとって得られるものはほとんど何もないと言って差し支えなかろう。
+もっとも本稿の対象読者は本稿シリーズを読了済の者であるので、ここまでを楽しく読めてきている方であるならば本章も楽しく読めるであろうが。</p>
+
+<p>中級者にとっては、MOPを利用してFuncallable Objectを作っているあたりが興味深く見れるかと思う。</p>
+
+<p>上級者にとっては、やはり特に面白く見れる点はなかろうと思う。
+Haskellコードを粛々とCommon Lispコードに置き換えていくだけの内容であり、それ自身はCommon Lispの強力さをまざまざと見せつけるものとなってはいるのだが、Common Lisp上級者たればそんなことは百も承知のもので「何を今更」な話でしかなかろうからだ。</p>
+
+<h1>11</h1>
+
+<h2>11.1</h2>
+
+<h3>io action as functor</h3>
+
+<pre><code><span class="code"><span class="keyword">instance</span> <span class="variable">Functor</span> <span class="variable">IO</span> <span class="keyword">where</span>
+&nbsp;   fmap f action <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;       result <span class="keyword">&lt;-</span> action
+&nbsp;       return <span class="paren1">(<span class="code">f result</span>)</span></span></code></pre>
+
+<p>型指定の補助がいるが、上記コードは簡単に移植できる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-type-class</span></i><span class="paren2">(<span class="code">functor f a</span>)</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">fmap<span class="paren4">(<span class="code"><span class="paren5">(<span class="code"><i><span class="symbol">function</span></i><span class="paren6">(<span class="code">a</span>)</span>b</span>)</span><span class="paren5">(<span class="code">functor a</span>)</span></span>)</span><span class="paren4">(<span class="code">functor b</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> io<span class="paren2">(<span class="code">&amp;optional ret</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">function</span></i> * ,ret</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i> fmap <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">f <span class="paren4">(<span class="code"><i><span class="symbol">function</span></i><span class="paren5">(<span class="code">a</span>)</span>b</span>)</span></span>)</span><span class="paren3">(<span class="code">action <span class="paren4">(<span class="code">io a</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">action result &lt;- action
+          <span class="paren3">(<span class="code">.return <span class="paren4">(<span class="code">funcall f result</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span> line <span class="keyword">&lt;-</span> fmap reverse getLine
+&nbsp;         putStrLn <span class="atom">$</span> <span class="string">"You said "</span> <span class="atom">++</span> line <span class="atom">++</span> <span class="string">" backwards!"</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main <span class="paren2">(<span class="code"></span>)</span>
+  line &lt;- <span class="paren2">(<span class="code">fmap #'reverse <span class="paren3">(<span class="code">get-line</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">put-string-line <span class="paren3">(<span class="code">uiop:strcat <span class="string">"You said "</span> line <span class="string">" backwards!"</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">Char</span>
+<span class="keyword">import</span> <span class="variable">Data</span><span class="atom">.</span><span class="variable">List</span>
+
+<span class="function">main</span> <span class="keyword">=</span> <span class="keyword">do</span> line <span class="keyword">&lt;-</span> fmap <span class="paren1">(<span class="code">intersperse <span class="character">'-'</span> <span class="atom">.</span> reverse <span class="atom">.</span> map toUpper</span>)</span>
+&nbsp;                      getLine
+&nbsp;         putStrLn line</span></code></pre>
+
+<p>Haskellの<code>intersperse</code>に相当する機能はCommon Lispには存在しないので、自作せねばならない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> intersperse <span class="paren2">(<span class="code">char string</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-output-to-string</span></i><span class="paren3">(<span class="code"><span class="special">*standard-output*</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> c <span class="keyword">:across</span> string
+          <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+          <span class="keyword">:when</span> <span class="paren4">(<span class="code">array-in-bounds-p string <span class="paren5">(<span class="code">1+ i</span>)</span></span>)</span>
+          <span class="keyword">:do</span> <span class="paren4">(<span class="code">write-char c</span>)</span><span class="paren4">(<span class="code">write-char char</span>)</span>
+          <span class="keyword">:else</span> <span class="keyword">:do</span> <span class="paren4">(<span class="code">write-char c</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> main <span class="paren2">(<span class="code"></span>)</span>
+  line &lt;- <span class="paren2">(<span class="code">fmap #`<span class="paren3">(<span class="code">+ #`<span class="paren4">(<span class="code">% 'intersperse <span class="character">#\-</span></span>)</span> 'reverse 'string-upcase</span>)</span>
+                <span class="paren3">(<span class="code">get-line</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">put-string-line line</span>)</span></span>)</span></span></code></pre>
+
+<h3>function as functor</h3>
+
+<pre><code><span class="code"><span class="keyword">instance</span> <span class="variable">Functor</span> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><span class="keyword">-&gt;</span></span>)</span> r</span>)</span> <span class="keyword">where</span>
+&nbsp;   fmap f g <span class="keyword">=</span> <span class="paren1">(<span class="code"><span class="keyword">\</span>x <span class="keyword">-&gt;</span> f <span class="paren2">(<span class="code">g x</span>)</span></span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap <span class="paren1">(<span class="code"><span class="atom">*</span>3</span>)</span> <span class="paren1">(<span class="code"><span class="atom">+</span>100</span>)</span> 1
+<span class="function">303</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code"><span class="atom">*</span>3</span>)</span> <span class="atom">`fmap`</span> <span class="paren1">(<span class="code"><span class="atom">+</span>100</span>)</span> <span class="atom">$</span> 1
+<span class="function">303</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code"><span class="atom">*</span>3</span>)</span> <span class="atom">.</span> <span class="paren1">(<span class="code"><span class="atom">+</span>100</span>)</span> <span class="atom">$</span> 1
+<span class="function">303</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap <span class="paren1">(<span class="code">show <span class="atom">.</span> <span class="paren2">(<span class="code"><span class="atom">*</span>3</span>)</span></span>)</span> <span class="paren1">(<span class="code"><span class="atom">+</span>100</span>)</span> 1
+<span class="string">"303"</span></span></code></pre>
+
+<p><code>DEFTYPE</code>による補助だけでは<code>IO</code>としての関数と通常の関数とを区別できないので、MOPを利用して新しく<code>IO-ACTION</code>型の関数を導入しよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> io-action <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">instance <span class="keyword">:initarg</span> <span class="keyword">:instance</span> <span class="keyword">:reader</span> action-of</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> closer-mop:funcallable-standard-class</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> initialize-instance <span class="keyword">:after</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">c io-action</span>)</span> &amp;key</span>)</span>
+  <span class="paren2">(<span class="code">closer-mop:set-funcallable-instance-function c <span class="paren3">(<span class="code">action-of c</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">defio</span></i> <span class="paren2">(<span class="code">name lambda-list declarations &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">PROGN</span></i> <span class="paren3">(<span class="code">DECLAIM<span class="paren4">(<span class="code">FTYPE<span class="paren5">(<span class="code"><i><span class="symbol">FUNCTION</span></i>,declarations IO-ACTION</span>)</span>,name</span>)</span></span>)</span>
+          <span class="paren3">(<span class="code"><i><span class="symbol">DEFUN</span></i>,name,lambda-list
+            <span class="paren4">(<span class="code">MAKE-INSTANCE 'IO-ACTION <span class="keyword">:INSTANCE</span> <span class="paren5">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren6">(<span class="code"></span>)</span>,@body</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> action<span class="paren2">(<span class="code">&amp;rest exp*</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">exp* &amp;optional acc</span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp exp*</span>)</span>
+              <span class="paren6">(<span class="code">nreverse acc</span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">cond</span></i>
+                <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">eq '<i><span class="symbol">let</span></i> <span class="paren3">(<span class="code">first exp*</span>)</span></span>)</span>
+                 `<span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><i><span class="symbol">LET*</span></i>,<span class="paren4">(<span class="code">second exp*</span>)</span>
+                    ,@<span class="paren4">(<span class="code">rec <span class="paren5">(<span class="code">nthcdr 2 exp*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">eq '&lt;- <span class="paren3">(<span class="code">second exp*</span>)</span></span>)</span>
+                 `<span class="paren2">(<span class="code">,@<span class="paren3">(<span class="code">nreverse acc</span>)</span>
+                    <span class="paren3">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">first exp*</span>)</span><span class="paren6">(<span class="code">MAY-CALL ,<span class="paren1">(<span class="code">third exp*</span>)</span></span>)</span></span>)</span></span>)</span>
+                      ,@<span class="paren4">(<span class="code">rec <span class="paren5">(<span class="code">nthcdr 3 exp*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren1">(<span class="code">T <span class="paren2">(<span class="code">rec <span class="paren3">(<span class="code">cdr exp*</span>)</span><span class="paren3">(<span class="code">cons `<span class="paren4">(<span class="code">MAY-CALL ,<span class="paren5">(<span class="code">first exp*</span>)</span></span>)</span>acc</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          </span>)</span>
+    `<span class="paren3">(<span class="code">MAKE-INSTANCE 'IO-ACTION <span class="keyword">:INSTANCE</span> <span class="paren4">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren5">(<span class="code"></span>)</span>,@<span class="paren5">(<span class="code">rec exp*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defio</span></i> .return<span class="paren2">(<span class="code">value</span>)</span><span class="paren2">(<span class="code">t</span>)</span>
+  value</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i> fmap <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">f <i><span class="symbol">function</span></i></span>)</span><span class="paren3">(<span class="code">action io-action</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">action result &lt;- action
+          <span class="paren3">(<span class="code">.return <span class="paren4">(<span class="code">funcall f result</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これにより、通常の関数と<code>IO</code>としての関数とを区別できるようになる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i> fmap <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">f <i><span class="symbol">function</span></i></span>)</span><span class="paren3">(<span class="code">g <i><span class="symbol">function</span></i></span>)</span></span>)</span>
+  #`<span class="paren2">(<span class="code">+ f g</span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">funcall <span class="paren2">(<span class="code">fmap #`<span class="paren3">(<span class="code">% '* 3</span>)</span> #`<span class="paren3">(<span class="code">% '+ 100</span>)</span></span>)</span> 1</span>)</span>
+303
+cl-user&gt; <span class="paren1">(<span class="code">funcall #%<span class="paren2">(<span class="code">#`<span class="paren3">(<span class="code">% '* 3</span>)</span> fmap #`<span class="paren3">(<span class="code">% '+ 100</span>)</span></span>)</span> 1</span>)</span>
+303
+cl-user&gt; <span class="paren1">(<span class="code">funcall #`<span class="paren2">(<span class="code">+ #`<span class="paren3">(<span class="code">% '* 3</span>)</span> #`<span class="paren3">(<span class="code">% '+ 100</span>)</span></span>)</span> 1</span>)</span>
+303
+cl-user&gt; <span class="paren1">(<span class="code">funcall <span class="paren2">(<span class="code">fmap #`<span class="paren3">(<span class="code">+ 'princ-to-string #`<span class="paren4">(<span class="code">% '* 3</span>)</span></span>)</span>
+                        #`<span class="paren3">(<span class="code">% '+ 100</span>)</span></span>)</span>
+                  1</span>)</span>
+"303"</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> fmap <span class="paren1">(<span class="code">replicate 3</span>)</span> <span class="paren1">[<span class="code">1,2,3,4</span>]</span>
+<span class="paren1">[<span class="code"><span class="paren2">[<span class="code">1,1,1</span>]</span>,<span class="paren2">[<span class="code">2,2,2</span>]</span>,<span class="paren2">[<span class="code">3,3,3</span>]</span><span class="paren2">[<span class="code">4,4,4</span>]</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap <span class="paren1">(<span class="code">replicate 3</span>)</span> <span class="paren1">(<span class="code"><span class="variable">Just</span> 4</span>)</span>
+<span class="variable">Just</span> <span class="paren1">[<span class="code">4,4,4</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap <span class="paren1">(<span class="code">replicate 3</span>)</span> <span class="paren1">(<span class="code"><span class="variable">Right</span> <span class="string">"blah"</span></span>)</span>
+<span class="variable">Right</span> <span class="paren1">[<span class="code"><span class="string">"blah"</span>,<span class="string">"blah"</span>,<span class="string">"blah"</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap <span class="paren1">(<span class="code">replicate 3</span>)</span> <span class="variable">Nothing</span>
+<span class="variable">Nothing</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap <span class="paren1">(<span class="code">replicate 3</span>)</span> <span class="paren1">(<span class="code"><span class="variable">Left</span> <span class="string">"foo"</span></span>)</span>
+<span class="variable">Left</span> <span class="string">"foo"</span></span></code></pre>
+
+<p>必要なインスタンスを都度定義するだけで、まぁ、だいたいは再現できる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i> fmap <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">f <i><span class="symbol">function</span></i></span>)</span><span class="paren3">(<span class="code">l list</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">mapcar f l</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">fmap #`<span class="paren2">(<span class="code">% 'replicate 3</span>)</span>'<span class="paren2">(<span class="code">list 1 2 3 4</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">LIST<span class="paren2">(<span class="code">1 1 1</span>)</span><span class="paren2">(<span class="code">2 2 2</span>)</span><span class="paren2">(<span class="code">3 3 3</span>)</span><span class="paren2">(<span class="code">4 4 4</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i> fmap <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">f <i><span class="symbol">function</span></i></span>)</span><span class="paren3">(<span class="code">m <span class="paren4">(<span class="code">maybe *</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">trivia:ematch m
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">just x</span>)</span><span class="paren4">(<span class="code">just <span class="paren5">(<span class="code">funcall f x</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:nothing</span> <span class="keyword">:nothing</span></span>)</span></span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">fmap #`<span class="paren2">(<span class="code">% 'replicate 3</span>)</span> <span class="paren2">(<span class="code">just 4</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST <span class="paren2">(<span class="code">4 4 4</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">fmap #`<span class="paren2">(<span class="code">% 'replicate 3</span>)</span> <span class="keyword">:nothing</span></span>)</span>
+:nothing
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i> fmap <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">f <i><span class="symbol">function</span></i></span>)</span><span class="paren3">(<span class="code">e <span class="paren4">(<span class="code">either * *</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">trivia:match e
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">right x</span>)</span><span class="paren4">(<span class="code">right <span class="paren5">(<span class="code">funcall f x</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">_ e</span>)</span></span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">fmap #`<span class="paren2">(<span class="code">% 'replicate 3</span>)</span> <span class="paren2">(<span class="code">left <span class="string">"foo"</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">LEFT <span class="string">"foo"</span></span>)</span></span></code></pre>
+
+<p>現時点で著しく不細工なのは<code>EITHER</code>の型指定子だろうか。
+型コンストラクタがカリー化されていない点は、おそらく将来、なんとかせねばならなくなるだろう。</p>
+
+<h2>11.2</h2>
+
+<h3>rule 1</h3>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> fmap id <span class="paren1">(<span class="code"><span class="variable">Just</span> 3</span>)</span>
+<span class="paren1">(<span class="code"><span class="variable">Just</span> 3</span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> id <span class="paren1">(<span class="code"><span class="variable">Just</span> 3</span>)</span>
+<span class="paren1">(<span class="code"><span class="variable">Just</span> 3</span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap id <span class="paren1">[<span class="code">1<span class="keyword">..</span>5</span>]</span>
+<span class="paren1">[<span class="code">1,2,3,4,5</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> id <span class="paren1">[<span class="code">1<span class="keyword">..</span>5</span>]</span>
+<span class="paren1">[<span class="code">1,2,3,4,5</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap id <span class="paren1">[<span class="code"></span>]</span>
+<span class="paren1">[<span class="code"></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap id <span class="variable">Nothing</span>
+<span class="variable">Nothing</span></span></code></pre>
+
+<p>ファンクタ則もほぼそのまま移植できる。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">fmap #'identity <span class="paren2">(<span class="code">just 3</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST 3</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">identity <span class="paren2">(<span class="code">just 3</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST 3</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">fmap #'identity <span class="paren2">(<span class="code">incf-cl:range 1 5</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">1 2 3 4 5</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">identity <span class="paren2">(<span class="code">incf-cl:range 1 5</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">1 2 3 4 5</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">fmap #'identity <span class="paren2">(<span class="code"></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">fmap #'identity nothing</span>)</span>
+:NOTHING</span></code></pre>
+
+<h3>rule 2</h3>
+
+<h3>breaking the rule</h3>
+
+<pre><code><span class="code"><span class="keyword">data</span> <span class="variable">CMaybe</span> a <span class="keyword">=</span> <span class="variable">CNothing</span> <span class="keyword">|</span> <span class="variable">CJust</span> <span class="variable">Int</span> a <span class="keyword">deriving</span> <span class="paren1">(<span class="code"><span class="variable">Show</span></span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">CNothing</span>
+<span class="variable">CNothing</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">CJust</span> 0 <span class="string">"haha"</span>
+<span class="variable">CJust</span> 0 <span class="string">"haha"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">:</span>t <span class="variable">CNothing</span>
+<span class="variable">CNothing</span> <span class="keyword">::</span> <span class="variable">CMaybe</span> a
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">:</span>t <span class="variable">CJust</span> 0 <span class="string">"haha"</span>
+<span class="variable">CJust</span> 0 <span class="string">"haha"</span> <span class="keyword">::</span> <span class="variable">CMaybe</span> <span class="paren1">[<span class="code"><span class="variable">Char</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">CJust</span> 100 <span class="paren1">[<span class="code">1,2,3</span>]</span>
+<span class="variable">CJust</span> 100 <span class="paren1">[<span class="code">1,2,3</span>]</span>
+
+<span class="keyword">instance</span> <span class="variable">Functor</span> <span class="variable">CMaybe</span> <span class="keyword">where</span>
+&nbsp;   fmap f <span class="variable">CNothing</span> <span class="keyword">=</span> <span class="variable">CNothing</span>
+&nbsp;   fmap f <span class="paren1">(<span class="code"><span class="variable">CJust</span> counter x</span>)</span> <span class="keyword">=</span> <span class="variable">CJust</span> <span class="paren1">(<span class="code">counter<span class="atom">+</span>1</span>)</span> <span class="paren1">(<span class="code">f x</span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap <span class="paren1">(<span class="code"><span class="atom">++</span><span class="string">"ha"</span></span>)</span> <span class="paren1">(<span class="code"><span class="variable">CJust</span> 0 <span class="string">"ho"</span></span>)</span>
+<span class="variable">CJust</span> 1 <span class="string">"hoha"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap <span class="paren1">(<span class="code"><span class="atom">++</span><span class="string">"he"</span></span>)</span> <span class="paren1">(<span class="code">fmap <span class="paren2">(<span class="code"><span class="atom">++</span><span class="string">"ha"</span></span>)</span> <span class="paren2">(<span class="code"><span class="variable">CJust</span> 0 <span class="string">"ho"</span></span>)</span></span>)</span>
+<span class="variable">CJust</span> 2 <span class="string">"hohahe"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap <span class="paren1">(<span class="code"><span class="atom">++</span><span class="string">"blah"</span></span>)</span> <span class="variable">CNothing</span>
+<span class="variable">CNothing</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> fmap id <span class="paren1">(<span class="code"><span class="variable">CJust</span> 0 <span class="string">"haha"</span></span>)</span>
+<span class="variable">CJust</span> 1 <span class="string">"haha"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> id <span class="paren1">(<span class="code"><span class="variable">CJust</span> 0 <span class="string">"haha"</span></span>)</span>
+<span class="variable">CJust</span> 0 <span class="string">"haha"</span></span></code></pre>
+
+<p>これもほぼそのままである。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defdata</span></i> counter-maybe<span class="paren2">(<span class="code">a</span>)</span>
+  counter-nothing
+  <span class="paren2">(<span class="code">counter-just fixnum a</span>)</span></span>)</span>
+
+cl-user&gt; :counter-nothing
+:COUNTER-MAYBE
+cl-user&gt; <span class="paren1">(<span class="code">counter-just 0 <span class="string">"haha"</span></span>)</span>
+<span class="paren1">(<span class="code">COUNTER-JUST 0 <span class="string">"haha"</span></span>)</span>
+cl-suer&gt; <span class="paren1">(<span class="code">counter-just 100 '<span class="paren2">(<span class="code">1 2 3</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">COUNTER-JUST 100 <span class="paren2">(<span class="code">1 2 3</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i> fmap <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">f <i><span class="symbol">function</span></i></span>)</span><span class="paren3">(<span class="code">cm <span class="paren4">(<span class="code">counter-maybe *</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">trivia:match cm
+    <span class="paren3">(<span class="code">counter-nothing counter-nothing</span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">counter-just counter x</span>)</span><span class="paren4">(<span class="code">counter-just <span class="paren5">(<span class="code">1+ counter</span>)</span><span class="paren5">(<span class="code">funcall f x</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">fmap #`<span class="paren2">(<span class="code">% 'uiop:strcat _ <span class="string">"ha"</span></span>)</span><span class="paren2">(<span class="code">counter-just 0 <span class="string">"ho"</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">COUNTER-JUST 1 <span class="string">"hoha"</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">fmap #`<span class="paren2">(<span class="code">% 'uiop:strcat _ <span class="string">"he"</span></span>)</span><span class="paren2">(<span class="code">fmap #`<span class="paren3">(<span class="code">% 'uiop:strcat _ <span class="string">"ha"</span></span>)</span><span class="paren3">(<span class="code">counter-just 0 <span class="string">"ho"</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">COUNTER-JUST 2 <span class="string">"hohahe"</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">fmap #`<span class="paren2">(<span class="code">% 'uiop:strcat _ <span class="string">"blah"</span></span>)</span> <span class="keyword">:counter-nothing</span></span>)</span>
+:COUNTER-NOTHING
+
+cl-user&gt; <span class="paren1">(<span class="code">fmap #'identity <span class="paren2">(<span class="code">counter-just 0 <span class="string">"haha"</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">COUNTER-JUST 1 <span class="string">"haha"</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">identity <span class="paren2">(<span class="code">counter-just 0 <span class="string">"haha"</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">COUNTER-JUST 0 <span class="string">"haha"</span></span>)</span></span></code></pre>
+
+<h2>11.3</h2>
+
+<h3>applicative</h3>
+
+<pre><code><span class="code"><span class="keyword">class</span> <span class="paren1">(<span class="code"><span class="variable">Functor</span> f</span>)</span> <span class="atom">=&gt;</span> <span class="variable">Applicative</span> f <span class="keyword">where</span>
+&nbsp;   pure <span class="keyword">::</span> a <span class="keyword">-&gt;</span> f a
+&nbsp;   <span class="paren1">(<span class="code"><span class="atom">&lt;*&gt;</span></span>)</span> <span class="keyword">::</span> f <span class="paren1">(<span class="code">a <span class="keyword">-&gt;</span> b</span>)</span> <span class="keyword">-&gt;</span> f a <span class="keyword">-&gt;</span> f b</span></code></pre>
+
+<p>上記コードは現行の実装では再現できない。
+現行の実装では各インスタンスは、インタープリタとして振る舞う関数と、それ上に機能するコンパイラマクロとして実装されている。</p>
+
+<p>そして<code>PURE</code>のインスタンスは型のコンテクストに依存して決定されることとなる。
+コンパイラマクロはこれを上手く捌けるが、インタープリタには出来ない。
+コンテクストが決まる前に<code>PURE</code>が評価されてしまうからだ。</p>
+
+<p>これに対応するには、コンパイラマクロと関数という二段構えの構造を捨て、代わりにグローバルマクロとローカルマクロの二段構えにすれば良い。</p>
+
+<pre><code><span class="code"><span class="comment">;;;; DEFINE-TYPE-CLASS
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">define-type-class</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">name type-var</span>)</span>super-classes methods &amp;rest rest</span>)</span>
+  <span class="comment">;; trivial syntax checking.
+</span>  <span class="paren2">(<span class="code">assert<span class="paren3">(<span class="code">symbolp name</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">assert<span class="paren3">(<span class="code">symbolp type-var</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">assert<span class="paren3">(<span class="code">listp super-classes</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">assert<span class="paren3">(<span class="code">every #'symbolp super-classes</span>)</span></span>)</span>
+  <span class="comment">;; as canonicalize
+</span>  <span class="paren2">(<span class="code">setf type-var <span class="paren3">(<span class="code">Envar type-var</span>)</span></span>)</span>
+  <span class="comment">;; body
+</span>  `<span class="paren2">(<span class="code"><i><span class="symbol">EVAL-WHEN</span></i><span class="paren3">(<span class="code"><span class="keyword">:COMPILE-TOPLEVEL</span> <span class="keyword">:LOAD-TOPLEVEL</span> <span class="keyword">:EXECUTE</span></span>)</span>
+     <span class="paren3">(<span class="code">SETF<span class="paren4">(<span class="code">GET ',name 'TYPE-CLASS</span>)</span><span class="paren4">(<span class="code">MAKE-INFO <span class="keyword">:NAME</span> ',name <span class="keyword">:VAR</span> ',type-var</span>)</span></span>)</span>
+     ,@<span class="paren3">(<span class="code">when super-classes
+         <span class="paren4">(<span class="code">&lt;type-class-relation-setter&gt; name super-classes</span>)</span></span>)</span>
+     ,@<span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i>
+         <span class="keyword">:for</span> <span class="paren4">(<span class="code">method lambda-list return-type</span>)</span> <span class="keyword">:in</span> methods
+         <span class="keyword">:for</span> gensyms = <span class="paren4">(<span class="code">Gensyms lambda-list</span>)</span>
+         <span class="keyword">:do</span> <span class="paren4">(<span class="code">setf <span class="comment">; as canonicalise
+</span>               lambda-list <span class="paren5">(<span class="code">patternize lambda-list</span>)</span>
+               return-type <span class="paren5">(<span class="code">patternize return-type</span>)</span></span>)</span>
+         <span class="keyword">:collect</span> <span class="paren4">(<span class="code">&lt;instance-info-setter&gt; method name lambda-list return-type rest</span>)</span>
+         <span class="keyword">:collect</span> <span class="paren4">(<span class="code">&lt;<i><span class="symbol">defmacro&gt;</span></i> method gensyms lambda-list return-type</span>)</span></span>)</span>
+     ',name</span>)</span></span>)</span>
+
+<span class="comment">;;; &lt;defmacro&gt;
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*sub-expand*</span> nil</span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*expand-verbose*</span> T</span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> &lt;<i><span class="symbol">defmacro&gt;</span></i><span class="paren2">(<span class="code">method gensyms lambda-list return-type &amp;aux <span class="paren3">(<span class="code">sub-name<span class="paren4">(<span class="code">sub-name method</span>)</span></span>)</span></span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">DEFMACRO</span></i>,method<span class="paren3">(<span class="code">&amp;WHOLE WHOLE ,@gensyms &amp;ENVIRONMENT ENV</span>)</span>
+     <span class="paren3">(<span class="code"><i><span class="symbol">IF</span></i> <span class="paren4">(<span class="code">EQ <span class="special">*SUB-EXPAND*</span> WHOLE</span>)</span>
+         <span class="paren4">(<span class="code">ERROR <span class="string">"Trap infinite expansion ~S"</span> whole</span>)</span>
+         <span class="paren4">(<span class="code"><i><span class="symbol">LET*</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code"><span class="special">*SUB-EXPAND*</span> WHOLE</span>)</span>
+               <span class="paren6">(<span class="code">EXPANDED<span class="paren1">(<span class="code"><i><span class="symbol">LOOP</span></i> <span class="keyword">:FOR</span> FORM <span class="keyword">:IN</span> <span class="paren2">(<span class="code">LIST ,@gensyms</span>)</span>
+                              <span class="keyword">:COLLECT</span> <span class="paren2">(<span class="code">EXPANDER:EXPAND FORM ENV</span>)</span></span>)</span></span>)</span>
+               <span class="paren6">(<span class="code">INFOS<span class="paren1">(<span class="code">CHECK-SIGNATURE ',lambda-list <span class="paren2">(<span class="code">COMPUTE-RETURN-TYPES EXPANDED ENV</span>)</span></span>)</span></span>)</span>
+               <span class="paren6">(<span class="code">IL<span class="paren1">(<span class="code">GET-INSTANCE-LAMBDA ',method INFOS</span>)</span></span>)</span>
+               <span class="paren6">(<span class="code">MACROS<span class="paren1">(<span class="code"><i><span class="symbol">LOOP</span></i> <span class="keyword">:FOR</span> <span class="paren2">(<span class="code">NAME . REST</span>)</span> <span class="keyword">:IN</span> IL
+                            <span class="keyword">:COLLECT</span> <span class="paren2">(<span class="code">CONS <span class="paren3">(<span class="code">SUB-NAME NAME</span>)</span> REST</span>)</span></span>)</span></span>)</span>
+               <span class="paren6">(<span class="code">BODY`<span class="paren1">(<span class="code">,',sub-name
+                       ,@<span class="paren2">(<span class="code"><i><span class="symbol">LOOP</span></i> <span class="keyword">:FOR</span> FORM <span class="keyword">:IN</span> <span class="paren3">(<span class="code">TRESTRUL:ASUBST-IF
+                                               #'SUB-NAME
+                                               <span class="paren4">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren5">(<span class="code">X</span>)</span><span class="paren5">(<span class="code">FIND X IL <span class="keyword">:KEY</span> #'CAR <span class="keyword">:TEST</span> #'EQ</span>)</span></span>)</span>
+                                               EXPANDED</span>)</span>
+                               <span class="keyword">:COLLECT</span> <span class="paren3">(<span class="code">expander:expand
+                                          `<span class="paren4">(<span class="code"><i><span class="symbol">MACROLET</span></i>,MACROS,FORM</span>)</span> env</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+           <span class="paren5">(<span class="code"><i><span class="symbol">IF</span></i> IL
+              ,<span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">millet:type-specifier-p return-type</span>)</span>
+                 ``<span class="paren1">(<span class="code"><i><span class="symbol">MACROLET</span></i>,MACROS <span class="paren2">(<span class="code"><i><span class="symbol">THE</span></i> ,',return-type ,BODY</span>)</span></span>)</span>
+                `<span class="paren1">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">RETURN<span class="paren4">(<span class="code">SUBSTITUTE-PATTERN ',return-type <span class="paren5">(<span class="code">TYPE-UNIFY:UNIFY ',lambda-list <span class="paren6">(<span class="code">ENWILD INFOS</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                   <span class="paren2">(<span class="code"><i><span class="symbol">IF</span></i><span class="paren3">(<span class="code">MILLET:TYPE-SPECIFIER-P RETURN</span>)</span>
+                     `<span class="paren3">(<span class="code"><i><span class="symbol">MACROLET</span></i>,MACROS <span class="paren4">(<span class="code"><i><span class="symbol">THE</span></i> ,RETURN ,BODY</span>)</span></span>)</span>
+                     `<span class="paren3">(<span class="code"><i><span class="symbol">MACROLET</span></i>,MACROS ,BODY</span>)</span></span>)</span></span>)</span></span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">PROGN</span></i> <span class="paren1">(<span class="code">WHEN <span class="special">*EXPAND-VERBOSE*</span>
+                       <span class="paren2">(<span class="code">WARN <span class="string">"Instance is not found. ~S ~S"</span>',method <span class="paren3">(<span class="code">LIST ,@gensyms</span>)</span></span>)</span></span>)</span>
+                     WHOLE</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> sub-name<span class="paren2">(<span class="code">symbol</span>)</span>
+  <span class="paren2">(<span class="code">intern<span class="paren3">(<span class="code">format nil <span class="string">"%~A"</span>symbol</span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;;;; DEFISTANCE
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">type-class type</span>)</span> <i><span class="symbol">definition</span></i></span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">progn</span></i> ,@<span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren4">(<span class="code">name</span>)</span> <span class="keyword">:in</span> <i><span class="symbol">definition</span></i>
+                  <span class="keyword">:for</span> signature = <span class="paren4">(<span class="code">subst type
+                                          <span class="paren5">(<span class="code">type-var <span class="paren6">(<span class="code">get type-class 'type-class</span>)</span></span>)</span>
+                                          <span class="paren5">(<span class="code">instance-lambda-list name</span>)</span></span>)</span>
+                  <span class="keyword">:when</span> <span class="paren4">(<span class="code">trestrul:find-leaf-if <span class="paren5">(<span class="code">complement #'type-unify:variablep</span>)</span>
+                                               signature</span>)</span>
+                  <span class="keyword">:collect</span> `<span class="paren4">(<span class="code">add-instance ',name ',signature ',<i><span class="symbol">definition</span></i></span>)</span></span>)</span>
+          ',type-class</span>)</span></span>)</span></span></code></pre>
+
+<p>少々トリッキーなので、理屈を解説しよう。
+まず、グローバルマクロ<code>&lt;*&gt;</code>が呼び出される。
+グローバルマクロ<code>&lt;*&gt;</code>はインスタンスを特定するために、引数として受け取ったS式を先にマクロ展開させる。
+例えばグローバルマクロ<code>PURE</code>が展開されるとする。
+グローバルマクロ<code>PURE</code>は現在の型のコンテクストが分からないのでインスタンスを特定できない。
+そこでマクロ展開を諦めて<code>&amp;WHOLE</code>を返す。
+すなわち、マクロ展開を遅延させる。
+グローバルマクロ<code>&lt;*&gt;</code>は、今一方の引数から（<code>&lt;*&gt;</code>はニ引数マクロである。）返り値が例えばリストであることが判明するとする。
+そこでグローバルマクロ<code>&lt;*&gt;</code>はリストのコンテクストを生成する。
+すなわち、マクロレットフォームを生成する。
+マクロレットフォームはローカルマクロ<code>PURE</code>を確立する。
+グローバルマクロ<code>&lt;*&gt;</code>の展開はここで終了し、評価をLispに引き渡す。
+Lispはマクロレットフォームのボディ部に評価を進めていき、改めて<code>PURE</code>にぶつかる。
+その時点でローカルマクロ<code>PURE</code>がグローバルマクロ<code>PURE</code>をシャドウしているので、この度はローカルマクロ<code>PURE</code>が呼び出され、成功裏にリストインスタンスの<code>PURE</code>が展開されるという運びとなる。
+以上、解説終わり。</p>
+
+<p>型クラスの定義は以下のようになる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-type-class</span></i><span class="paren2">(<span class="code">applicative f</span>)</span><span class="paren2">(<span class="code">functor</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">pure<span class="paren4">(<span class="code">a</span>)</span><span class="paren4">(<span class="code">functor a</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">&lt;*&gt;<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">functor<span class="paren6">(<span class="code"><i><span class="symbol">function</span></i><span class="paren1">(<span class="code">a</span>)</span>b</span>)</span></span>)</span><span class="paren5">(<span class="code">functor a</span>)</span></span>)</span><span class="paren4">(<span class="code">functor b</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Maybe is applicative functor</h3>
+
+<pre><code><span class="code"><span class="keyword">instance</span> <span class="variable">Applicative</span> <span class="variable">Maybe</span> <span class="keyword">where</span>
+&nbsp;   pure <span class="keyword">=</span> <span class="variable">Just</span>
+&nbsp;   <span class="variable">Nothing</span> <span class="atom">&lt;*&gt;</span> _ <span class="keyword">=</span> <span class="variable">Nothing</span>
+&nbsp;   <span class="paren1">(<span class="code"><span class="variable">Just</span> f</span>)</span> <span class="atom">&lt;*&gt;</span> something <span class="keyword">=</span> fmap f something</span></code></pre>
+
+<p>上記インスタンス定義は以下のようになる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">aplicative maybe</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">pure<span class="paren4">(<span class="code">x</span>)</span>
+     `<span class="paren4">(<span class="code">just ,x</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">&lt;*&gt;<span class="paren4">(<span class="code">a b</span>)</span>
+     <span class="paren4">(<span class="code">trivia:match*<span class="paren5">(<span class="code">a b</span>)</span>
+        <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">nothing _</span>)</span> nothing</span>)</span>
+        <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">just f</span>)</span>something</span>)</span>`<span class="paren5">(<span class="code">fmap ,f ,something</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>パターンマッチをマクロ展開時に行っている点要注意。</p>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Just</span> <span class="paren1">(<span class="code"><span class="atom">+</span>3</span>)</span> <span class="atom">&lt;*&gt;</span> <span class="variable">Just</span> 9
+<span class="variable">Just</span> 12
+<span class="function">ghci</span><span class="atom">&gt;</span> pure <span class="paren1">(<span class="code"><span class="atom">+</span>3</span>)</span> <span class="atom">&lt;*&gt;</span> <span class="variable">Just</span> 10
+<span class="variable">Just</span> 13
+<span class="function">ghci</span><span class="atom">&gt;</span> pure <span class="paren1">(<span class="code"><span class="atom">+</span>3</span>)</span> <span class="atom">&lt;*&gt;</span> <span class="variable">Just</span> 9
+<span class="variable">Just</span> 12
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Just</span> <span class="paren1">(<span class="code"><span class="atom">++</span><span class="string">"hahaha"</span></span>)</span> <span class="atom">&lt;*&gt;</span> <span class="variable">Nothing</span>
+<span class="variable">Nothing</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Nothing</span> <span class="atom">&lt;*&gt;</span> <span class="variable">Just</span> <span class="string">"woot"</span>
+<span class="variable">Nothing</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">&lt;*&gt; <span class="paren2">(<span class="code">just <span class="paren3">(<span class="code">curried-function:section + 3 _</span>)</span></span>)</span> <span class="paren2">(<span class="code">just 9</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST 12</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">&lt;*&gt; <span class="paren2">(<span class="code">pure <span class="paren3">(<span class="code">curried-function:section + 3 _</span>)</span></span>)</span> <span class="paren2">(<span class="code">just 10</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST 13</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">&lt;*&gt; <span class="paren2">(<span class="code">pure <span class="paren3">(<span class="code">curried-function:section + 3 _</span>)</span></span>)</span> <span class="paren2">(<span class="code">just 9</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST 12</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">&lt;*&gt; <span class="paren2">(<span class="code">just <span class="paren3">(<span class="code">curried-function:section uiop:strcat _ <span class="string">"hahaha"</span></span>)</span></span>)</span> nothing</span>)</span>
+NOTHING
+cl-user&gt; <span class="paren1">(<span class="code">&lt;*&gt; nothing <span class="paren2">(<span class="code">just <span class="string">"woot"</span></span>)</span></span>)</span>
+NOTHING</span></code></pre>
+
+<p><code>&lt;*&gt;</code>が前置になっている点と、関数のカリー化が冗長な点を除けば、ほぼ直訳と言える。</p>
+
+<h3>Applicative style.</h3>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> pure <span class="paren1">(<span class="code"><span class="atom">+</span></span>)</span> <span class="atom">&lt;*&gt;</span> <span class="variable">Just</span> 3 <span class="atom">&lt;*&gt;</span> <span class="variable">Just</span> 5
+<span class="variable">Just</span> 8
+<span class="function">ghci</span><span class="atom">&gt;</span> pure <span class="paren1">(<span class="code"><span class="atom">+</span></span>)</span> <span class="atom">&lt;*&gt;</span> <span class="variable">Just</span> 3 <span class="atom">&lt;*&gt;</span> <span class="variable">Nothing</span>
+<span class="variable">Nothing</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> pure <span class="paren1">(<span class="code"><span class="atom">+</span></span>)</span> <span class="atom">&lt;*&gt;</span> <span class="variable">Nothing</span> <span class="atom">&lt;*&gt;</span> <span class="variable">Just</span> 5
+<span class="variable">Nothing</span></span></code></pre>
+
+<p><code>&lt;*&gt;</code>が左結合である点を明示的に書かねばならない点が非常に不細工であるが、上記コードは以下のようになる。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">&lt;*&gt; <span class="paren2">(<span class="code">&lt;*&gt; <span class="paren3">(<span class="code">pure <span class="paren4">(<span class="code">curried-function:section + _ _</span>)</span></span>)</span>
+                   <span class="paren3">(<span class="code">just 3</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code">just 5</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST 8</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">&lt;*&gt; <span class="paren2">(<span class="code">&lt;*&gt; <span class="paren3">(<span class="code">pure <span class="paren4">(<span class="code">curried-function::section + _ _</span>)</span></span>)</span>
+                   <span class="paren3">(<span class="code">just 3</span>)</span></span>)</span>
+              nothing</span>)</span>
+NOTHING
+cl-user&gt; <span class="paren1">(<span class="code">&lt;*&gt; <span class="paren2">(<span class="code">&lt;*&gt; <span class="paren3">(<span class="code">pure <span class="paren4">(<span class="code">curried-function::section + _ _</span>)</span></span>)</span>
+                   nothing</span>)</span>
+              <span class="paren2">(<span class="code">just 5</span>)</span></span>)</span>
+NOTHING</span></code></pre>
+
+<p>不細工なシンタックスに我慢をして付き合う必要はない。
+なぜならLispだからだ。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> &lt;<span class="special">*&gt;*</span><span class="paren2">(<span class="code">&amp;rest body</span>)</span>
+    <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">body</span>)</span>
+              <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp <span class="paren1">(<span class="code">cdr body</span>)</span></span>)</span>
+                <span class="paren6">(<span class="code">car body</span>)</span>
+                `<span class="paren6">(<span class="code">&lt;*&gt; ,<span class="paren1">(<span class="code">rec<span class="paren2">(<span class="code">cdr body</span>)</span></span>)</span>
+                      ,<span class="paren1">(<span class="code">car body</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren3">(<span class="code">rec<span class="paren4">(<span class="code">reverse body</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書けるようになった。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">&lt;<span class="special">*&gt;*</span> <span class="paren2">(<span class="code">pure <span class="paren3">(<span class="code">curried-function:section + _ _</span>)</span></span>)</span>
+               <span class="paren2">(<span class="code">just 3</span>)</span>
+               <span class="paren2">(<span class="code">just 5</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST 8</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">&lt;<span class="special">*&gt;*</span> <span class="paren2">(<span class="code">pure <span class="paren3">(<span class="code">curried-function::section + _ _</span>)</span></span>)</span>
+               <span class="paren2">(<span class="code">just 3</span>)</span>
+               nothing</span>)</span>
+NOTHING
+cl-user&gt; <span class="paren1">(<span class="code">&lt;<span class="special">*&gt;*</span> <span class="paren2">(<span class="code">pure <span class="paren3">(<span class="code">curried-function::section + _ _</span>)</span></span>)</span>
+               nothing
+               <span class="paren2">(<span class="code">just 5</span>)</span></span>)</span>
+NOTHING</span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><span class="atom">&lt;$&gt;</span></span>)</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Functor</span> f</span>)</span> <span class="atom">=&gt;</span> <span class="paren1">(<span class="code">a <span class="keyword">-&gt;</span> b</span>)</span> <span class="keyword">-&gt;</span> f a <span class="keyword">-&gt;</span> f b
+<span class="function">f</span> <span class="atom">&lt;$&gt;</span> x <span class="keyword">=</span> fmap f x</span></code></pre>
+
+<p>上記関数は、現行の実装ではマクロとして実装せざるを得ない。
+なぜなら<code>FMAP</code>はマクロであり、マクロは関数より先に展開されるからだ。
+ついでに<code>&lt;*&gt;*</code>の機能も載せてしまおう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> &lt;$&gt;<span class="paren2">(<span class="code"><i><span class="symbol">function</span></i> &amp;rest functors</span>)</span>
+    <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">body</span>)</span>
+              <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp <span class="paren1">(<span class="code">cdr body</span>)</span></span>)</span>
+                `<span class="paren6">(<span class="code">fmap ,<i><span class="symbol">function</span></i> ,<span class="paren1">(<span class="code">car body</span>)</span></span>)</span>
+                `<span class="paren6">(<span class="code">&lt;*&gt; ,<span class="paren1">(<span class="code">rec<span class="paren2">(<span class="code">cdr body</span>)</span></span>)</span>
+                      ,<span class="paren1">(<span class="code">car body</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren3">(<span class="code">rec<span class="paren4">(<span class="code">reverse functors</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code"><span class="atom">++</span></span>)</span> <span class="atom">&lt;$&gt;</span> <span class="variable">Just</span> <span class="string">"johntra"</span> <span class="atom">&lt;*&gt;</span> <span class="variable">Just</span> <span class="string">"volta"</span>
+<span class="variable">Just</span> <span class="string">"johntravolta</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">&lt;$&gt; <span class="paren2">(<span class="code">curried-function::section concatenate 'string _ _</span>)</span>
+              <span class="paren2">(<span class="code">just <span class="string">"johntra"</span></span>)</span>
+              <span class="paren2">(<span class="code">just <span class="string">"volta"</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST <span class="string">"johntravolta"</span></span>)</span></span></code></pre>
+
+<h3>List</h3>
+
+<pre><code><span class="code"><span class="keyword">instance</span> <span class="variable">Applicative</span> <span class="paren1">[<span class="code"></span>]</span> <span class="keyword">where</span>
+&nbsp;   pure x <span class="keyword">=</span> <span class="paren1">[<span class="code"></span>]</span>
+&nbsp;   fs <span class="atom">&lt;*&gt;</span> xs <span class="keyword">=</span> <span class="paren1">[<span class="code">f x <span class="keyword">|</span> f <span class="keyword">&lt;-</span> fs, x <span class="keyword">&lt;-</span> xs</span>]</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="atom">*</span>0</span>)</span>,<span class="paren2">(<span class="code"><span class="atom">+</span>100</span>)</span>,<span class="paren2">(<span class="code"><span class="atom">^</span>2</span>)</span></span>]</span> <span class="atom">&lt;*&gt;</span> <span class="paren1">[<span class="code">1,2,3</span>]</span>
+<span class="paren1">[<span class="code">0,0,0,101,102,103,1,4,9</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="atom">+</span></span>)</span>,<span class="paren2">(<span class="code"><span class="atom">*</span></span>)</span></span>]</span> <span class="atom">&lt;*&gt;</span> <span class="paren1">[<span class="code">1,2</span>]</span> <span class="atom">&lt;*&gt;</span> <span class="paren1">[<span class="code">3,4</span>]</span>
+<span class="paren1">[<span class="code">4,5,5,6,3,4,6,8</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code"><span class="atom">++</span></span>)</span> <span class="atom">&lt;$&gt;</span> <span class="paren1">[<span class="code"><span class="string">"ha"</span>,<span class="string">"heh"</span>,<span class="string">"hmm"</span></span>]</span> <span class="atom">&lt;*&gt;</span> <span class="paren1">[<span class="code"><span class="string">"?"</span>,<span class="string">"!"</span>,<span class="string">"."</span></span>]</span>
+<span class="paren1">[<span class="code"><span class="string">"ha?"</span>,<span class="string">"ha!"</span>,<span class="string">"ha."</span>,<span class="string">"heh?"</span>,<span class="string">"heh!"</span>,<span class="string">"hmm?"</span>,<span class="string">"hmm!"</span>,<span class="string">"hmm."</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code"><span class="atom">*</span></span>)</span> <span class="atom">&lt;$&gt;</span> <span class="paren1">[<span class="code">2,5,10</span>]</span> <span class="atom">&lt;*&gt;</span> <span class="paren1">[<span class="code">8,10,11</span>]</span>
+<span class="paren1">[<span class="code">16,20,22,40,50,55,80,100,110</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> filter <span class="paren1">(<span class="code"><span class="atom">&gt;</span>50</span>)</span> <span class="atom">$</span> <span class="paren1">(<span class="code"><span class="atom">*</span></span>)</span> <span class="atom">&lt;$&gt;</span> <span class="paren1">[<span class="code">2,5,10</span>]</span> <span class="atom">&lt;*&gt;</span> <span class="paren1">[<span class="code">8,10,11</span>]</span>
+<span class="paren1">[<span class="code">55,80,100,110</span>]</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">applicative list</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&lt;*&gt;<span class="paren4">(<span class="code">functor arg</span>)</span>
+     `<span class="paren4">(<span class="code">incf-cl:lc <span class="paren5">(<span class="code">funcall f x</span>)</span>
+                  <span class="paren5">(<span class="code">incf-cl:&lt;- f ,functor</span>)</span>
+                  <span class="paren5">(<span class="code">incf-cl:&lt;- x ,arg</span>)</span></span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">pure<span class="paren4">(<span class="code">x</span>)</span>
+     `<span class="paren4">(<span class="code">list ,x</span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">&lt;*&gt; <span class="paren2">(<span class="code">list <span class="paren3">(<span class="code">curried-function::section * 0 _</span>)</span>
+                    <span class="paren3">(<span class="code">curried-function::section + 100 _</span>)</span>
+                    <span class="paren3">(<span class="code">curried-function::section expt _ 2</span>)</span></span>)</span>
+              '<span class="paren2">(<span class="code">1 2 3</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">0 0 0 101 102 103 1 4 9</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">&lt;$&gt; <span class="paren2">(<span class="code">curried-function::section concatenate 'string _ _</span>)</span>
+              '<span class="paren2">(<span class="code"><span class="string">"ha"</span> <span class="string">"heh"</span> <span class="string">"hmm"</span></span>)</span>
+              '<span class="paren2">(<span class="code"><span class="string">"?"</span> <span class="string">"!"</span> <span class="string">"."</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"ha?"</span> <span class="string">"ha!"</span> <span class="string">"ha."</span> <span class="string">"heh?"</span> <span class="string">"heh!"</span> <span class="string">"heh."</span> <span class="string">"hmm?"</span> <span class="string">"hmm!"</span> <span class="string">"hmm."</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">&lt;$&gt; <span class="paren2">(<span class="code">curried-function::section * _ _</span>)</span>
+              '<span class="paren2">(<span class="code">2 5 10</span>)</span>
+              '<span class="paren2">(<span class="code">8 10 11</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">16 20 22 40 50 55 80 100 110</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">remove-if-not <span class="paren2">(<span class="code">curried-function::section &gt; _ 50</span>)</span>
+                        <span class="paren2">(<span class="code">&lt;$&gt; <span class="paren3">(<span class="code">curried-function::section * _ _</span>)</span>
+                             '<span class="paren3">(<span class="code">2 5 10</span>)</span>
+                             '<span class="paren3">(<span class="code">8 10 11</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">55 80 100 110</span>)</span></span></code></pre>
+
+<h3>IO</h3>
+
+<pre><code><span class="code"><span class="keyword">instance</span> <span class="variable">Applicative</span> <span class="variable">IO</span> <span class="keyword">where</span>
+&nbsp;   pure <span class="keyword">=</span> return
+&nbsp;   a <span class="atom">&lt;*&gt;</span> b <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;       f <span class="keyword">&lt;-</span> a
+&nbsp;       x <span class="keyword">&lt;-</span> b
+&nbsp;       return <span class="paren1">(<span class="code">f x</span>)</span>
+
+<span class="function">myAction</span> <span class="keyword">::</span> <span class="variable">IO</span> <span class="variable">String</span>
+<span class="function">myAction</span> <span class="keyword">=</span> <span class="paren1">(<span class="code"><span class="atom">++</span></span>)</span> <span class="atom">&lt;$&gt;</span> getLine <span class="atom">&lt;*&gt;</span> getLine</span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">applicative io</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&lt;*&gt;<span class="paren4">(<span class="code">functor arg</span>)</span>
+     `<span class="paren4">(<span class="code">action f &lt;- ,functor
+              x &lt;- ,arg
+              <span class="paren5">(<span class="code">.return <span class="paren6">(<span class="code">funcall f x</span>)</span></span>)</span></span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">pure<span class="paren4">(<span class="code">x</span>)</span>
+     `<span class="paren4">(<span class="code">.return ,x</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defaction</span></i> my-action <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">&lt;$&gt; <span class="paren3">(<span class="code">curried-function::section concatenate 'string _ _</span>)</span>
+       <span class="paren3">(<span class="code">get-line</span>)</span>
+       <span class="paren3">(<span class="code">get-line</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Function</h3>
+
+<pre><code><span class="code"><span class="keyword">instance</span> <span class="variable">Applicative</span> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><span class="keyword">-&gt;</span></span>)</span> r</span>)</span> <span class="keyword">where</span>
+&nbsp;   pure x <span class="keyword">=</span> <span class="paren1">(<span class="code"><span class="keyword">\</span>_ <span class="keyword">-&gt;</span> x</span>)</span>
+&nbsp;   f <span class="atom">&lt;*&gt;</span> g <span class="keyword">=</span> <span class="keyword">\</span>x <span class="keyword">-&gt;</span> f x <span class="paren1">(<span class="code">g x</span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code"><span class="atom">+</span></span>)</span> <span class="atom">&lt;$&gt;</span> <span class="paren1">(<span class="code"><span class="atom">+</span>3</span>)</span> <span class="atom">&lt;*&gt;</span> <span class="paren1">(<span class="code"><span class="atom">*</span>100</span>)</span> <span class="atom">$</span> 5
+<span class="function">508</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code"><span class="keyword">\</span>x y z <span class="keyword">-&gt;</span> <span class="paren2">[<span class="code">x,y,z</span>]</span></span>)</span> <span class="atom">&lt;$&gt;</span> <span class="paren1">(<span class="code"><span class="atom">+</span>3</span>)</span> <span class="atom">&lt;*&gt;</span> <span class="paren1">(<span class="code"><span class="atom">*</span>2</span>)</span> <span class="atom">&lt;*&gt;</span> <span class="paren1">(<span class="code"><span class="atom">/</span>2</span>)</span> <span class="atom">$</span> 5
+<span class="paren1">[<span class="code">8<span class="atom">.</span>0,10<span class="atom">.</span>0,2<span class="atom">.</span>5</span>]</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">applicative <i><span class="symbol">function</span></i></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">pure<span class="paren4">(<span class="code">x</span>)</span>
+     `<span class="paren4">(<span class="code">constantly ,x</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">&lt;*&gt;<span class="paren4">(<span class="code">f g</span>)</span>
+     `<span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">x</span>)</span>
+        <span class="paren5">(<span class="code">funcall <span class="paren6">(<span class="code">funcall ,f x</span>)</span> <span class="paren6">(<span class="code">funcall ,g x</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">funcall <span class="paren2">(<span class="code">&lt;$&gt; <span class="paren3">(<span class="code">curried-function::section + _ _</span>)</span>
+                       <span class="paren3">(<span class="code">curried-function::section + _ 3</span>)</span>
+                       <span class="paren3">(<span class="code">curried-function::section * _ 100</span>)</span></span>)</span>
+                  5</span>)</span>
+508
+
+cl-user&gt; <span class="paren1">(<span class="code">funcall <span class="paren2">(<span class="code">&lt;$&gt; <span class="paren3">(<span class="code">curried-function:section list _ _ _</span>)</span>
+                           <span class="paren3">(<span class="code">curried-function:section + _ 3</span>)</span>
+                           <span class="paren3">(<span class="code">curried-function:section * _ 2</span>)</span>
+                           <span class="paren3">(<span class="code">curried-function:section / _ 2</span>)</span></span>)</span>
+                  5</span>)</span>
+<span class="paren1">(<span class="code">8 10 5/2</span>)</span></span></code></pre>
+
+<h3>Zip List</h3>
+
+<p>本節は次章で<code>newtype</code>を実装してから行う。</p>
+
+<h2>11.4</h2>
+
+<pre><code><span class="code"><span class="function">liftA2</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Applicative</span> f</span>)</span> <span class="atom">=&gt;</span> <span class="paren1">(<span class="code">a <span class="keyword">-&gt;</span> b <span class="keyword">-&gt;</span> c</span>)</span> <span class="keyword">-&gt;</span> f a <span class="keyword">-&gt;</span> f b <span class="keyword">-&gt;</span> f c
+<span class="function">liftA2</span> f a b <span class="keyword">=</span> f <span class="atom">&lt;$&gt;</span> a <span class="atom">&lt;*&gt;</span> b
+
+<span class="function">ghci</span><span class="atom">&gt;</span> liftA2 <span class="paren1">(<span class="code"><span class="variable">:</span></span>)</span> <span class="paren1">(<span class="code">just 3</span>)</span> <span class="paren1">(<span class="code"><span class="variable">Just</span> <span class="paren2">[<span class="code">4</span>]</span></span>)</span>
+<span class="variable">Just</span> <span class="paren1">[<span class="code">3,4</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code"><span class="variable">:</span></span>)</span> <span class="atom">&lt;$&gt;</span> <span class="variable">Just</span> 3 <span class="atom">&lt;*&gt;</span> <span class="variable">Just</span> <span class="paren1">[<span class="code">4</span>]</span>
+<span class="variable">Just</span> <span class="paren1">[<span class="code">3,4</span>]</span></span></code></pre>
+
+<p><code>LIFT</code>もまたマクロとして実装せざるを得ない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> lift<span class="paren2">(<span class="code"><i><span class="symbol">function</span></i> &amp;rest functor*</span>)</span>
+    `<span class="paren2">(<span class="code">&lt;$&gt; ,<i><span class="symbol">function</span></i> ,@functor*</span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">lift <span class="paren2">(<span class="code">curried-function:section cons _ _</span>)</span> <span class="paren2">(<span class="code">just 3</span>)</span><span class="paren2">(<span class="code">just '<span class="paren3">(<span class="code">4</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">just <span class="paren2">(<span class="code">3 4</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">&lt;$&gt; <span class="paren2">(<span class="code">curried-function:section cons _ _</span>)</span>
+              <span class="paren2">(<span class="code">just 3</span>)</span>
+              <span class="paren2">(<span class="code">just '<span class="paren3">(<span class="code">4</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">just <span class="paren2">(<span class="code">3 4</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">sequenceA</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">Applicative</span> f</span>)</span> <span class="atom">=&gt;</span> <span class="paren1">[<span class="code">f a</span>]</span> <span class="keyword">-&gt;</span> f <span class="paren1">[<span class="code">a</span>]</span>
+<span class="function">sequenceA</span> <span class="paren1">[<span class="code"></span>]</span> <span class="keyword">=</span> pure <span class="paren1">[<span class="code"></span>]</span>
+<span class="function">sequenceA</span> <span class="paren1">(<span class="code">x<span class="variable">:</span>xs</span>)</span> <span class="keyword">=</span> <span class="paren1">(<span class="code"><span class="variable">:</span></span>)</span> <span class="atom">&lt;$&gt;</span> x <span class="atom">&lt;*&gt;</span> sequenceA xs
+
+<span class="function">ghci</span><span class="atom">&gt;</span> sequenceA <span class="paren1">[<span class="code"><span class="variable">Just</span> 3, <span class="variable">Just</span> 2, <span class="variable">Just</span> 1</span>]</span>
+<span class="variable">Just</span> <span class="paren1">[<span class="code">3,2,1</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> sequenceA <span class="paren1">[<span class="code"><span class="variable">Just</span> 3, <span class="variable">Nothing,</span> <span class="variable">Just</span> 1</span>]</span>
+<span class="variable">Nothing</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> sequenceA <span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="atom">+</span>3</span>)</span>,<span class="paren2">(<span class="code"><span class="atom">+</span>2</span>)</span>,<span class="paren2">(<span class="code"><span class="atom">+</span>1</span>)</span></span>]</span> 3
+<span class="paren1">[<span class="code">6,5,4</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> sequenceA <span class="paren1">[<span class="code"><span class="paren2">[<span class="code">1,2,3</span>]</span>,<span class="paren2">[<span class="code">4,5,6</span>]</span></span>]</span>
+<span class="paren1">[<span class="code"><span class="paren2">[<span class="code">1,4</span>]</span>,<span class="paren2">[<span class="code">1,5</span>]</span>,<span class="paren2">[<span class="code">1,6</span>]</span>,<span class="paren2">[<span class="code">2,4</span>]</span>,<span class="paren2">[<span class="code">2,5</span>]</span>,<span class="paren2">[<span class="code">2,6</span>]</span>,<span class="paren2">[<span class="code">3,4</span>]</span>,<span class="paren2">[<span class="code">3,5</span>]</span>,<span class="paren2">[<span class="code">3,6</span>]</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> sequenceA <span class="paren1">[<span class="code"><span class="paren2">[<span class="code">1,2,3</span>]</span>,<span class="paren2">[<span class="code">4,5,6</span>]</span>,<span class="paren2">[<span class="code">3,4,4</span>]</span>,<span class="paren2">[<span class="code"></span>]</span></span>]</span>
+<span class="paren1">[<span class="code"></span>]</span></span></code></pre>
+
+<p><code>sequenceA</code>もまたマクロで実装せねばならない。
+本実装では引数はコンパイル時に決定していなければならない。
+このような制限はHaskellには存在しないはずだが、本稿では原著の例題さえ再現できればよしとするスタンスのため、ここでは目を瞑ることとする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> sequence-a<span class="paren2">(<span class="code">applicative*</span>)</span>
+    <span class="paren2">(<span class="code">trivia:ematch applicative*
+      <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">null</span>)</span>`<span class="paren4">(<span class="code">pure nil</span>)</span></span>)</span>
+      <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">cons x xs</span>)</span>`<span class="paren4">(<span class="code">&lt;$&gt; <span class="paren5">(<span class="code">curried-function:section cons _ _</span>)</span>
+                        ,x
+                        <span class="paren5">(<span class="code">sequence-a ,xs</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">sequence-a <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">just 3</span>)</span><span class="paren3">(<span class="code">just 2</span>)</span><span class="paren3">(<span class="code">just 1</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">just <span class="paren2">(<span class="code">3 2 1</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">sequence-a <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">just 3</span>)</span>nothing<span class="paren3">(<span class="code">just 1</span>)</span></span>)</span></span>)</span>
+NOTHING
+cl-user&gt; <span class="paren1">(<span class="code">funcall <span class="paren2">(<span class="code">sequence-a <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">curried-function:section + _ 3</span>)</span>
+                               <span class="paren4">(<span class="code">curried-function:section + _ 2</span>)</span>
+                               <span class="paren4">(<span class="code">curried-function:section + _ 1</span>)</span></span>)</span></span>)</span>
+                  3</span>)</span>
+<span class="paren1">(<span class="code">6 5 4</span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">sequence-a <span class="paren2">(<span class="code">'<span class="paren3">(<span class="code">1 2 3</span>)</span>'<span class="paren3">(<span class="code">4 5 6</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">1 4</span>)</span><span class="paren2">(<span class="code">1 5</span>)</span><span class="paren2">(<span class="code">1 6</span>)</span><span class="paren2">(<span class="code">2 4</span>)</span><span class="paren2">(<span class="code">2 5</span>)</span><span class="paren2">(<span class="code">2 6</span>)</span><span class="paren2">(<span class="code">3 4</span>)</span><span class="paren2">(<span class="code">3 5</span>)</span><span class="paren2">(<span class="code">3 6</span>)</span></span>)</span>
+cl-user&gt; <span class="paren1">(<span class="code">sequence-a <span class="paren2">(<span class="code">'<span class="paren3">(<span class="code">1 2 3</span>)</span>'<span class="paren3">(<span class="code">4 5 6</span>)</span>'<span class="paren3">(<span class="code">3 4 4</span>)</span>nil</span>)</span></span>)</span>
+NIL</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> sequenceA <span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="atom">&gt;</span>4</span>)</span>,<span class="paren2">(<span class="code"><span class="atom">&lt;</span>10</span>)</span>,odd</span>]</span> 7
+<span class="paren1">[<span class="code"><span class="variable">True,True,True</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> and <span class="atom">$</span> sequenceA <span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="atom">&gt;</span>4</span>)</span>,<span class="paren2">(<span class="code"><span class="atom">&lt;</span>10</span>)</span>,odd</span>]</span> 7
+<span class="variable">True</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">funcall <span class="paren2">(<span class="code">sequence-a <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">curried-function:section &gt; _ 4</span>)</span>
+                               <span class="paren4">(<span class="code">curried-function:section &lt; _ 10</span>)</span>
+                              #'oddp</span>)</span></span>)</span>
+                  7</span>)</span>
+<span class="paren1">(<span class="code">T T T</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">every #'identity
+                <span class="paren2">(<span class="code">funcall <span class="paren3">(<span class="code">sequence-a<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">curried-function:section &gt; _ 4</span>)</span>
+                                     <span class="paren5">(<span class="code">curried-function:section &lt; _ 10</span>)</span>
+                                     #'oddp</span>)</span></span>)</span>
+                         7</span>)</span></span>)</span>
+=&gt; T</span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> sequenceA <span class="paren1">[<span class="code">getLine,getLine,getLine</span>]</span>
+<span class="function">heyh</span>
+<span class="function">ho</span>
+<span class="function">woo</span>
+<span class="paren1">[<span class="code"><span class="string">"heyh"</span>,<span class="string">"ho"</span>,<span class="string">"woo"</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">funcall <span class="paren2">(<span class="code">sequence-a <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">get-line</span>)</span><span class="paren4">(<span class="code">get-line</span>)</span><span class="paren4">(<span class="code">get-line</span>)</span></span>)</span></span>)</span></span>)</span>
+heyh
+ho
+woo
+<span class="paren1">(<span class="code"><span class="string">"heyh"</span> <span class="string">"ho"</span> <span class="string">"woo"</span></span>)</span></span></code></pre>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
