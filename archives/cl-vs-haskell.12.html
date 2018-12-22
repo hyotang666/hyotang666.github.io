@@ -1,0 +1,583 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>cl-vs-haskell.12
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>Common Lisp vs Haskell, Chapter 12</h1>
+
+<h2>Meta note</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="cl-vs-haskell.11.html" >前章</a>を読了済みの者。</p>
+
+<h2>Introduction</h2>
+
+<p>本稿は「すごいH本」の内容をCommon Lispに翻訳しながらCLerがHaskellを学ぶその第12章である。</p>
+
+<p>本章では<code>newtype</code>に相当する機能を実装し、学んでいく。
+また、<code>monoid</code>も実装し、学んでいく。</p>
+
+<p>初心者CLerにとっては、中程で紹介されるCommon Lisp組み込み関数<code>STRING</code>のファミリーが参考になろうかと思う。</p>
+
+<p>中級以上のCLerにとっては、得られるものが何もなかろうと思う。
+ちょっと癖のあるハッキーな<code>THE</code>の使い方が面白くは見えるかもしれない。</p>
+
+<p>長文ではあるが、大半はHaskellコードをCommon Lispコードに粛々と移植していくだけの内容なので、中身は大変薄っぺらい。
+コーヒーを片手に、ざっと流し読みしていただけたならそれで充分である。</p>
+
+<h1>12</h1>
+
+<h2>NEWTYPE</h2>
+
+<p>Haskellに於ける<code>newtype</code>キーワードはCommon Lispで作ることは不可能である。
+だが、ここで欲しいのはインスタンスをディスパッチする際のキーとしての新しい名前である。
+<code>DEFTYPE</code>と<code>THE</code>を使うことで、近しいことはできよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">define-newtype</span></i><span class="paren2">(<span class="code">name lambda-list &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">PROGN</span></i> <span class="paren3">(<span class="code">SETF <span class="paren4">(<span class="code">GET ',name 'newtype</span>)</span> T</span>)</span>
+          <span class="paren3">(<span class="code"><i><span class="symbol">DEFTYPE</span></i> ,name ,lambda-list ,@body</span>)</span>
+          <span class="paren3">(<span class="code"><i><span class="symbol">DEFMACRO</span></i>,name<span class="paren4">(<span class="code">arg</span>)</span>
+            `<span class="paren4">(<span class="code"><i><span class="symbol">THE</span></i> ,',name ,arg</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> denew<span class="paren2">(<span class="code">form</span>)</span><span class="paren2">(<span class="code">third form</span>)</span></span>)</span></span></code></pre>
+
+<p>これにより前章で後回しにしていた宿題を片付けることが出来る。</p>
+
+<pre><code><span class="code"><span class="keyword">instance</span> <span class="variable">Applicative</span> <span class="variable">ZipList</span> <span class="keyword">where</span>
+&nbsp;   pure x <span class="keyword">=</span> <span class="variable">ZipList</span> <span class="paren1">(<span class="code">repeat x</span>)</span>
+&nbsp;   <span class="variable">ZipList</span> fs <span class="atom">&lt;*&gt;</span> <span class="variable">ZipList</span> xs <span class="keyword">=</span> <span class="variable">ZipList</span> <span class="paren1">(<span class="code">zipWith <span class="paren2">(<span class="code"><span class="keyword">\</span>f x <span class="keyword">-&gt;</span> f x</span>)</span> fs xs</span></span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-newtype</span></i> zip-list<span class="paren2">(<span class="code">&amp;optional a</span>)</span>
+  <span class="paren2">(<span class="code">declare<span class="paren3">(<span class="code">ignore a</span>)</span></span>)</span>
+  'list</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">functor zip-list</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">fmap<span class="paren4">(<span class="code">f zl</span>)</span>
+     `<span class="paren4">(<span class="code">zip-list <span class="paren5">(<span class="code">fmap ,f ,<span class="paren6">(<span class="code">denew zl</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">applicative zip-list</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">pure<span class="paren4">(<span class="code">x</span>)</span>
+     `<span class="paren4">(<span class="code">series:series ,x</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">&lt;*&gt;<span class="paren4">(<span class="code">fs xs</span>)</span>
+     `<span class="paren4">(<span class="code">zip-list <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">fn ,fs</span>)</span></span>)</span>
+                  <span class="paren6">(<span class="code">series:collect<span class="paren1">(<span class="code">series:map-fn t #'funcall <span class="paren2">(<span class="code">series:scan fn</span>)</span>
+                                                <span class="paren2">(<span class="code">series:scan ,xs</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> getZipList <span class="atom">$</span> <span class="paren1">(<span class="code"><span class="atom">+</span></span>)</span> <span class="atom">&lt;$&gt;</span> <span class="variable">ZipList</span> <span class="paren1">[<span class="code">1,2,3</span>]</span> <span class="atom">&lt;*&gt;</span> <span class="variable">ZipList</span> <span class="paren1">[<span class="code">100,100,100</span>]</span>
+<span class="paren1">[<span class="code">101,102,103</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getZipList <span class="atom">$</span> <span class="paren1">(<span class="code"><span class="atom">+</span></span>)</span> <span class="atom">&lt;$&gt;</span> <span class="variable">ZipList</span> <span class="paren1">[<span class="code">1,2,3</span>]</span> <span class="atom">&lt;*&gt;</span> <span class="variable">ZipList</span> <span class="paren1">[<span class="code">100,100<span class="keyword">..</span></span>]</span>
+<span class="paren1">[<span class="code">101,102,103</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getZipList <span class="atom">$</span> max <span class="atom">&lt;$&gt;</span> <span class="variable">ZipList</span> <span class="paren1">[<span class="code">1,2,3,4,5,3</span>]</span> <span class="atom">&lt;*&gt;</span> <span class="variable">ZipList</span> <span class="paren1">[<span class="code">5,3,1,2</span>]</span>
+<span class="paren1">[<span class="code">5,3,3,4</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getZipList <span class="atom">$</span> <span class="paren1">(<span class="code">,,</span>)</span> <span class="atom">&lt;$&gt;</span> <span class="variable">ZipList</span> <span class="string">"dog"</span> <span class="atom">&lt;*&gt;</span> <span class="variable">ZipList</span> <span class="string">"cat"</span> <span class="atom">&lt;*&gt;</span> <span class="variable">ZipList</span> <span class="string">"rat"</span>
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="character">'d'</span>,<span class="character">'c'</span>,<span class="character">'r'</span></span>)</span>,<span class="paren2">(<span class="code"><span class="character">'o'</span>,<span class="character">'a'</span>,<span class="character">'a'</span></span>)</span>,<span class="paren2">(<span class="code"><span class="character">'g'</span>,<span class="character">'t'</span>,<span class="character">'t'</span></span>)</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">&lt;$&gt; <span class="paren2">(<span class="code">curried-function:section + _ _</span>)</span>
+              <span class="paren2">(<span class="code">zip-list '<span class="paren3">(<span class="code">1 2 3</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code">zip-list '<span class="paren3">(<span class="code">100 100 100</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">101 102 103</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">&lt;$&gt; <span class="paren2">(<span class="code">curried-function:section max _ _</span>)</span>
+              <span class="paren2">(<span class="code">zip-list '<span class="paren3">(<span class="code">1 2 3 4 5 3</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code">zip-list '<span class="paren3">(<span class="code">5 3 1 2</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">5 3 3 4</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">&lt;$&gt; <span class="paren2">(<span class="code">curried-function:section list _ _ _</span>)</span>
+              <span class="paren2">(<span class="code">zip-list <span class="paren3">(<span class="code">coerce <span class="string">"dog"</span> 'list</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code">zip-list <span class="paren3">(<span class="code">coerce <span class="string">"cat"</span> 'list</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code">zip-list <span class="paren3">(<span class="code">coerce <span class="string">"rat"</span> 'list</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><span class="character">#\d</span> <span class="character">#\c</span> <span class="character">#\r</span></span>)</span><span class="paren2">(<span class="code"><span class="character">#\o</span> <span class="character">#\a</span> <span class="character">#\a</span></span>)</span><span class="paren2">(<span class="code"><span class="character">#\g</span> <span class="character">#\t</span> <span class="character">#\t</span></span>)</span></span>)</span></span></code></pre>
+
+<p>我々の実装に於いて<code>NEWTYPE</code>は<code>THE</code>のフォームに展開される。
+よって<code>getZipList</code>で中身を取り出すことは通常必要ない。
+必要になるのはマクロ展開時に<code>THE</code>の型情報を引っぺがして下層型としてインスタンスのディスパッチを行いたい場合のみだ。
+その場合、定義された型に合わせてあれこれ名前を用意するのは面倒なので<code>DENEW</code>というヘルパーが定義されている。
+これは<code>THE</code>のフォームから本体を取り出すだけのものだ。</p>
+
+<p>なお、現行、無限リストへの対応はできていない。
+しかしながら、この点は不可能ではない。
+ただ、<code>SERIES</code>が警告を大量に出すのと、効率的な<code>LOOP</code>にならないのと、それを解決するには<code>SERIES</code>のソースコードをがっつり解析しなければならないことが面倒なだけで、警告と効率を無視して良いのなら簡単に対応はできる。</p>
+
+<p>さて、宿題は一通り終えたので本編に進もう。</p>
+
+<h2>12.1</h2>
+
+<h3>Wrapping type with newtype.</h3>
+
+<pre><code><span class="code"><span class="keyword">newtype</span> <span class="variable">CharList</span> <span class="keyword">=</span> <span class="variable">CharList</span> <span class="paren1">{<span class="code"> getCharList <span class="keyword">::</span> <span class="paren2">[<span class="code"><span class="variable">Char</span></span>]</span> </span>}</span> <span class="keyword">deriving</span> <span class="paren1">(<span class="code"><span class="variable">Eq,</span> <span class="variable">Show</span></span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">CharList</span> <span class="string">"this will be shown!"</span>
+<span class="variable">CharList</span> <span class="paren1">{<span class="code"> getCharList <span class="keyword">=</span> <span class="string">"this will be shown!"</span></span>}</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">CharList</span> <span class="string">"benny"</span> <span class="atom">==</span> <span class="variable">CharList</span> <span class="string">"benny"</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">CharList</span> <span class="string">"benny"</span> <span class="atom">==</span> <span class="variable">CharList</span> <span class="string">"oisters"</span>
+<span class="variable">False</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-newtype</span></i> char-list<span class="paren2">(<span class="code">&amp;optional char</span>)</span>
+  <span class="paren2">(<span class="code">declare<span class="paren3">(<span class="code">ignore char</span>)</span></span>)</span>
+  'list</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">char-list <span class="paren2">(<span class="code">coerce <span class="string">"this"</span> 'list</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="character">#\t</span> <span class="character">#\h</span> <span class="character">#\i</span> <span class="character">#\s</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">equal <span class="paren2">(<span class="code">char-list <span class="paren3">(<span class="code">coerce <span class="string">"bunny"</span> 'list</span>)</span></span>)</span>
+                <span class="paren2">(<span class="code">char-list <span class="paren3">(<span class="code">coerce <span class="string">"bunny"</span> 'list</span>)</span></span>)</span></span>)</span>
+T
+
+cl-user&gt; <span class="paren1">(<span class="code">equal <span class="paren2">(<span class="code">char-list <span class="paren3">(<span class="code">coerce <span class="string">"benny"</span> 'list</span>)</span></span>)</span>
+                <span class="paren2">(<span class="code">char-list <span class="paren3">(<span class="code">coerce <span class="string">"oister"</span> 'list</span>)</span></span>)</span></span>)</span>
+NIL</span></code></pre>
+
+<p>Common Lispに於いて<code>THE</code>フォームは外側のフォームに型を伝えるためだけのものであるので、一度評価されてしまうと、それ以上型の伝播は行えなくなってしまう点要注意。</p>
+
+<h3>Making instance of type class with newtype.</h3>
+
+<pre><code><span class="code"><span class="keyword">newtype</span> <span class="variable">Pair</span> b a <span class="keyword">=</span> <span class="variable">Pair</span> <span class="paren1">{<span class="code"> getPair <span class="keyword">::</span> <span class="paren2">(<span class="code">a, b</span>)</span> </span>}</span>
+
+<span class="keyword">instance</span> <span class="variable">Functor</span> <span class="paren1">(<span class="code"><span class="variable">Pair</span> c</span>)</span> <span class="keyword">where</span>
+&nbsp;   fmap f <span class="paren1">(<span class="code">pair <span class="paren2">(<span class="code">x, y</span>)</span></span>)</span> <span class="keyword">=</span> <span class="variable">Pair</span> <span class="paren1">(<span class="code">f x, y</span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> getPair <span class="atom">$</span> fmap <span class="paren1">(<span class="code"><span class="atom">*</span>100</span>)</span> <span class="paren1">(<span class="code"><span class="variable">Pair</span> <span class="paren2">(<span class="code">2, 3</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">200,3</span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getPair <span class="atom">$</span> fmap reverse <span class="paren1">(<span class="code"><span class="variable">Pair</span> <span class="paren2">(<span class="code"><span class="string">"london calling"</span>, 3</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"gnillac nodnol"</span>, 3</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-newtype</span></i> pair<span class="paren2">(<span class="code">&amp;optional b a</span>)</span>
+  `<span class="paren2">(<span class="code">cons ,a ,b</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">functor pair</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">fmap<span class="paren4">(<span class="code">f pair</span>)</span>
+     `<span class="paren4">(<span class="code">trivia:match ,pair
+        <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">cons x y</span>)</span><span class="paren6">(<span class="code">pair <span class="paren1">(<span class="code">cons <span class="paren2">(<span class="code">funcall ,f x</span>)</span>y</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+cluser&gt; <span class="paren1">(<span class="code">fmap <span class="paren2">(<span class="code">curried-function:section * _ 100</span>)</span>
+              <span class="paren2">(<span class="code">pair '<span class="paren3">(<span class="code">2 . 3</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">200 . 3</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">fmap #'reverse <span class="paren2">(<span class="code">pair '<span class="paren3">(<span class="code"><span class="string">"london calling"</span> . 3</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"gnillac nodnol"</span> . 3</span>)</span></span></code></pre>
+
+<p>パターンマッチをマクロ展開時ではなく実行時に行っている点要注意。
+この点、かなり場当たり的であり、非常に不細工である。
+下層の実装がどうなっているのか、またパターンマッチを展開時/実行時いずれに行うかを明示せねばならない点、非常によろしくない。
+Haskellの美しさが際立つ点である。</p>
+
+<h2>12.2</h2>
+
+<h3>Monoid</h3>
+
+<pre><code><span class="code"><span class="keyword">class</span> monoid m <span class="keyword">where</span>
+&nbsp;   mempty <span class="keyword">::</span> m
+&nbsp;   mappend <span class="keyword">::</span> m <span class="keyword">-&gt;</span> m <span class="keyword">-&gt;</span> m
+&nbsp;   mconcat <span class="keyword">::</span> <span class="paren1">[<span class="code">m</span>]</span> <span class="keyword">-&gt;</span> m
+&nbsp;   mconcat <span class="keyword">=</span> foldr mappend mempty</span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-type-class</span></i><span class="paren2">(<span class="code">monoid m</span>)</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">mempty<span class="paren4">(<span class="code"></span>)</span>m</span>)</span>
+   <span class="paren3">(<span class="code">mappend<span class="paren4">(<span class="code">m m</span>)</span>m</span>)</span>
+   <span class="paren3">(<span class="code">mconcat<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">list m</span>)</span></span>)</span>m</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:default</span> mconcat<span class="paren3">(<span class="code">ms</span>)</span>
+    `<span class="paren3">(<span class="code">reduce <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">a m</span>)</span><span class="paren5">(<span class="code">mappend a m</span>)</span></span>)</span>
+             ,ms
+             <span class="keyword">:from-end</span> t
+             <span class="keyword">:initial-value</span> <span class="paren4">(<span class="code">mempty</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>我々の実装に於いて、インスタンスはマクロとして定義されているので、高階関数に渡すにはラムダで包まねばならない。
+これもまた、非常に不細工な点である。
+Haskellの美しさが際立つ。</p>
+
+<h2>12.3</h2>
+
+<h3>List as monoid.</h3>
+
+<pre><code><span class="code"><span class="keyword">instance</span> <span class="variable">Monoid</span> <span class="paren1">[<span class="code">a</span>]</span> <span class="keyword">where</span>
+&nbsp;   mempty <span class="keyword">=</span> <span class="paren1">[<span class="code"></span>]</span>
+&nbsp;   mappend <span class="keyword">=</span> <span class="paren1">(<span class="code"><span class="atom">++</span></span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">1,2,3</span>]</span> <span class="atom">`mappend`</span> <span class="paren1">[<span class="code">4,5,6</span>]</span>
+<span class="paren1">[<span class="code">1,2,3,4,5,6</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code"><span class="string">"one"</span> <span class="atom">`mappend`</span> <span class="string">"two"</span></span>)</span> <span class="atom">`mappend`</span> <span class="string">"three"</span>
+<span class="string">"onetwothree"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="string">"one"</span> <span class="atom">`mappend`</span> <span class="paren1">(<span class="code"><span class="string">"two"</span> <span class="atom">`mappend`</span> <span class="string">"three"</span></span>)</span>
+<span class="string">"onetwothree"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="string">"one"</span> <span class="atom">`mappend`</span> <span class="string">"two"</span> <span class="atom">`mappend`</span> <span class="string">"three"</span>
+<span class="string">"onetwothree"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="string">"pang"</span> <span class="atom">`mappend`</span> mempty
+<span class="string">"pang"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> mconcat <span class="paren1">[<span class="code"><span class="paren2">[<span class="code">1,2</span>]</span>,<span class="paren2">[<span class="code">3,6</span>]</span>,<span class="paren2">[<span class="code">9</span>]</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">monoid list</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">mempty<span class="paren4">(<span class="code"></span>)</span>nil</span>)</span>
+   <span class="paren3">(<span class="code">mappend<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code">funcall <span class="paren5">(<span class="code">curried-function:section append _ _</span>)</span>
+                     ,a
+                     ,b</span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend '<span class="paren2">(<span class="code">1 2 3</span>)</span>'<span class="paren2">(<span class="code">4 5 6</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">1 2 3 4 5 6</span>)</span></span></code></pre>
+
+<p>Common Lispに於いて<code>LIST</code>と<code>STRING</code>は別々な型なので、<code>STRING</code>用のインスタンスを別途定義せねばならない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">monoid string</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">mempty<span class="paren4">(<span class="code"></span>)</span><span class="string">""</span></span>)</span>
+   <span class="paren3">(<span class="code">mappend<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code">funcall <span class="paren5">(<span class="code">curried-function:section concatenate 'string _ _</span>)</span>
+                     ,a ,b</span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="string">"one"</span> <span class="paren2">(<span class="code">mappend <span class="string">"two"</span> <span class="string">"three"</span></span>)</span></span>)</span>
+"onetwothree"
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">mappend <span class="string">"one"</span> <span class="string">"two"</span></span>)</span>
+                  <span class="string">"three"</span></span>)</span>
+"onetwothree"</span></code></pre>
+
+<p>Common Lispに於いて、演算子を中置にする機能は外部ライブラリを使わない限り難しいが、代わりと言ってはなんだが前置特有の可変長引数なら簡単に導入できる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> mappend* <span class="paren2">(<span class="code">&amp;body form*</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">form*</span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp<span class="paren1">(<span class="code">cdr form*</span>)</span></span>)</span>
+              <span class="paren6">(<span class="code">car form*</span>)</span>
+              `<span class="paren6">(<span class="code">mappend ,<span class="paren1">(<span class="code">car form*</span>)</span>
+                        ,<span class="paren1">(<span class="code">rec <span class="paren2">(<span class="code">cdr form*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">rec form*</span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend* <span class="string">"one"</span> <span class="string">"two"</span> <span class="string">"three"</span></span>)</span>
+"onetwothree"
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="string">"pang"</span> <span class="paren2">(<span class="code">mempty</span>)</span></span>)</span>
+"pang"
+
+cl-user&gt; <span class="paren1">(<span class="code">mconcat '<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">1 2</span>)</span><span class="paren3">(<span class="code">3 6</span>)</span><span class="paren3">(<span class="code">9</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">1 2 3 6 9</span>)</span></span></code></pre>
+
+<h3>Product</h3>
+
+<pre><code><span class="code"><span class="keyword">newtype</span> <span class="variable">Product</span> a <span class="keyword">=</span> <span class="variable">Product</span> <span class="paren1">{<span class="code"> getProduct <span class="keyword">::</span> a </span>}</span>
+&nbsp;   <span class="keyword">deriving</span> <span class="paren1">(<span class="code"><span class="variable">Eq,</span> <span class="variable">Ord,</span> <span class="variable">Read,</span> <span class="variable">Show,</span> <span class="variable">Bounded</span></span>)</span>
+
+<span class="keyword">instance</span> <span class="variable">Num</span> a <span class="atom">=&gt;</span> <span class="variable">Monoid</span> <span class="paren1">(<span class="code"><span class="variable">Product</span> a</span>)</span> <span class="keyword">where</span>
+&nbsp;   mempty <span class="keyword">=</span> <span class="variable">Product</span> 1
+&nbsp;   <span class="variable">Product</span> x <span class="atom">`mappend`</span> <span class="variable">Product</span> y <span class="keyword">=</span> <span class="variable">Product</span> <span class="paren1">(<span class="code">x <span class="atom">*</span> y</span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> getProduct <span class="atom">$</span> <span class="variable">Product</span> 3 <span class="atom">`mappend`</span> <span class="variable">Product</span> 9
+<span class="function">27</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getProduct <span class="atom">$</span> <span class="variable">Product</span> 3 <span class="atom">`mappend`</span> mempty
+<span class="function">3</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getProduct <span class="atom">$</span> <span class="variable">Product</span> 3 <span class="atom">`mappend`</span> <span class="variable">Product</span> 4 <span class="atom">`mappend`</span> <span class="variable">Product</span> 2
+<span class="function">24</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getProduct <span class="atom">.</span> mconcat <span class="atom">.</span> map <span class="variable">Product</span> <span class="atom">$</span> <span class="paren1">[<span class="code">3,4,2</span>]</span>
+<span class="function">24</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-newtype</span></i> product<span class="paren2">(<span class="code"></span>)</span>
+   'integer</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">monoid product</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">mempty<span class="paren4">(<span class="code"></span>)</span>`<span class="paren4">(<span class="code">product 1</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">mappend<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code">product <span class="paren5">(<span class="code">* ,a ,b</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">product 3</span>)</span><span class="paren2">(<span class="code">product 9</span>)</span></span>)</span>
+27
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">product 3</span>)</span><span class="paren2">(<span class="code">mempty</span>)</span></span>)</span>
+3
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">product 3</span>)</span>
+                  <span class="paren2">(<span class="code">mappend <span class="paren3">(<span class="code">product 4</span>)</span>
+                                 <span class="paren3">(<span class="code">product 2</span>)</span></span>)</span></span>)</span>
+24
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend* <span class="paren2">(<span class="code">product 3</span>)</span> <span class="paren2">(<span class="code">product 4</span>)</span> <span class="paren2">(<span class="code">product 2</span>)</span></span>)</span>
+24
+
+cl-user&gt; <span class="paren1">(<span class="code">mconcat<span class="paren2">(<span class="code"><i><span class="symbol">the</span></i><span class="paren3">(<span class="code">list product</span>)</span>'<span class="paren3">(<span class="code">3 4 2</span>)</span></span>)</span></span>)</span>
+24</span></code></pre>
+
+<p>Haskellに於いてはリストの各要素に<code>Product</code>を<code>map</code>して型変換をした挙句<code>mconcat</code>に渡しているのに対し、我々の実装では単に<code>THE</code>を通して<code>MCONCAT</code>に型を伝えているだけな点要注意。</p>
+
+<h3>Sum</h3>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> getSum <span class="atom">$</span> <span class="variable">Sum</span> 2 <span class="atom">`mappend`</span> <span class="variable">Sum</span> 9
+<span class="function">11</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getSum <span class="atom">$</span> mempty <span class="atom">`mappend`</span> <span class="variable">Sum</span> 3
+<span class="function">3</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getSum <span class="atom">.</span> mconcat map <span class="variable">Sum</span> <span class="atom">$</span> <span class="paren1">[<span class="code">1,2,3</span>]</span>
+<span class="function">6</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-newtype</span></i> sum<span class="paren2">(<span class="code"></span>)</span> 'integer</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">monoid sum</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">mempty<span class="paren4">(<span class="code"></span>)</span>`<span class="paren4">(<span class="code">sum 0</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">mappend<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code">sum <span class="paren5">(<span class="code">+ ,a ,b</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">sum 2</span>)</span><span class="paren2">(<span class="code">sum 9</span>)</span></span>)</span>
+11
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">mempty</span>)</span><span class="paren2">(<span class="code">sum 3</span>)</span></span>)</span>
+3
+
+cl-user&gt; <span class="paren1">(<span class="code">mconcat <span class="paren2">(<span class="code"><i><span class="symbol">the</span></i> <span class="paren3">(<span class="code">list sum</span>)</span>'<span class="paren3">(<span class="code">1 2 3</span>)</span></span>)</span></span>)</span>
+6</span></code></pre>
+
+<h3>Any</h3>
+
+<pre><code><span class="code"><span class="keyword">newtype</span> <span class="variable">Any</span> <span class="keyword">=</span> <span class="variable">Any</span> <span class="paren1">{<span class="code"> getAny <span class="keyword">::</span> <span class="variable">Bool</span> </span>}</span>
+&nbsp;   <span class="keyword">deriving</span> <span class="paren1">(<span class="code"><span class="variable">Eq,</span> <span class="variable">Ord,</span> <span class="variable">Read,</span> <span class="variable">Show,</span> <span class="variable">Bounded</span></span>)</span>
+
+<span class="keyword">instance</span> <span class="variable">Monoid</span> <span class="variable">Any</span> <span class="keyword">where</span>
+&nbsp;   mempty <span class="keyword">=</span> <span class="variable">Any</span> <span class="variable">False</span>
+&nbsp;   <span class="variable">Any</span> x <span class="atom">`mappend`</span> <span class="variable">Any</span> y <span class="keyword">=</span> <span class="variable">Any</span> <span class="paren1">(<span class="code">x <span class="atom">||</span> y</span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> getAny <span class="atom">$</span> <span class="variable">Any</span> <span class="variable">True</span> <span class="atom">`mappend`</span> <span class="variable">Any</span> <span class="variable">False</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getAny <span class="atom">$</span> mempty <span class="atom">`mappend`</span> <span class="variable">Any</span> <span class="variable">True</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getAny <span class="atom">.</span> mconcat <span class="atom">.</span> map <span class="variable">Any</span> <span class="atom">$</span> <span class="paren1">[<span class="code"><span class="variable">False,False,False,True</span></span>]</span>
+<span class="variable">Trhe</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getAny <span class="atom">$</span> mempty <span class="atom">`mappend`</span> mempty
+<span class="variable">False</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-newtype</span></i> any<span class="paren2">(<span class="code"></span>)</span> 'boolean</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">monoid any</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">mempty<span class="paren4">(<span class="code"></span>)</span>`<span class="paren4">(<span class="code">any nil</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">mappend<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code">or ,a ,b</span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">any t</span>)</span><span class="paren2">(<span class="code">any nil</span>)</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">mempty</span>)</span><span class="paren2">(<span class="code">any t</span>)</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">mconcat <span class="paren2">(<span class="code"><i><span class="symbol">the</span></i> <span class="paren3">(<span class="code">list any</span>)</span> '<span class="paren3">(<span class="code">nil nil nil t</span>)</span></span>)</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code"><i><span class="symbol">the</span></i> any <span class="paren3">(<span class="code">mempty</span>)</span></span>)</span><span class="paren2">(<span class="code">mempty</span>)</span></span>)</span>
+NIL</span></code></pre>
+
+<p>最後の例に見られるように、我々の実装では<code>getAny</code>の必要が無い分、コンパイラが型推論のヒントとすべき型情報がなくなってしまうので、代わりに<code>THE</code>フォームで<code>ANY</code>型である点を伝えてあげる必要が生じる。</p>
+
+<h3>All</h3>
+
+<pre><code><span class="code"><span class="keyword">newtype</span> <span class="variable">All</span> <span class="keyword">=</span> <span class="variable">All</span> <span class="paren1">{<span class="code"> getAll <span class="keyword">::</span> <span class="variable">Bool</span> </span>}</span>
+&nbsp;   <span class="keyword">deriving</span> <span class="paren1">(<span class="code"><span class="variable">Eq,</span> <span class="variable">Ord,</span> <span class="variable">Read,</span> <span class="variable">Show,</span> <span class="variable">Bounded</span></span>)</span>
+
+<span class="keyword">instance</span> <span class="variable">Monoid</span> <span class="variable">All</span> <span class="keyword">where</span>
+&nbsp;   mempty <span class="keyword">=</span> <span class="variable">All</span> <span class="variable">True</span>
+&nbsp;   <span class="variable">All</span> x <span class="atom">`mappend`</span> <span class="variable">All</span> y <span class="keyword">=</span> <span class="variable">All</span> <span class="paren1">(<span class="code">x <span class="atom">&amp;&amp;</span> y</span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> getAll <span class="atom">$</span> mempty <span class="atom">`mappend`</span> <span class="variable">All</span> <span class="variable">True</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getAll <span class="atom">$</span> mempty <span class="atom">`mappend`</span> <span class="variable">All</span> <span class="variable">False</span>
+<span class="variable">False</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getAll <span class="atom">.</span> mconcat <span class="atom">.</span> map <span class="variable">All</span> <span class="atom">$</span> <span class="paren1">[<span class="code"><span class="variable">True,</span> <span class="variable">True,</span> <span class="variable">True</span></span>]</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getAll <span class="atom">.</span> mconcat <span class="atom">.</span> map <span class="variable">All</span> <span class="atom">$</span> <span class="paren1">[<span class="code"><span class="variable">True,</span> <span class="variable">True,</span> <span class="variable">False</span></span>]</span>
+<span class="variable">False</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-newtype</span></i> all<span class="paren2">(<span class="code"></span>)</span> 'boolean</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">monoid all</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">mempty<span class="paren4">(<span class="code"></span>)</span>`<span class="paren4">(<span class="code">all t</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">mappend<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code">and ,a ,b</span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">mempty</span>)</span><span class="paren2">(<span class="code">all t</span>)</span></span>)</span>
+T
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">mempty</span>)</span><span class="paren2">(<span class="code">all nil</span>)</span></span>)</span>
+NIL
+
+cl-user&gt; <span class="paren1">(<span class="code">mconcat <span class="paren2">(<span class="code"><i><span class="symbol">the</span></i> <span class="paren3">(<span class="code">list all</span>)</span> '<span class="paren3">(<span class="code">t t t</span>)</span></span>)</span></span>)</span>
+T
+cl-user&gt; <span class="paren1">(<span class="code">mconcat <span class="paren2">(<span class="code"><i><span class="symbol">the</span></i> <span class="paren3">(<span class="code">list all</span>)</span> '<span class="paren3">(<span class="code">t t nil</span>)</span></span>)</span></span>)</span>
+NIL</span></code></pre>
+
+<h3>Ordering</h3>
+
+<pre><code><span class="code"><span class="keyword">instance</span> <span class="variable">Monoid</span> <span class="variable">Ordering</span> <span class="keyword">where</span>
+&nbsp;   mempty <span class="keyword">=</span> <span class="variable">EQ</span>
+&nbsp;   <span class="variable">LT</span> <span class="atom">`mappend`</span> _ <span class="keyword">=</span> <span class="variable">LT</span>
+&nbsp;   <span class="variable">EQ</span> <span class="atom">`mappend`</span> y <span class="keyword">=</span> y
+&nbsp;   <span class="variable">GT</span> <span class="atom">`mappend`</span> _ <span class="keyword">=</span> <span class="variable">GT</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">LT</span> <span class="atom">`mappend`</span> <span class="variable">GT</span>
+<span class="variable">LT</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">GT</span> <span class="atom">`mappend`</span> <span class="variable">LT</span>
+<span class="variable">GT</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> mempty <span class="atom">`mappend`</span> <span class="variable">LT</span>
+<span class="variable">LT</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> mempty <span class="atom">`mappend`</span> <span class="variable">GT</span>
+<span class="variable">GT</span>
+
+<span class="function">lengthCompare</span> <span class="keyword">::</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="variable">Ordering</span>
+<span class="function">lengthCompare</span> x y <span class="keyword">=</span> <span class="paren1">(<span class="code">length x <span class="atom">`compare`</span> length y</span>)</span> <span class="atom">`mappend`</span>
+&nbsp;                   <span class="paren1">(<span class="code">x <span class="atom">`compare`</span> y</span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> lengthCompare <span class="string">"zen"</span> <span class="string">"ants"</span>
+<span class="variable">LT</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> lengthCompare <span class="string">"zen"</span> <span class="string">"ant"</span>
+<span class="variable">GT</span>
+
+<span class="function">lengthCompare</span> <span class="keyword">::</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> <span class="variable">Ordering</span>
+<span class="function">lengthCompare</span> x y <span class="keyword">=</span> <span class="paren1">(<span class="code">length x <span class="atom">`compare`</span> length y</span>)</span> <span class="atom">`mappend`</span>
+&nbsp;                   <span class="paren1">(<span class="code">vowels x <span class="atom">`compare`</span> vowels y</span>)</span> <span class="atom">`mappend`</span>
+&nbsp;                   <span class="paren1">(<span class="code">x <span class="atom">`compare`</span> y</span>)</span>
+&nbsp;   <span class="keyword">where</span> vowels <span class="keyword">=</span> length <span class="atom">.</span> filter <span class="paren1">(<span class="code"><span class="atom">`elem`</span> <span class="string">"aeiou"</span></span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> lengthCompare <span class="string">"zen"</span> <span class="string">"anna"</span>
+<span class="variable">LT</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> lengthCompare <span class="string">"zen"</span> <span class="string">"ana"</span>
+<span class="variable">LT</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> lengthCompare <span class="string">"zen"</span> <span class="string">"ann"</span>
+<span class="variable">GT</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defdata</span></i> ordering<span class="paren2">(<span class="code"></span>)</span>
+  <span class="keyword">:lt</span> <span class="keyword">:eq</span> <span class="keyword">:gt</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">monoid ordering</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">mempty<span class="paren4">(<span class="code"></span>)</span><span class="keyword">:eq</span></span>)</span>
+   <span class="paren3">(<span class="code">mappend<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code">trivia:ematch*<span class="paren5">(<span class="code">,a ,b</span>)</span>
+        <span class="paren5">(<span class="code"><span class="paren6">(<span class="code"><span class="keyword">:lt</span> _</span>)</span><span class="keyword">:lt</span></span>)</span>
+        <span class="paren5">(<span class="code"><span class="paren6">(<span class="code"><span class="keyword">:eq</span> y</span>)</span>y</span>)</span>
+        <span class="paren5">(<span class="code"><span class="paren6">(<span class="code"><span class="keyword">:gt</span> _</span>)</span><span class="keyword">:gt</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="keyword">:lt</span> <span class="keyword">:gt</span></span>)</span>
+:LT
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="keyword">:gt</span> <span class="keyword">:lt</span></span>)</span>
+:GT
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">mempty</span>)</span> <span class="keyword">:lt</span></span>)</span>
+:LT
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">mempty</span>)</span> <span class="keyword">:gt</span></span>)</span>
+:GT</span></code></pre>
+
+<p>Common Lispに於いてリストとストリングは明確に区別されるので、<code>STRING</code>向けの<code>COMPARE</code>を定義する必要がある。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">compare string</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">lt<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code">string&lt; ,a ,b</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">lte<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code">string&lt;= ,a ,b</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">gt<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code">string&gt; ,a ,b</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">gte<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code">string&gt;= ,a ,b</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">compare<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code"><i><span class="symbol">cond</span></i>
+        <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">string= ,a ,b</span>)</span><span class="keyword">:eq</span></span>)</span>
+        <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">string&lt; ,a ,b</span>)</span><span class="keyword">:lt</span></span>)</span>
+        <span class="paren5">(<span class="code">t <span class="keyword">:gt</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> length-compare<span class="paren2">(<span class="code">x y</span>)</span>
+  <span class="paren2">(<span class="code">mappend <span class="paren3">(<span class="code">compare <span class="paren4">(<span class="code">length x</span>)</span><span class="paren4">(<span class="code">length y</span>)</span></span>)</span>
+           <span class="paren3">(<span class="code">compare x y</span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">length-compare <span class="string">"zen"</span> <span class="string">"ants"</span></span>)</span> =&gt; :LT
+cl-user&gt; <span class="paren1">(<span class="code">length-compare <span class="string">"zen"</span> <span class="string">"ant"</span></span>)</span> =&gt; :GT
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> length-compare2<span class="paren2">(<span class="code">x y</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">flet</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">vowels<span class="paren5">(<span class="code">x</span>)</span>
+          <span class="paren5">(<span class="code">count-if <span class="paren6">(<span class="code">curried-function:section find _ <span class="string">"aeiou"</span></span>)</span>
+                    x</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">declare<span class="paren4">(<span class="code">ftype <span class="paren5">(<span class="code"><i><span class="symbol">function</span></i><span class="paren6">(<span class="code">string</span>)</span>fixnum</span>)</span>vowels</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">mappend* <span class="paren4">(<span class="code">compare <span class="paren5">(<span class="code">length x</span>)</span><span class="paren5">(<span class="code">length y</span>)</span></span>)</span>
+              <span class="paren4">(<span class="code">compare <span class="paren5">(<span class="code">vowels x</span>)</span><span class="paren5">(<span class="code">vowels y</span>)</span></span>)</span>
+              <span class="paren4">(<span class="code">compare x y</span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">length-compare2 <span class="string">"zen"</span> <span class="string">"anna"</span></span>)</span>
+:LT
+cl-user&gt; <span class="paren1">(<span class="code">length-compare2 <span class="string">"zen"</span> <span class="string">"ana"</span></span>)</span>
+:LT
+cl-user&gt; <span class="paren1">(<span class="code">length-compare2 <span class="string">"zen"</span> <span class="string">"ann"</span></span>)</span>
+:GT</span></code></pre>
+
+<p>なお、単に辞書順の比較であるなら、Common Lispは<code>STRING&lt;</code>、<code>STRING&lt;=</code>、<code>STRING&gt;</code>、<code>STRING&gt;=</code>、<code>STRING-LESSP</code>、<code>STRING-NOT-LESSP</code>、<code>STRING-GREATERP</code>、<code>STRING-NOT-GREATERP</code>を擁している。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">string&lt; <span class="string">"zen"</span> <span class="string">"ants"</span></span>)</span>
+NIL</span></code></pre>
+
+<h3>Maybe monoid.</h3>
+
+<pre><code><span class="code"><span class="keyword">instance</span> <span class="variable">Monoid</span> a <span class="atom">=&gt;</span> <span class="variable">Monoid</span> <span class="paren1">(<span class="code"><span class="variable">Maybe</span> a</span>)</span> <span class="keyword">where</span>
+&nbsp;   mempty <span class="keyword">=</span> nothing
+&nbsp;   <span class="variable">Nothing</span> <span class="atom">`mappend`</span> m <span class="keyword">=</span> m
+&nbsp;   m <span class="atom">`mappend`</span> <span class="variable">Nothing</span> <span class="keyword">=</span> m
+&nbsp;   <span class="variable">Just</span> m1 <span class="atom">`mappend`</span> <span class="variable">Just</span> m2 <span class="keyword">=</span> <span class="variable">Just</span> <span class="paren1">(<span class="code">m1 <span class="atom">`mappend`</span> m2</span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Nothing</span> <span class="atom">`mappend`</span> <span class="variable">Just</span> <span class="string">"andy"</span>
+<span class="variable">Just</span> <span class="string">"andy"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Just</span> <span class="variable">LT</span> <span class="atom">`mappend`</span> <span class="variable">Nothing</span>
+<span class="variable">Just</span> <span class="variable">LT</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Just</span> <span class="paren1">(<span class="code"><span class="variable">Sum</span> 3</span>)</span> <span class="atom">`mappend`</span> <span class="variable">Just</span> <span class="paren1">(<span class="code"><span class="variable">Sum</span> 4</span>)</span>
+<span class="variable">Just</span> <span class="paren1">(<span class="code"><span class="variable">Sum</span> <span class="paren2">{<span class="code">getSum <span class="keyword">=</span> 7</span>}</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">monoid maybe</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">mempty<span class="paren4">(<span class="code"></span>)</span>nothing</span>)</span>
+   <span class="paren3">(<span class="code">mappend<span class="paren4">(<span class="code">a b</span>)</span>
+     <span class="paren4">(<span class="code">trivia:ematch*<span class="paren5">(<span class="code">a b</span>)</span>
+       <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">nothing m</span>)</span>m</span>)</span>
+       <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">m nothing</span>)</span>m</span>)</span>
+       <span class="paren5">(<span class="code"><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">just m1</span>)</span><span class="paren1">(<span class="code">just m2</span>)</span></span>)</span>
+        `<span class="paren6">(<span class="code">just<span class="paren1">(<span class="code">mappend ,m1 ,m2</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend nothing <span class="paren2">(<span class="code">just <span class="string">"andy"</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST <span class="string">"andy"</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">just <span class="keyword">:lt</span></span>)</span>nothing</span>)</span>
+<span class="paren1">(<span class="code">JUST <span class="keyword">:LT</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">just <span class="paren3">(<span class="code">sum 3</span>)</span></span>)</span><span class="paren2">(<span class="code">just <span class="paren3">(<span class="code">sum 4</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST 7</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="keyword">newtype</span> <span class="variable">First</span> a <span class="keyword">=</span> <span class="variable">First</span> <span class="paren1">{<span class="code"> getFirst <span class="keyword">::</span> <span class="variable">Maybe</span> a </span>}</span>
+&nbsp;   <span class="keyword">deriving</span> <span class="paren1">(<span class="code"><span class="variable">Eq,</span> <span class="variable">Ord,</span> <span class="variable">Read,</span> <span class="variable">Show</span></span>)</span>
+
+<span class="keyword">instance</span> <span class="variable">Monoid</span> <span class="paren1">(<span class="code"><span class="variable">First</span> a</span>)</span> <span class="keyword">where</span>
+&nbsp;   mempty <span class="keyword">=</span> <span class="variable">First</span> <span class="variable">Nothing</span>
+&nbsp;   <span class="variable">First</span> <span class="paren1">(<span class="code"><span class="variable">Just</span> x</span>)</span> <span class="atom">`mappend`</span> _ <span class="keyword">=</span> <span class="variable">First</span> <span class="paren1">(<span class="code"><span class="variable">Just</span> x</span>)</span>
+&nbsp;   <span class="variable">First</span> <span class="variable">Nothing</span> <span class="atom">`mappend`</span> x <span class="keyword">=</span> x
+
+<span class="function">ghci</span><span class="atom">&gt;</span> getFirst <span class="atom">$</span> <span class="variable">First</span> <span class="paren1">(<span class="code"><span class="variable">Just</span> <span class="character">'a'</span></span>)</span> <span class="atom">`mappend`</span> <span class="variable">First</span> <span class="paren1">(<span class="code"><span class="variable">Just</span> <span class="character">'b'</span></span>)</span>
+<span class="variable">Just</span> <span class="character">'a'</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getFirst <span class="atom">$</span> <span class="variable">First</span> <span class="variable">Nothing</span> <span class="atom">`mappend`</span> <span class="variable">First</span> <span class="paren1">(<span class="code"><span class="variable">Just</span> <span class="character">'b'</span></span>)</span>
+<span class="variable">Just</span> <span class="character">'b'</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> getFirst <span class="atom">$</span> <span class="variable">First</span> <span class="paren1">(<span class="code"><span class="variable">Just</span> <span class="character">'a) `mappend` First Nothing
+Just '</span>a'
+<span class="function">ghci</span><span class="atom">&gt;</span> getFirst <span class="atom">.</span> mconcat <span class="atom">.</span> map <span class="variable">First</span> <span class="atom">$</span> <span class="paren2">[<span class="code"><span class="variable">Nothing,</span> <span class="variable">Just</span> 9, <span class="variable">Just</span> 10</span>]</span>
+<span class="variable">Just</span> 9</span></span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-newtype</span></i> 1st<span class="paren2">(<span class="code">&amp;optional a</span>)</span>
+  `<span class="paren2">(<span class="code">maybe ,a</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">monoid 1st</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">mempty<span class="paren4">(<span class="code"></span>)</span>'<span class="paren4">(<span class="code">1st nothing</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">mappend<span class="paren4">(<span class="code">a b</span>)</span>
+     `<span class="paren4">(<span class="code">trivia:ematch*<span class="paren5">(<span class="code">,a ,b</span>)</span>
+        <span class="paren5">(<span class="code"><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">just x</span>)</span>_</span>)</span><span class="paren6">(<span class="code">1st<span class="paren1">(<span class="code">just x</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">nothing x</span>)</span>x</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">1st<span class="paren3">(<span class="code">just <span class="character">#\a</span></span>)</span></span>)</span><span class="paren2">(<span class="code">1st<span class="paren3">(<span class="code">just <span class="character">#\b</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">just <span class="character">#\a</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">1st nothing</span>)</span><span class="paren2">(<span class="code">1st <span class="paren3">(<span class="code">just <span class="character">#\b</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST <span class="character">#\b</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mappend <span class="paren2">(<span class="code">1st <span class="paren3">(<span class="code">just <span class="character">#\a</span></span>)</span></span>)</span><span class="paren2">(<span class="code">1st nothing</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST <span class="character">#\a</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">mconcat <span class="paren2">(<span class="code"><i><span class="symbol">the</span></i> <span class="paren3">(<span class="code">list 1st</span>)</span>'<span class="paren3">(<span class="code">nothing <span class="paren4">(<span class="code">just 9</span>)</span><span class="paren4">(<span class="code">just 10</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST 9</span>)</span></span></code></pre>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
