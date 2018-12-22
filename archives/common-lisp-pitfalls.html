@@ -40,6 +40,16 @@
 <p>なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。</p>
 
+<h2>STRING family</h2>
+
+<p><code>STRING</code>のファミリーは引数に文字列指定子を受け付ける。
+すなわち、文字、シンボルも受け付けられる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">string= <span class="paren2">(<span class="code"></span>)</span> <span class="string">"NIL"</span></span>)</span> <span class="comment">; =&gt; T
+</span><span class="paren1">(<span class="code">string= <span class="keyword">:a</span> <span class="character">#\A</span></span>)</span> <span class="comment">; =&gt; T</span></span></code></pre>
+
+<p>文字列同士でしか比較をしたくない場合は<code>EQUAL</code>、<code>EQUALP</code>を使う。</p>
+
 <h2>IMPORT, EXPORT, UNEXPORT, SHADOWING-IMPORT, SHADOW</h2>
 
 <p>第一引数はあくまでリストである。

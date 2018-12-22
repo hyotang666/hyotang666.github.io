@@ -21,6 +21,16 @@ SBCL、CLISP、ECL、CCL
 なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。
 
+## STRING family
+`STRING`のファミリーは引数に文字列指定子を受け付ける。
+すなわち、文字、シンボルも受け付けられる。
+
+```lisp
+(string= () "NIL") ; => T
+(string= :a #\A) ; => T
+```
+文字列同士でしか比較をしたくない場合は`EQUAL`、`EQUALP`を使う。
+
 ## IMPORT, EXPORT, UNEXPORT, SHADOWING-IMPORT, SHADOW
 第一引数はあくまでリストである。
 便宜的にシンボル自身も受け付けるが、あくまで基本はリストである。
