@@ -40,6 +40,27 @@
 <p>なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。</p>
 
+<h2>WRITE, *PRINT-PRETTY*</h2>
+
+<p>割と多くの処理系で<code>(function hoge)</code>というリストは表示できない。
+<code>#'hoge</code>になってしまう。
+筆者が調べた限りでは、SBCLは<code>*PRINT-PRETTY*</code>を<code>NIL</code>に束縛することで期待通り出力できるようだ。
+CLISP, ECL, CCLではリスト<code>(function hoge)</code>の出力方法は見つけられなかった。
+仕様ではこの点については触れられていない。
+同様に<code>(quote hoge)</code>というリストも割と多くの処理系で表示できない。</p>
+
+<pre><code><span class="code">#+sbcl
+<span class="paren1">(<span class="code">write '<span class="paren2">(<span class="code"><i><span class="symbol">function</span></i> hoge</span>)</span> <span class="keyword">:pretty</span> nil</span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">FUNCTION</span></i> HOGE</span>)</span> <span class="comment">; &lt;--- output
+</span>#'HOGE      <span class="comment">; &lt;--- return
+</span>
+#-sbcl
+<span class="paren1">(<span class="code">write '<span class="paren2">(<span class="code"><i><span class="symbol">function</span></i> hoge</span>)</span> <span class="keyword">:pretty</span> nil</span>)</span>
+#'HOGE      <span class="comment">; &lt;--- output
+</span>#'HOGE      <span class="comment">; &lt;--- return</span></span></code></pre>
+
+<p>ドキュメンテーション自動生成ツール開発中に、メソッドの各シグネチャを出力する際、シグネチャが<code>(function function)</code>だった場合に<code>#'FUNCTION</code>と出力されてしまうという形で出会った。</p>
+
 <h2>STRING family</h2>
 
 <p><code>STRING</code>のファミリーは引数に文字列指定子を受け付ける。

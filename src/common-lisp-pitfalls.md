@@ -21,6 +21,27 @@ SBCL、CLISP、ECL、CCL
 なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。
 
+## WRITE, \*PRINT-PRETTY\*
+割と多くの処理系で`(function hoge)`というリストは表示できない。
+`#'hoge`になってしまう。
+筆者が調べた限りでは、SBCLは`*PRINT-PRETTY*`を`NIL`に束縛することで期待通り出力できるようだ。
+CLISP, ECL, CCLではリスト`(function hoge)`の出力方法は見つけられなかった。
+仕様ではこの点については触れられていない。
+同様に`(quote hoge)`というリストも割と多くの処理系で表示できない。
+
+```lisp
+#+sbcl
+(write '(function hoge) :pretty nil)
+(FUNCTION HOGE) ; <--- output
+#'HOGE		; <--- return
+
+#-sbcl
+(write '(function hoge) :pretty nil)
+#'HOGE		; <--- output
+#'HOGE		; <--- return
+```
+ドキュメンテーション自動生成ツール開発中に、メソッドの各シグネチャを出力する際、シグネチャが`(function function)`だった場合に`#'FUNCTION`と出力されてしまうという形で出会った。
+
 ## STRING family
 `STRING`のファミリーは引数に文字列指定子を受け付ける。
 すなわち、文字、シンボルも受け付けられる。
