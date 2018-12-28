@@ -1,0 +1,732 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>cl-vs-haskell.13
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>Common Lisp vs Haskell, Chapter 13</h1>
+
+<h2>Meta note</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="cl-vs-haskell.12.html" >前章</a>を読了済みの者。</p>
+
+<h2>Introduction</h2>
+
+<p>本稿は「すごいH本」の内容をCommon Lispに翻訳しながらCLerがHaskellを学ぶその第13章である。</p>
+
+<p>本稿ではHaskellに於ける型クラス<code>Monad</code>と、その周辺のオペレータ、すなわち<code>do</code>とリスト内包表記とをCommon Lispに移植しながら学習していく。</p>
+
+<p>本稿はCLerより、むしろHaskellerにとって興味深い内容となっているかもしれない。
+というのも、Haskellではブラックボックスになっていて脳内で想像するしかない型クラスの振る舞いが、マクロ展開という形で詳らかにされているからだ。</p>
+
+<h2>13.3</h2>
+
+<h3>Monad</h3>
+
+<pre><code><span class="code"><span class="keyword">class</span> <span class="variable">Monad</span> m <span class="keyword">where</span>
+&nbsp;   return <span class="keyword">::</span> a <span class="keyword">-&gt;</span> m a
+&nbsp;   <span class="paren1">(<span class="code"><span class="atom">&gt;&gt;=</span></span>)</span> <span class="keyword">::</span> m a <span class="keyword">-&gt;</span> <span class="paren1">(<span class="code">a <span class="keyword">-&gt;</span> m b</span>)</span> <span class="keyword">-&gt;</span> m b
+&nbsp;   <span class="paren1">(<span class="code"><span class="atom">&gt;&gt;</span></span>)</span> <span class="keyword">::</span> m a <span class="keyword">-&gt;</span> m b <span class="keyword">-&gt;</span> m b
+&nbsp;   x <span class="atom">&gt;&gt;</span> y <span class="keyword">=</span> x <span class="atom">&gt;&gt;=</span> <span class="keyword">\</span>_ <span class="keyword">-&gt;</span> y
+&nbsp;   fail <span class="keyword">::</span> <span class="variable">String</span> <span class="keyword">-&gt;</span> m a
+&nbsp;   fail msg <span class="keyword">=</span> error msg</span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-type-class</span></i><span class="paren2">(<span class="code">monad m</span>)</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">.return<span class="paren4">(<span class="code">a</span>)</span><span class="paren4">(<span class="code">m a</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">&gt;&gt;=<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">m a</span>)</span><span class="paren5">(<span class="code"><i><span class="symbol">function</span></i><span class="paren6">(<span class="code">a</span>)</span><span class="paren6">(<span class="code">m b</span>)</span></span>)</span></span>)</span><span class="paren4">(<span class="code">m b</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">&gt;&gt;<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">m a</span>)</span><span class="paren5">(<span class="code">m b</span>)</span></span>)</span><span class="paren4">(<span class="code">m b</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">fail<span class="paren4">(<span class="code">string</span>)</span><span class="paren4">(<span class="code">m a</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:default</span> &gt;&gt; <span class="paren3">(<span class="code">x y</span>)</span>
+    `<span class="paren3">(<span class="code">&gt;&gt;= ,x <span class="paren4">(<span class="code">constantly ,y</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:default</span> fail<span class="paren3">(<span class="code">msg</span>)</span>
+    `<span class="paren3">(<span class="code">error ,msg</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>８章で実装した<code>.RETURN</code>とは全く違うものになっている点、要注意。</p>
+
+<pre><code><span class="code"><span class="keyword">instance</span> <span class="variable">Monad</span> <span class="variable">Maybe</span> <span class="keyword">where</span>
+&nbsp;   return x <span class="keyword">=</span> <span class="variable">Just</span> x
+&nbsp;   <span class="variable">Nothing</span> <span class="atom">&gt;&gt;=</span> f <span class="keyword">=</span> <span class="variable">Nothing</span>
+&nbsp;   <span class="variable">Just</span> x <span class="atom">&gt;&gt;=</span> f <span class="keyword">=</span> f x
+&nbsp;   fail _ <span class="keyword">=</span> <span class="variable">Nothing</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Just</span> 9 <span class="atom">&gt;&gt;=</span> <span class="keyword">\</span>x <span class="keyword">-&gt;</span> return <span class="paren1">(<span class="code">x<span class="atom">*</span>10</span>)</span>
+<span class="variable">Just</span> 90
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Nothing</span> <span class="atom">&gt;&gt;=</span> <span class="keyword">\</span>x <span class="keyword">-&gt;</span> return <span class="paren1">(<span class="code">x<span class="atom">*</span>10</span>)</span>
+<span class="variable">Nothing</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">monad maybe</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">.return<span class="paren4">(<span class="code">x</span>)</span>
+     `<span class="paren4">(<span class="code">just ,x</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">&gt;&gt;=<span class="paren4">(<span class="code">a b</span>)</span>
+     <span class="paren4">(<span class="code"><i><span class="symbol">alexandria:with-gensyms</span></i><span class="paren5">(<span class="code">x f</span>)</span>
+       `<span class="paren5">(<span class="code">trivia:ematch*<span class="paren6">(<span class="code">,a ,b</span>)</span>
+          <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">nothing _</span>)</span>nothing</span>)</span>
+          <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="paren2">(<span class="code">just ,x</span>)</span>,f</span>)</span><span class="paren1">(<span class="code">funcall ,f ,x</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">fail<span class="paren4">(<span class="code">a</span>)</span>
+     <span class="paren4">(<span class="code">declare<span class="paren5">(<span class="code">ignore a</span>)</span></span>)</span>
+     'nothing</span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">&gt;&gt;= <span class="paren2">(<span class="code">just 9</span>)</span><span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">x</span>)</span><span class="paren3">(<span class="code">.return <span class="paren4">(<span class="code">* x 10</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">just 90</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">&gt;&gt;= nothing<span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">x</span>)</span><span class="paren3">(<span class="code">.return <span class="paren4">(<span class="code">* x 10</span>)</span></span>)</span></span>)</span></span>)</span>
+NOTHING</span></code></pre>
+
+<h3>13.4</h3>
+
+<pre><code><span class="code"><span class="keyword">type</span> <span class="variable">Birds</span> <span class="keyword">=</span> <span class="variable">Int</span>
+<span class="keyword">type</span> <span class="variable">Pole</span> <span class="keyword">=</span> <span class="paren1">(<span class="code"><span class="variable">Birds,</span> <span class="variable">Birds</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> birds<span class="paren2">(<span class="code"></span>)</span>'integer</span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> pole<span class="paren2">(<span class="code"></span>)</span>'<span class="paren2">(<span class="code">cons birds birds</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">landLeft</span> <span class="keyword">::</span> <span class="variable">Birds</span> <span class="keyword">-&gt;</span> <span class="variable">Pole</span> <span class="keyword">-&gt;</span> <span class="variable">Maybe</span> <span class="variable">Pole</span>
+<span class="function">landLeft</span> n <span class="paren1">(<span class="code">left, right</span>)</span>
+&nbsp;   <span class="keyword">|</span> abs <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">left <span class="atom">+</span> n</span>)</span> <span class="atom">-</span> right</span>)</span> <span class="atom">&lt;</span> 4 <span class="keyword">=</span> <span class="variable">Just</span> <span class="paren1">(<span class="code">left <span class="atom">+</span> n, right</span>)</span>
+&nbsp;   <span class="keyword">|</span> otherwise                    <span class="keyword">=</span> <span class="variable">Nothing</span>
+
+<span class="function">landRight</span> <span class="keyword">::</span> <span class="variable">Birds</span> <span class="keyword">-&gt;</span> <span class="variable">Pole</span> <span class="keyword">-&gt;</span> <span class="variable">Maybe</span> <span class="variable">Pole</span>
+<span class="function">landRight</span> n <span class="paren1">(<span class="code">left, right</span>)</span>
+&nbsp;   <span class="keyword">|</span> abs <span class="paren1">(<span class="code">left <span class="atom">-</span> <span class="paren2">(<span class="code">right <span class="atom">+</span> n</span>)</span></span>)</span> <span class="atom">&lt;</span> 4 <span class="keyword">=</span> <span class="variable">Just</span> <span class="paren1">(<span class="code">left, right <span class="atom">+</span> n</span>)</span>
+&nbsp;   <span class="keyword">|</span> otherwise                    <span class="keyword">=</span> <span class="variable">Nothing</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> land-left<span class="paren2">(<span class="code">n pole</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind<span class="paren3">(<span class="code">left . right</span>)</span>pole
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">&lt; <span class="paren5">(<span class="code">abs <span class="paren6">(<span class="code">- <span class="paren1">(<span class="code">+ left n</span>)</span>
+                  right</span>)</span></span>)</span>
+          4</span>)</span>
+       <span class="paren4">(<span class="code">just <span class="paren5">(<span class="code">cons <span class="paren6">(<span class="code">+ left n</span>)</span> right</span>)</span></span>)</span>
+       nothing</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> land-right<span class="paren2">(<span class="code">n pole</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind<span class="paren3">(<span class="code">left . right</span>)</span>pole
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">&lt; <span class="paren5">(<span class="code">abs <span class="paren6">(<span class="code">- left
+                  <span class="paren1">(<span class="code">+ right n</span>)</span></span>)</span></span>)</span>
+          4</span>)</span>
+       <span class="paren4">(<span class="code">just <span class="paren5">(<span class="code">cons left <span class="paren6">(<span class="code">+ n right</span>)</span></span>)</span></span>)</span>
+       nothing</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> return <span class="paren1">(<span class="code">0, 0</span>)</span> <span class="atom">&gt;&gt;=</span> landRight 2 <span class="atom">&gt;&gt;=</span> landLeft 2 <span class="atom">&gt;&gt;=</span> landRight 2
+<span class="variable">Just</span> <span class="paren1">(<span class="code">2,4</span>)</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> return <span class="paren1">(<span class="code">0, 0</span>)</span> <span class="atom">&gt;&gt;=</span> landLeft 1 <span class="atom">&gt;&gt;=</span> landRight 4 <span class="atom">&gt;&gt;=</span> landLeft <span class="paren1">(<span class="code"><span class="atom">-</span>1</span>)</span> <span class="atom">&gt;&gt;=</span> landRight <span class="paren1">(<span class="code"><span class="atom">-</span>2</span>)</span>
+<span class="variable">Nothing</span></span></code></pre>
+
+<p>Common Lispに於いて、関数の型宣言は通常<code>DECLAIM</code>を使って行われる。
+また、関数名（シンボル）から宣言された関数型を取り出す機能は言語仕様上には存在しない。
+CLtL2には環境オブジェクトに問い合わせを行う幾つかのオペレータが提案されていたのだが、ANSIでは省かれてしまったようだ。
+とはいえかつてCLtL2では提案されていたものなので、処理系によってはそれらをサポートしている場合がある。
+それら処理系依存のAPIを叩くにはラッパライブラリである<code>INTROSPECT-ENVIRONMENT</code>を利用するのが定石だ。
+ここでも処理系依存のAPIを直接叩くことはせずに、<code>INTROSPECT-ENVIRONMENT</code>経由で叩くこととしている。
+もっとも、<code>INTROSPECT-ENVIRONMENT</code>はAPIこそラップしてくれているが、振る舞いの共通化までは面倒を見てくれていないので本稿のコードは現時点でSBCLでしか動かないのだが。
+さて、そうして取り出した関数型は（SBCLでは）型展開された後のものとなる。
+すなわち、<code>(maybe fixnum)</code>と返り値を宣言していても、返ってくるのは<code>(or (member nothing)(cons (member just)(cons fixnum null)))</code>という型となる。
+そして、展開後の型指定子から展開前の型指定子を取り出すのは不可能であり、展開後の型指定子から型シグネチャのチェックを行うのも困難である。</p>
+
+<p>我々の実装に於いて、各インスタンスはマクロであり、各インスタンスマクロは各引数の返り値型を計算し、その型をシグネチャと照らしあわせ実インスタンスを取り出す。
+取り出した返り値型から型シグネチャのチェックが出来ないというのは致命的である。</p>
+
+<p>これを避けるため、各種ヘルパーを提供しよう。
+組み込みたる<code>DECLAIM</code>と重複する機能を提供し、独自のルールを盛り込むのは大変不細工であり、心苦しいのだが、プログラミング言語を作るのではなく、Haskellの機能をCommon Lispで再現するならどうするかという視点で本稿は書かれており、結句、Common Lispの型システムとHaskellの型システムとを同居させねばならなくなってしまっているので、この点については目を瞑ろう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> function-type <span class="paren2">(<span class="code">name args return</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">PROGN</span></i> <span class="paren3">(<span class="code">SETF <span class="paren4">(<span class="code">GET ',name 'FTYPE</span>)</span>'<span class="paren4">(<span class="code"><i><span class="symbol">FUNCTION</span></i> ,args ,return</span>)</span></span>)</span>
+          ',name</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> function-type-of<span class="paren2">(<span class="code">name</span>)</span>
+  <span class="paren2">(<span class="code">get name 'ftype</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> compute-standard-form-return-type<span class="paren2">(<span class="code">form env</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">function-type-of<span class="paren5">(<span class="code">car form</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">third<span class="paren5">(<span class="code">function-type-of<span class="paren6">(<span class="code">car form</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">and <span class="paren5">(<span class="code">eq 'coerce <span class="paren6">(<span class="code">car form</span>)</span></span>)</span>
+          <span class="paren5">(<span class="code">constantp <span class="paren6">(<span class="code">third form</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">introspect-environment:constant-form-value<span class="paren5">(<span class="code">third form</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">t
+      <span class="paren4">(<span class="code">multiple-value-bind<span class="paren5">(<span class="code">type localp declaration</span>)</span><span class="paren5">(<span class="code">introspect-environment:function-information <span class="paren6">(<span class="code">car form</span>)</span>env</span>)</span>
+        <span class="paren5">(<span class="code">declare<span class="paren6">(<span class="code">ignore localp</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">case type
+          <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">nil</span>)</span> <span class="paren1">(<span class="code">when <span class="special">*return-type-verbose*</span>
+                   <span class="paren2">(<span class="code">warn <span class="string">"Undefined function ~S. ~S"</span><span class="paren3">(<span class="code">car form</span>)</span>form</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><span class="keyword">:special-form</span> <span class="paren1">(<span class="code">special-operator-return-type form env</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><span class="keyword">:macro</span> <span class="paren1">(<span class="code">compute-return-type <span class="paren2">(<span class="code">agnostic-lizard:macroexpand-all <span class="paren3">(<span class="code">copy-tree form</span>)</span>env</span>)</span>
+                                       env</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><span class="keyword">:function</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">ftype<span class="paren4">(<span class="code">assoc 'ftype declaration</span>)</span></span>)</span></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> ftype
+                <span class="paren3">(<span class="code">ftype-return-type <span class="paren4">(<span class="code">cdr ftype</span>)</span></span>)</span>
+                <span class="paren3">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren4">(<span class="code">when <span class="special">*return-type-verbose*</span>
+                         <span class="paren5">(<span class="code">warn <span class="string">"Could not determine type of ~S"</span>form</span>)</span></span>)</span>
+                       T</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>また、カリー化された関数から返り値の型を取得できねばならない。
+これまでは外部ライブラリを利用していたが、フォークする形で本稿用のものをでっちあげよう。</p>
+
+<pre><code><span class="code"><span class="comment">;;;; CURRY data structure.
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> curry <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><i><span class="symbol">function</span></i> <span class="keyword">:initarg</span> <span class="keyword">:function</span> <span class="keyword">:reader</span> curried-function</span>)</span>
+   <span class="paren3">(<span class="code">arity <span class="keyword">:initarg</span> <span class="keyword">:arity</span> <span class="keyword">:reader</span> arity</span>)</span>
+   <span class="paren3">(<span class="code">return-type <span class="keyword">:initarg</span> <span class="keyword">:return-type</span> <span class="keyword">:reader</span> return-type</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> c2mop:funcallable-standard-class</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> initialize-instance <span class="keyword">:after</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">c curry</span>)</span> &amp;key</span>)</span>
+  <span class="paren2">(<span class="code">c2mop:set-funcallable-instance-function c <span class="paren3">(<span class="code">curried-function c</span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;;;; CURRY
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> curry <span class="paren2">(<span class="code">op &amp;rest args</span>)</span>
+  <span class="comment">;; Trivial syntax check.
+</span>  <span class="paren2">(<span class="code">check-type op <span class="paren3">(<span class="code">or symbol <span class="paren4">(<span class="code">cons <span class="paren5">(<span class="code">eql <i><span class="symbol">lambda</span></i></span>)</span>T</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">when<span class="paren3">(<span class="code">typep op '<span class="paren4">(<span class="code">cons <span class="paren5">(<span class="code">eql <i><span class="symbol">lambda</span></i></span>)</span>t</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">assert <span class="paren4">(<span class="code">every #'symbolp <span class="paren5">(<span class="code">cadr op</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">assert <span class="paren4">(<span class="code">notany <span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren6">(<span class="code">elt</span>)</span>
+                      <span class="paren6">(<span class="code">find elt lambda-list-keywords</span>)</span></span>)</span>
+                    <span class="paren5">(<span class="code">cadr op</span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="comment">;; body
+</span>  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">null args</span>)</span>
+    `#',op
+    <span class="paren3">(<span class="code">&lt;Section-Form&gt; op args</span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;;; &lt;Section-Form&gt;
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> &lt;Section-Form&gt;<span class="paren2">(<span class="code">op args</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">gensyms<span class="paren5">(<span class="code">gensyms<span class="paren6">(<span class="code">count-if #'underscorep args</span>)</span></span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">optional-lambda-list<span class="paren5">(<span class="code">optional-lambda-list gensyms</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> gensyms
+      <span class="paren4">(<span class="code">&lt;Curry-Form&gt; <span class="paren5">(<span class="code">&lt;Section-Body-Form&gt; op args gensyms</span>)</span> optional-lambda-list
+                    <span class="paren5">(<span class="code">and <span class="paren6">(<span class="code">symbolp op</span>)</span>
+                         <span class="paren6">(<span class="code">or <span class="paren1">(<span class="code">third<span class="paren2">(<span class="code">function-type-of op</span>)</span></span>)</span>
+                             <span class="paren1">(<span class="code">third<span class="paren2">(<span class="code">introspect-environment:function-type op</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      `<span class="paren4">(<span class="code">,op ,@args</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> underscorep <span class="paren2">(<span class="code">thing</span>)</span>
+  <span class="paren2">(<span class="code">and <span class="paren3">(<span class="code">symbolp thing</span>)</span>
+       <span class="paren3">(<span class="code">string= <span class="string">"_"</span> thing</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> optional-lambda-list<span class="paren2">(<span class="code">lambda-list</span>)</span>
+  <span class="paren2">(<span class="code">mapcar <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">x</span>)</span>
+            `<span class="paren4">(<span class="code">,x NIL ,<span class="paren5">(<span class="code">gensym <span class="paren6">(<span class="code">format nil <span class="string">"~A-P"</span>x</span>)</span></span>)</span></span>)</span></span>)</span>
+          lambda-list</span>)</span></span>)</span>
+
+<span class="comment">;;; &lt;Section-Body-Form&gt;
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> &lt;Section-Body-Form&gt;<span class="paren2">(<span class="code">op args gensyms</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">args gensyms &amp;optional acc</span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp args</span>)</span>
+              <span class="paren6">(<span class="code">nreverse acc</span>)</span>
+              <span class="paren6">(<span class="code">body<span class="paren1">(<span class="code">car args</span>)</span><span class="paren1">(<span class="code">cdr args</span>)</span>gensyms acc</span>)</span></span>)</span></span>)</span>
+          <span class="paren4">(<span class="code">body<span class="paren5">(<span class="code">arg rest gensyms acc</span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">underscorep arg</span>)</span>
+              <span class="paren6">(<span class="code">rec rest <span class="paren1">(<span class="code">cdr gensyms</span>)</span><span class="paren1">(<span class="code">push <span class="paren2">(<span class="code">car gensyms</span>)</span>acc</span>)</span></span>)</span>
+              <span class="paren6">(<span class="code">rec rest gensyms <span class="paren1">(<span class="code">push arg acc</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    `<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">,op ,@<span class="paren5">(<span class="code">rec args gensyms</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;;; &lt;Curry-Form&gt;
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> &lt;Curry-Form&gt; <span class="paren2">(<span class="code">body optional-lambda-list return-type</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">curry <span class="paren5">(<span class="code">gensym <span class="string">"CURRY"</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">ENTRY-POINT<span class="paren6">(<span class="code">list</span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">endp list</span>)</span>
+                <span class="paren1">(<span class="code">&lt;BODY-FORM&gt; body</span>)</span>
+                `<span class="paren1">(<span class="code"><i><span class="symbol">LABELS</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">,curry<span class="paren4">(<span class="code">&amp;OPTIONAL ,@list</span>)</span>
+                           <span class="paren4">(<span class="code"><i><span class="symbol">IF</span></i> ,<span class="paren5">(<span class="code">caddar list</span>)</span>
+                             ,<span class="paren5">(<span class="code">rec <span class="paren6">(<span class="code">cdr list</span>)</span></span>)</span>
+                             <span class="paren5">(<span class="code">MAKE-INSTANCE 'CURRYi
+                                            <span class="keyword">:FUNCTION</span> #',curry
+                                            <span class="keyword">:ARITY</span> ,<span class="paren6">(<span class="code">length list</span>)</span>
+                                            <span class="keyword">:RETURN-TYPE</span> ',return-type
+                                            </span>)</span></span>)</span></span>)</span></span>)</span>
+                   <span class="paren2">(<span class="code">MAKE-INSTANCE 'CURRY
+                                  <span class="keyword">:FUNCTION</span> #',curry
+                                  <span class="keyword">:ARITY</span> ,<span class="paren3">(<span class="code">length list</span>)</span>
+                                  <span class="keyword">:RETURN-TYPE</span> ',return-type
+                                  </span>)</span></span>)</span></span>)</span></span>)</span>
+            <span class="paren5">(<span class="code">REC<span class="paren6">(<span class="code">list</span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">endp list</span>)</span>
+                <span class="paren1">(<span class="code">&lt;body-form&gt; body</span>)</span>
+                `<span class="paren1">(<span class="code"><i><span class="symbol">IF</span></i>,<span class="paren2">(<span class="code">caddar list</span>)</span>
+                   ,<span class="paren2">(<span class="code">REC <span class="paren3">(<span class="code">cdr list</span>)</span></span>)</span>
+                   ,<span class="paren2">(<span class="code">ENTRY-POINT list</span>)</span></span>)</span></span>)</span></span>)</span>
+            <span class="paren5">(<span class="code">&lt;BODY-FORM&gt;<span class="paren6">(<span class="code">body</span>)</span>
+                <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">cdr body</span>)</span>
+                  `<span class="paren1">(<span class="code"><i><span class="symbol">LOCALLY</span></i> ,@body</span>)</span>
+                  <span class="paren1">(<span class="code">car body</span>)</span></span>)</span></span>)</span>
+            </span>)</span>
+      <span class="paren4">(<span class="code">ENTRY-POINT optional-lambda-list</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで型推論が上手く機能するようになる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">function-type land-right <span class="paren2">(<span class="code">fixnum pole</span>)</span><span class="paren2">(<span class="code">maybe *</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">function-type land-left <span class="paren2">(<span class="code">fixnum pole</span>)</span><span class="paren2">(<span class="code">maybe *</span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">&gt;&gt;= <span class="paren2">(<span class="code">&gt;&gt;= <span class="paren3">(<span class="code">&gt;&gt;= <span class="paren4">(<span class="code">.return '<span class="paren5">(<span class="code">0 . 0</span>)</span></span>)</span>
+                        <span class="paren4">(<span class="code">curry land-right 2 _</span>)</span></span>)</span>
+                   <span class="paren3">(<span class="code">curry land-left 2 _</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code">curry land-right 2 _</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST <span class="paren2">(<span class="code">2 . 4</span>)</span></span>)</span></span></code></pre>
+
+<p><code>&gt;&gt;=</code>が左結合であることを明示的に書かねばならない点、相変わらず不細工であるが、醜いシンタックスと無理して付き合わなくて良い点もまた、相変わらずである。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> &gt;&gt;=* <span class="paren2">(<span class="code">&amp;rest expression*</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">list</span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp<span class="paren1">(<span class="code">cdr list</span>)</span></span>)</span>
+              <span class="paren6">(<span class="code">car list</span>)</span>
+              `<span class="paren6">(<span class="code">&gt;&gt;= ,<span class="paren1">(<span class="code">rec <span class="paren2">(<span class="code">cdr list</span>)</span></span>)</span>
+                    ,<span class="paren1">(<span class="code">car list</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">reverse expression*</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上記マクロを使えば以下のように書ける。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">&gt;&gt;=* <span class="paren2">(<span class="code">.return '<span class="paren3">(<span class="code">0 . 0</span>)</span></span>)</span>
+               <span class="paren2">(<span class="code">curry land-right 2 _</span>)</span>
+               <span class="paren2">(<span class="code">curry land-left 2 _</span>)</span>
+               <span class="paren2">(<span class="code">curry land-right 2 _</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST <span class="paren2">(<span class="code">2 . 4</span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">&gt;&gt;=* <span class="paren2">(<span class="code">.return '<span class="paren3">(<span class="code">0 . 0</span>)</span></span>)</span>
+               <span class="paren2">(<span class="code">curry land-left 1 _</span>)</span>
+               <span class="paren2">(<span class="code">curry land-right 4 _</span>)</span>
+               <span class="paren2">(<span class="code">curry land-left -1 _</span>)</span>
+               <span class="paren2">(<span class="code">curry land-right -2 _</span>)</span></span>)</span>
+NOTHING</span></code></pre>
+
+<pre><code><span class="code"><span class="function">banana</span> <span class="keyword">::</span> <span class="variable">Pole</span> <span class="keyword">-&gt;</span> <span class="variable">Maybe</span> <span class="variable">Pole</span>
+<span class="function">banana</span> _ <span class="keyword">=</span> <span class="variable">Nothing</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> return <span class="paren1">(<span class="code">0, 0</span>)</span> <span class="atom">&gt;&gt;=</span> landLeft 1 <span class="atom">&gt;&gt;=</span> banana <span class="atom">&gt;&gt;=</span> landRight 1
+<span class="variable">Nothing</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">setf<span class="paren2">(<span class="code">symbol-function 'banana</span>)</span><span class="paren2">(<span class="code">constantly nothing</span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">&gt;&gt;=* <span class="paren2">(<span class="code">.return '<span class="paren3">(<span class="code">0 . 0</span>)</span></span>)</span>
+               <span class="paren2">(<span class="code">curry land-left 1 _</span>)</span>
+               #'banana
+               <span class="paren2">(<span class="code">curry land-right 1 _</span>)</span></span>)</span>
+NOTHING</span></code></pre>
+
+<h3>13.5 DO</h3>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Just</span> 3 <span class="atom">&gt;&gt;=</span> <span class="paren1">(<span class="code"><span class="keyword">\</span>x <span class="keyword">-&gt;</span> <span class="variable">Just</span> <span class="string">"!"</span> <span class="atom">&gt;&gt;=</span> <span class="paren2">(<span class="code"><span class="keyword">\</span>y <span class="keyword">-&gt;</span> <span class="variable">Just</span> <span class="paren3">(<span class="code">show x <span class="atom">++</span> y</span>)</span></span>)</span></span>)</span>
+<span class="variable">Just</span> <span class="string">"3!"</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Nothing</span> <span class="atom">&gt;&gt;=</span> <span class="paren1">(<span class="code"><span class="keyword">\</span>x <span class="keyword">-&gt;</span> <span class="variable">Just</span> <span class="string">"!"</span> <span class="atom">&gt;&gt;=</span> <span class="paren2">(<span class="code"><span class="keyword">\</span>y <span class="keyword">-&gt;</span> <span class="variable">Just</span> <span class="paren3">(<span class="code">show x <span class="atom">++</span> y</span>)</span></span>)</span></span>)</span>
+<span class="variable">Nothing</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Just</span> 3 <span class="atom">&gt;&gt;=</span> <span class="paren1">(<span class="code"><span class="keyword">\</span>x <span class="keyword">-&gt;</span> <span class="variable">Nothing</span> <span class="atom">&gt;&gt;=</span> <span class="paren2">(<span class="code"><span class="keyword">\</span>y <span class="keyword">-&gt;</span> <span class="variable">Just</span> <span class="paren3">(<span class="code">show x <span class="atom">++</span> y</span>)</span></span>)</span></span>)</span>
+<span class="variable">Nothing</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Just</span> 3 <span class="atom">&gt;&gt;=</span> <span class="paren1">(<span class="code"><span class="keyword">\</span>x <span class="keyword">-&gt;</span> <span class="variable">Just</span> <span class="string">"!"</span> <span class="atom">&gt;&gt;=</span> <span class="paren2">(<span class="code"><span class="keyword">\</span>y <span class="keyword">-&gt;</span> <span class="variable">Nothing</span></span>)</span></span>)</span>
+<span class="variable">Nothing</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">&gt;&gt;= <span class="paren2">(<span class="code">just 3</span>)</span>
+     <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">x</span>)</span>
+       <span class="paren3">(<span class="code">&gt;&gt;= <span class="paren4">(<span class="code">just <span class="string">"!"</span></span>)</span>
+            <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">y</span>)</span>
+                    <span class="paren5">(<span class="code">just <span class="paren6">(<span class="code">format nil <span class="string">"~A~A"</span> x y</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST <span class="string">"3!"</span></span>)</span>
+
+<span class="paren1">(<span class="code">&gt;&gt;= nothing
+     <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">x</span>)</span>
+       <span class="paren3">(<span class="code">&gt;&gt;= <span class="paren4">(<span class="code">just <span class="string">"!"</span></span>)</span>
+            <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">y</span>)</span>
+                    <span class="paren5">(<span class="code">just <span class="paren6">(<span class="code">format nil <span class="string">"~A~A"</span> x y</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+NOTHING
+
+<span class="paren1">(<span class="code">&gt;&gt;= <span class="paren2">(<span class="code">just 3</span>)</span>
+     <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">x</span>)</span>
+       <span class="paren3">(<span class="code">&gt;&gt;= nothing
+            <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">y</span>)</span>
+                    <span class="paren5">(<span class="code">just <span class="paren6">(<span class="code">format nil <span class="string">"~A~A"</span> x y</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+NOTHING
+
+<span class="paren1">(<span class="code">&gt;&gt;= <span class="paren2">(<span class="code">just 3</span>)</span>
+     <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">x</span>)</span>
+       <span class="paren3">(<span class="code">declare<span class="paren4">(<span class="code">ignore x</span>)</span></span>)</span>
+       <span class="paren3">(<span class="code">&gt;&gt;= <span class="paren4">(<span class="code">just <span class="string">"!"</span></span>)</span>
+            <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">y</span>)</span>
+                    <span class="paren5">(<span class="code">declare<span class="paren6">(<span class="code">ignore y</span>)</span></span>)</span>
+                    nothing</span>)</span></span>)</span></span>)</span></span>)</span>
+NOTHING</span></code></pre>
+
+<pre><code><span class="code"><span class="function">foo</span> <span class="keyword">::</span> <span class="variable">Maybe</span> <span class="variable">String</span>
+<span class="function">foo</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   x <span class="keyword">&lt;-</span> <span class="variable">Just</span> 3
+&nbsp;   y <span class="keyword">&lt;-</span> <span class="variable">Just</span> <span class="string">"!"</span>
+&nbsp;   <span class="variable">Just</span> <span class="paren1">(<span class="code">show x <span class="atom">++</span> y</span>)</span></span></code></pre>
+
+<p>Haskellに於ける<code>DO</code>記法はシンタックスシュガーである。
+Common Lispに於いてシンタックスシュガーはマクロで作るべきものである。
+<code>DO</code>だと名前が衝突するので、ここでは<code>DOMONAD</code>とする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> domonad<span class="paren2">(<span class="code">&amp;rest expression*</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">list</span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">second<span class="paren2">(<span class="code">second list</span>)</span></span>)</span></span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">and <span class="paren2">(<span class="code">symbolp second</span>)</span>
+                      <span class="paren2">(<span class="code">string= '<span class="keyword">#:&lt;-</span> second</span>)</span></span>)</span>
+                `<span class="paren1">(<span class="code">&gt;&gt;= ,<span class="paren2">(<span class="code">third list</span>)</span>
+                      ,<span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">symbolp<span class="paren4">(<span class="code">first list</span>)</span></span>)</span>
+                         `<span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">,<span class="paren5">(<span class="code">first list</span>)</span></span>)</span>
+                            <span class="paren4">(<span class="code">declare<span class="paren5">(<span class="code">ignorable ,<span class="paren6">(<span class="code">first list</span>)</span></span>)</span></span>)</span>
+                            ,<span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">nthcdr 3 list</span>)</span></span>)</span></span>)</span>
+                         `<span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">arg</span>)</span>
+                            <span class="paren4">(<span class="code">trivia:match arg
+                                          <span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">first list</span>)</span>,<span class="paren6">(<span class="code">rec<span class="paren1">(<span class="code">nthcdr 3 list</span>)</span></span>)</span></span>)</span>
+                                          <span class="paren5">(<span class="code">_ <span class="paren6">(<span class="code">fail <span class="string">"Pattern missing."</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren1">(<span class="code"><i><span class="symbol">if</span></i><span class="paren2">(<span class="code">cdr list</span>)</span>
+                  `<span class="paren2">(<span class="code">&gt;&gt; ,<span class="paren3">(<span class="code">first list</span>)</span>
+                       ,<span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">cdr list</span>)</span></span>)</span></span>)</span>
+                  <span class="paren2">(<span class="code">car list</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">rec expression*</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書ける。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> foo<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">domonad x &lt;- <span class="paren3">(<span class="code">just 3</span>)</span>
+           y &lt;- <span class="paren3">(<span class="code">just <span class="string">"!"</span></span>)</span>
+           <span class="paren3">(<span class="code">just <span class="paren4">(<span class="code">format nil <span class="string">"~A~A"</span> x y</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="variable">Just</span> 9 <span class="atom">&gt;&gt;=</span> <span class="paren1">(<span class="code"><span class="keyword">\</span>x <span class="keyword">-&gt;</span> <span class="variable">Just</span> <span class="paren2">(<span class="code">x <span class="atom">&gt;</span> 8</span>)</span></span>)</span>
+<span class="variable">Just</span> <span class="variable">True</span>
+
+<span class="function">marySue</span> <span class="keyword">::</span> <span class="variable">Maybe</span> <span class="variable">Bool</span>
+<span class="function">marySue</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   x <span class="keyword">&lt;-</span> <span class="variable">Just</span> 9
+&nbsp;   <span class="variable">Just</span> <span class="paren1">(<span class="code">x <span class="atom">&gt;</span> 8</span>)</span></span></code></pre>
+
+<p>原著ではここで以下の指摘がある。</p>
+
+<blockquote>
+<p>２つを見比べると、do記法で連鎖させた最後のモナドの結果がdo式全体の結果になる仕組みがよく分かると思います。</p>
+</blockquote>
+
+<p>Haskellに於いて、プログラマは２つの式の同意性を脳内で想像するしかないが、Common Lispに於いては<code>MACROEXPAND-1</code>して実際に見ることができる。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">&gt;&gt;= <span class="paren2">(<span class="code">just 9</span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">x</span>)</span>
+                <span class="paren3">(<span class="code">just <span class="paren4">(<span class="code">&gt; x 8</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST T</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">macroexpand-1 '<span class="paren2">(<span class="code">domonad x &lt;- <span class="paren3">(<span class="code">just 9</span>)</span>
+                                  <span class="paren3">(<span class="code">just <span class="paren4">(<span class="code">&gt; x 8</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">&gt;&gt;= <span class="paren2">(<span class="code">JUST 9</span>)</span>
+     <span class="paren2">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren3">(<span class="code">X</span>)</span>
+       <span class="paren3">(<span class="code">DECLARE<span class="paren4">(<span class="code">IGNORABLE X</span>)</span></span>)</span>
+       <span class="paren3">(<span class="code">JUST <span class="paren4">(<span class="code">&gt; X 8</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">routine</span> <span class="keyword">::</span> <span class="variable">Maybe</span> <span class="variable">Pole</span>
+<span class="function">routine</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   start <span class="keyword">&lt;-</span> return <span class="paren1">(<span class="code">0, 0</span>)</span>
+&nbsp;   first <span class="keyword">&lt;-</span> landLeft 2 start
+&nbsp;   second <span class="keyword">&lt;-</span> landRight 2 first
+&nbsp;   landLeft 1 second
+
+<span class="function">ghci</span><span class="atom">&gt;</span> routine
+<span class="variable">Just</span> <span class="paren1">(<span class="code">3, 2</span>)</span></span></code></pre>
+
+<p>Haskellに於いて<code>do</code>は関数を返すが、我らが<code>DOMONAD</code>は単に処理を行う。
+これは将来、変更されるかもしれない。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">domonad start &lt;- <span class="paren2">(<span class="code">.return '<span class="paren3">(<span class="code">0 . 0</span>)</span></span>)</span>
+                  first &lt;- <span class="paren2">(<span class="code">land-left 2 start</span>)</span>
+                  second &lt;- <span class="paren2">(<span class="code">land-right 2 first</span>)</span>
+                  <span class="paren2">(<span class="code">land-left 1 second</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST <span class="paren2">(<span class="code">3 . 2</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">justH</span> <span class="keyword">::</span> <span class="variable">Maybe</span> <span class="variable">Char</span>
+<span class="function">justH</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   <span class="paren1">(<span class="code">x<span class="variable">:</span>xs</span>)</span> <span class="keyword">&lt;-</span> <span class="variable">Just</span> <span class="string">"hello"</span>
+&nbsp;   return x
+
+<span class="function">ghci</span><span class="atom">&gt;</span> justH
+<span class="variable">Just</span> <span class="character">'h'</span>
+
+<span class="function">wopwop</span> <span class="keyword">::</span> <span class="variable">Maybe</span> <span class="variable">Char</span>
+<span class="function">wopwop</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   <span class="paren1">(<span class="code">x<span class="variable">:</span>xs</span>)</span> <span class="keyword">&lt;-</span> <span class="variable">Just</span> <span class="string">""</span>
+&nbsp;   return x
+
+<span class="function">ghci</span><span class="atom">&gt;</span> wopwop
+<span class="variable">Nothing</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> just-h<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">domonad <span class="paren3">(<span class="code">trivia:string* x _</span>)</span> &lt;- <span class="paren3">(<span class="code">just <span class="string">"hello"</span></span>)</span>
+           <span class="paren3">(<span class="code">.return x</span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">just-h</span>)</span>
+<span class="paren1">(<span class="code">JUST <span class="character">#\h</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> wopwop<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">domonad <span class="paren3">(<span class="code">cons x _</span>)</span> &lt;- <span class="paren3">(<span class="code">just <span class="string">""</span></span>)</span>
+           <span class="paren3">(<span class="code">.return x</span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">wopwop</span>)</span>
+NOTHING</span></code></pre>
+
+<p>我々の実装に於いてパターンマッチは<code>TRIVIA</code>に依存している。
+<code>TRIVIA</code>の<code>STRING*</code>マッチャーは空文字列にマッチする点要注意。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">domonad <span class="paren2">(<span class="code">trivia:string* x _</span>)</span> &lt;- <span class="paren2">(<span class="code">just <span class="string">""</span></span>)</span>
+                  <span class="paren2">(<span class="code">.return x</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">JUST NIL</span>)</span></span></code></pre>
+
+<h3>List Monad</h3>
+
+<pre><code><span class="code"><span class="keyword">instance</span> <span class="variable">Monad</span> <span class="paren1">[<span class="code"></span>]</span> <span class="keyword">where</span>
+&nbsp;   return x <span class="keyword">=</span> <span class="paren1">[<span class="code">x</span>]</span>
+&nbsp;   xs <span class="atom">&gt;&gt;=</span> f <span class="keyword">=</span> concat <span class="paren1">(<span class="code">map f xs</span>)</span>
+&nbsp;   fail _ <span class="keyword">=</span> <span class="paren1">[<span class="code"></span>]</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">monad list</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">.return<span class="paren4">(<span class="code">x</span>)</span>`<span class="paren4">(<span class="code">list ,x</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">&gt;&gt;=<span class="paren4">(<span class="code">xs f</span>)</span>
+     `<span class="paren4">(<span class="code">mapcan ,f ,xs</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">fail<span class="paren4">(<span class="code">x</span>)</span>
+     <span class="paren4">(<span class="code">declare<span class="paren5">(<span class="code">ignore x</span>)</span></span>)</span>
+     NIL</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">3,4,5</span>]</span> <span class="atom">&gt;&gt;=</span> <span class="keyword">\</span>x <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code">x,<span class="atom">-</span>x</span>]</span>
+<span class="paren1">[<span class="code">3,<span class="atom">-</span>3,4,<span class="atom">-</span>4,5,<span class="atom">-</span>5</span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code"></span>]</span> <span class="atom">&gt;&gt;=</span> <span class="keyword">\</span>x <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code"><span class="string">"bad"</span>,<span class="string">"mad"</span>,<span class="string">"rad"</span></span>]</span>
+<span class="paren1">[<span class="code"></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">1,2,3</span>]</span> <span class="atom">&gt;&gt;=</span> <span class="keyword">\</span>x <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code"></span>]</span>
+<span class="paren1">[<span class="code"></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">1,2</span>]</span> <span class="atom">&gt;&gt;=</span> <span class="keyword">\</span>n <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code"><span class="character">'a'</span>,<span class="character">'b'</span></span>]</span> <span class="atom">&gt;&gt;=</span> <span class="keyword">\</span>ch <span class="keyword">-&gt;</span> return <span class="paren1">(<span class="code">n, ch</span>)</span>
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code">1,'a'</span>)</span>,<span class="paren2">(<span class="code">1,'b'</span>)</span>,<span class="paren2">(<span class="code">2,'a'</span>)</span>,<span class="paren2">(<span class="code">2,'b'</span>)</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">&gt;&gt;= '<span class="paren2">(<span class="code">3 4 5</span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">x</span>)</span>
+                <span class="paren3">(<span class="code">list x <span class="paren4">(<span class="code">- x</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">3 -3 4 -4 5 -5</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">&gt;&gt;= nil
+              <span class="paren2">(<span class="code">constantly '<span class="paren3">(<span class="code"><span class="string">"bad"</span> <span class="string">"mad"</span> <span class="string">"rad"</span></span>)</span></span>)</span></span>)</span>
+NIL
+
+cl-user&gt; <span class="paren1">(<span class="code">&gt;&gt;= '<span class="paren2">(<span class="code">1 2 3</span>)</span>
+              <span class="paren2">(<span class="code">constantly nil</span>)</span></span>)</span>
+NIL
+
+cl-user&gt; <span class="paren1">(<span class="code">&gt;&gt;= '<span class="paren2">(<span class="code">1 2</span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">n</span>)</span>
+                <span class="paren3">(<span class="code">&gt;&gt;= '<span class="paren4">(<span class="code"><span class="character">#\a</span> <span class="character">#\b</span></span>)</span>
+                     <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">c</span>)</span>
+                       <span class="paren5">(<span class="code">.return <span class="paren6">(<span class="code">cons n c</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">1 . <span class="character">#\a</span></span>)</span><span class="paren2">(<span class="code">1 . <span class="character">#\b</span></span>)</span><span class="paren2">(<span class="code">2 . <span class="character">#\a</span></span>)</span><span class="paren2">(<span class="code">2 . <span class="character">#\b</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">listOfTuples</span> <span class="keyword">::</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code"><span class="variable">Int,</span> <span class="variable">Char</span></span>)</span></span>]</span>
+<span class="function">listOfTuples</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   n <span class="keyword">&lt;-</span> <span class="paren1">[<span class="code">1,2</span>]</span>
+&nbsp;   ch <span class="keyword">&lt;-</span> <span class="paren1">[<span class="code"><span class="character">'a'</span>,<span class="character">'b'</span></span>]</span>
+&nbsp;   return <span class="paren1">(<span class="code">n, ch</span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> list-of-cons<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">domonad n &lt;- '<span class="paren3">(<span class="code">1 2</span>)</span>
+           ch &lt;- '<span class="paren3">(<span class="code"><span class="character">#\a</span> <span class="character">#\b</span></span>)</span>
+           <span class="paren3">(<span class="code">.return <span class="paren4">(<span class="code">cons n ch</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code"> <span class="paren2">(<span class="code">n, ch</span>)</span> <span class="keyword">|</span> n <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code">1,2</span>]</span>, ch <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code"><span class="character">'a'</span>,<span class="character">'b'</span></span>]</span> </span>]</span>
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code">1,'a'</span>)</span>,<span class="paren2">(<span class="code">1,'b'</span>)</span>,<span class="paren2">(<span class="code">2,'a'</span>)</span>,<span class="paren2">(<span class="code">2,'b'</span>)</span></span>]</span></span></code></pre>
+
+<p>Haskelに於いてリスト内包表記はシンタックスシュガーである。
+Common Lispに於いてシンタックスシュガーはマクロで実装されるべきものである。
+これまで頼ってきていた<code>INCF-CL</code>の<code>LC</code>を捨てて、独自の<code>LC</code>マクロを用意しよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> lc <span class="paren2">(<span class="code">&amp;rest expression*</span>)</span>
+  `<span class="paren2">(<span class="code">domonad ,@<span class="paren3">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">rec<span class="paren6">(<span class="code">list &amp;optional acc</span>)</span>
+                        <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">endp list</span>)</span>
+                          <span class="paren1">(<span class="code">nreverse acc</span>)</span>
+                          <span class="paren1">(<span class="code"><i><span class="symbol">if</span></i><span class="paren2">(<span class="code">and <span class="paren3">(<span class="code">symbolp<span class="paren4">(<span class="code">second list</span>)</span></span>)</span>
+                                  <span class="paren3">(<span class="code">string= '<span class="keyword">#:&lt;-</span> <span class="paren4">(<span class="code">second list</span>)</span></span>)</span></span>)</span>
+                            <span class="paren2">(<span class="code">rec <span class="paren3">(<span class="code">cdddr list</span>)</span><span class="paren3">(<span class="code">list* <span class="paren4">(<span class="code">third list</span>)</span><span class="paren4">(<span class="code">second list</span>)</span><span class="paren4">(<span class="code">first list</span>)</span>acc</span>)</span></span>)</span>
+                            <span class="paren2">(<span class="code">rec <span class="paren3">(<span class="code">cdr list</span>)</span><span class="paren3">(<span class="code">cons `<span class="paren4">(<span class="code">guard ,<span class="paren5">(<span class="code">car list</span>)</span></span>)</span>acc</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren4">(<span class="code">rec <span class="paren5">(<span class="code">cddr expression*</span>)</span></span>)</span></span>)</span>
+            <span class="paren3">(<span class="code">.return ,<span class="paren4">(<span class="code">car expression*</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書ける。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">lc <span class="paren2">(<span class="code">cons n c</span>)</span> || n &lt;- '<span class="paren2">(<span class="code">1 2</span>)</span> c &lt;- '<span class="paren2">(<span class="code"><span class="character">#\a</span> <span class="character">#\b</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">1 . <span class="character">#\a</span></span>)</span><span class="paren2">(<span class="code">1 . <span class="character">#\b</span></span>)</span><span class="paren2">(<span class="code">2 . <span class="character">#\a</span></span>)</span><span class="paren2">(<span class="code">2 . <span class="character">#\b</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>MACROEXPAND-1</code>していくと以下の通り。</p>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">macroexpand-1 '<span class="paren2">(<span class="code">lc <span class="paren3">(<span class="code">cons n c</span>)</span> || n &lt;- '<span class="paren3">(<span class="code">1 2</span>)</span> c &lt;- '<span class="paren3">(<span class="code"><span class="character">#\a</span> <span class="character">#\b</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">DOMOAD N &lt;- '<span class="paren2">(<span class="code">1 2</span>)</span> C &lt;- '<span class="paren2">(<span class="code"><span class="character">#\a</span> <span class="character">#\b</span></span>)</span> <span class="paren2">(<span class="code">.RETURN <span class="paren3">(<span class="code">CONS N C</span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">macroexpand-1 *</span>)</span>
+<span class="paren1">(<span class="code">&gt;&gt;= '<span class="paren2">(<span class="code">1 2</span>)</span>
+     <span class="paren2">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren3">(<span class="code">N</span>)</span>
+       <span class="paren3">(<span class="code">DECLARE<span class="paren4">(<span class="code">IGNORABLE N</span>)</span></span>)</span>
+       <span class="paren3">(<span class="code">&gt;&gt;= '<span class="paren4">(<span class="code"><span class="character">#\a</span> <span class="character">#\b</span></span>)</span>
+            <span class="paren4">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren5">(<span class="code">C</span>)</span>
+              <span class="paren5">(<span class="code">DECLARE<span class="paren6">(<span class="code">IGNORABLE C</span>)</span></span>)</span>
+              <span class="paren5">(<span class="code">.RETURN <span class="paren6">(<span class="code">CONS N C</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">eval +</span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">MACROLET</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">.RETURN<span class="paren4">(<span class="code">X</span>)</span>
+             `<span class="paren4">(<span class="code">LIST ,X</span>)</span></span>)</span>
+           <span class="paren3">(<span class="code">%&gt;&gt;=<span class="paren4">(<span class="code">XS F</span>)</span>
+             `<span class="paren4">(<span class="code">MAPCAN ,F ,XS</span>)</span></span>)</span>
+           <span class="paren3">(<span class="code">FAIL<span class="paren4">(<span class="code">X</span>)</span>
+             <span class="paren4">(<span class="code">DECLARE<span class="paren5">(<span class="code">IGNORE X</span>)</span></span>)</span>
+             NIL</span>)</span>
+           <span class="paren3">(<span class="code">MZERO<span class="paren4">(<span class="code"></span>)</span>
+             NIL</span>)</span>
+           <span class="paren3">(<span class="code">MPLUS<span class="paren4">(<span class="code">A B</span>)</span>
+             `<span class="paren4">(<span class="code">APPEND ,A ,B</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">THE</span></i> LIST
+       <span class="paren3">(<span class="code">%&gt;&gt;= '<span class="paren4">(<span class="code">1 2</span>)</span>
+             <span class="paren4">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren5">(<span class="code">N</span>)</span>
+               <span class="paren5">(<span class="code">DECLARE<span class="paren6">(<span class="code">IGNORABLE N</span>)</span></span>)</span>
+               <span class="paren5">(<span class="code"><i><span class="symbol">THE</span></i> LIST
+                    <span class="paren6">(<span class="code">MAPCAN <span class="paren1">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren2">(<span class="code">C</span>)</span>
+                              <span class="paren2">(<span class="code">DECLARE<span class="paren3">(<span class="code">IGNORABLE C</span>)</span></span>)</span>
+                              <span class="paren2">(<span class="code">LIST <span class="paren3">(<span class="code">CONS N C</span>)</span></span>)</span></span>)</span>
+                            '<span class="paren1">(<span class="code"><span class="character">#\a</span> <span class="character">#\b</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">expander:expand *</span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">THE</span></i> LIST
+     <span class="paren2">(<span class="code">MAPCAN <span class="paren3">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren4">(<span class="code">N</span>)</span>
+               <span class="paren4">(<span class="code">DECLARE<span class="paren5">(<span class="code">IGNORABLE N</span>)</span></span>)</span>
+               <span class="paren4">(<span class="code"><i><span class="symbol">THE</span></i> LIST
+                    <span class="paren5">(<span class="code">MAPCAN <span class="paren6">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren1">(<span class="code">C</span>)</span>
+                              <span class="paren1">(<span class="code">DECLARE<span class="paren2">(<span class="code">IGNORABLE C</span>)</span></span>)</span>
+                              <span class="paren1">(<span class="code">LIST <span class="paren2">(<span class="code">CONS N C</span>)</span></span>)</span></span>)</span>
+                            '<span class="paren6">(<span class="code"><span class="character">#\a</span> <span class="character">#\b</span></span>)</span></span>)</span></span>)</span></span>)</span>
+             '<span class="paren3">(<span class="code">1 2</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>Haskellではブラックボックスになっており、プログラマが想像するしかない背後の働きが、上記のように我々の実装に於いては<code>MACROEXPAND</code>を通して詳らかにされる点は、遅延評価を実装せずマクロで無理やり実装したことによる数少ないメリットの一つであろうかと思う。</p>
+
+<p>また、高級なフォームが展開され低級なフォームになるわけだが、どちらもLispフォームである点に変わりはなく、Lispが「プリティアセンブラ」と言われるのも頷けるものとなっている。</p>
+
+<h3>MonadPlus</h3>
+
+<pre><code><span class="code"><span class="keyword">class</span> <span class="variable">Monad</span> m <span class="atom">=&gt;</span> <span class="variable">MonadPlus</span> m <span class="keyword">where</span>
+&nbsp;   mzero <span class="keyword">::</span> m a
+&nbsp;   mplus <span class="keyword">::</span> m a <span class="keyword">-&gt;</span> m a <span class="keyword">-&gt;</span> m a
+
+<span class="keyword">instance</span> <span class="variable">MonadPlus</span> <span class="paren1">[<span class="code"></span>]</span> <span class="keyword">where</span>
+&nbsp;   mzero <span class="keyword">=</span> <span class="paren1">[<span class="code"></span>]</span>
+&nbsp;   mplus <span class="keyword">=</span> <span class="paren1">(<span class="code"><span class="atom">++</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-type-class</span></i><span class="paren2">(<span class="code">monad+ m</span>)</span><span class="paren2">(<span class="code">monad</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">mzero<span class="paren4">(<span class="code"></span>)</span><span class="paren4">(<span class="code">m a</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">mplus<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">m a</span>)</span><span class="paren5">(<span class="code">m a</span>)</span></span>)</span><span class="paren4">(<span class="code">m a</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">definstance</span></i><span class="paren2">(<span class="code">monad+ list</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">mzero<span class="paren4">(<span class="code"></span>)</span>nil</span>)</span>
+   <span class="paren3">(<span class="code">mplus<span class="paren4">(<span class="code">a b</span>)</span>`<span class="paren4">(<span class="code">append ,a ,b</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">guard</span> <span class="keyword">::</span> <span class="paren1">(<span class="code"><span class="variable">MonadPlus</span> m</span>)</span> <span class="atom">=&gt;</span> <span class="variable">Bool</span> <span class="keyword">-&gt;</span> m <span class="paren1">(<span class="code"></span>)</span>
+<span class="function">guard</span> <span class="variable">True</span> <span class="keyword">=</span> return <span class="paren1">(<span class="code"></span>)</span>
+<span class="function">guard</span> <span class="variable">False</span> <span class="keyword">=</span> mzero</span></code></pre>
+
+<p>Haskellに於いて<code>guard</code>は関数であるが、我々の実装に於いてはマクロで実装せねばならない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> guard<span class="paren2">(<span class="code">bool</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> ,bool
+     <span class="paren3">(<span class="code">.return nil</span>)</span>
+     <span class="paren3">(<span class="code">mzero</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code">1<span class="keyword">..</span>50</span>]</span> <span class="atom">&gt;&gt;=</span> <span class="paren1">(<span class="code"><span class="keyword">\</span>x <span class="keyword">-&gt;</span> guard <span class="paren2">(<span class="code"><span class="character">'7'</span> <span class="atom">`elem`</span> show x</span>)</span> <span class="atom">&gt;&gt;</span> return x</span>)</span>
+<span class="paren1">[<span class="code">7,17,27,37,47</span>]</span>
+
+<span class="function">sevensOnly</span> <span class="keyword">::</span> <span class="paren1">[<span class="code"><span class="variable">Int</span></span>]</span>
+<span class="function">sevensOnly</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   x <span class="keyword">&lt;-</span> <span class="paren1">[<span class="code">1<span class="keyword">..</span>50</span>]</span>
+&nbsp;   guard <span class="paren1">(<span class="code"><span class="character">'7'</span> <span class="atom">`elem`</span> show x</span>)</span>
+&nbsp;   return x
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">[<span class="code"> x <span class="keyword">|</span> x <span class="keyword">&lt;-</span> <span class="paren2">[<span class="code">1<span class="keyword">..</span>50</span>]</span>, <span class="character">'7'</span> <span class="atom">`elem`</span> show x </span>]</span>
+<span class="paren1">[<span class="code">7,17,27,37,47</span>]</span></span></code></pre>
+
+<pre><code><span class="code">cl-user&gt; <span class="paren1">(<span class="code">&gt;&gt;= <span class="paren2">(<span class="code"><i><span class="symbol">the</span></i> list<span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 1 <span class="keyword">:to</span> 50 <span class="keyword">:collect</span> i</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">x</span>)</span>
+                <span class="paren3">(<span class="code">&gt;&gt; <span class="paren4">(<span class="code">guard<span class="paren5">(<span class="code">find <span class="character">#\7</span><span class="paren6">(<span class="code">princ-to-string x</span>)</span></span>)</span></span>)</span>
+                    <span class="paren4">(<span class="code">.return x</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">7 17 27 37 47</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">domonad x &lt;- <span class="paren2">(<span class="code"><i><span class="symbol">the</span></i> list<span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 1 <span class="keyword">:to</span> 50 <span class="keyword">:collect</span> i</span>)</span></span>)</span>
+                  <span class="paren2">(<span class="code">guard <span class="paren3">(<span class="code">find <span class="character">#\7</span> <span class="paren4">(<span class="code">princ-to-string x</span>)</span></span>)</span></span>)</span>
+                  <span class="paren2">(<span class="code">.return x</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">7 17 27 37 47</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">lc x || x &lt;- <span class="paren2">(<span class="code"><i><span class="symbol">the</span></i> list<span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 1 <span class="keyword">:to</span> 50 <span class="keyword">:collect</span> i</span>)</span></span>)</span>
+             <span class="paren2">(<span class="code">find <span class="character">#\7</span> <span class="paren3">(<span class="code">princ-to-string x</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">7 17 27 37 47</span>)</span></span></code></pre>
+
+<p><code>LOOP</code>マクロからは返り値の型推論が不可能なので<code>THE</code>により型ヒントを明示してあげなければならない点要注意。</p>
+
+<pre><code><span class="code"><span class="keyword">type</span> <span class="variable">KnightPos</span> <span class="keyword">=</span> <span class="paren1">(<span class="code"><span class="variable">Int,</span> <span class="variable">Int</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> knight-pos<span class="paren2">(<span class="code"></span>)</span>
+  '<span class="paren2">(<span class="code">cons fixnum fixnum</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">moveKnight</span> <span class="keyword">::</span> <span class="variable">KnightPos</span> <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code"><span class="variable">KnightPos</span></span>]</span>
+<span class="function">moveKnight</span> <span class="paren1">(<span class="code">c, r</span>)</span> <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   <span class="paren1">(<span class="code">c', r'</span>)</span> <span class="keyword">&lt;-</span> <span class="paren1">[<span class="code"><span class="paren2">(<span class="code">c<span class="atom">+</span>2,r<span class="atom">-</span>1</span>)</span>,<span class="paren2">(<span class="code">c<span class="atom">+</span>2,r<span class="atom">+</span>1</span>)</span>,<span class="paren2">(<span class="code">c<span class="atom">-</span>2,r<span class="atom">-</span>1</span>)</span>,<span class="paren2">(<span class="code">c<span class="atom">-</span>2,r<span class="atom">+</span>1</span>)</span>
+&nbsp;               ,<span class="paren2">(<span class="code">c<span class="atom">+</span>1,r<span class="atom">-</span>2</span>)</span>,<span class="paren2">(<span class="code">c<span class="atom">+</span>1,r<span class="atom">+</span>2</span>)</span>,<span class="paren2">(<span class="code">c<span class="atom">-</span>1,r<span class="atom">-</span>2</span>)</span>,<span class="paren2">(<span class="code">c<span class="atom">-</span>1,r<span class="atom">+</span>2</span>)</span>
+&nbsp;               </span>]</span>
+&nbsp;   guard <span class="paren1">(<span class="code">c' <span class="atom">`elem`</span> <span class="paren2">[<span class="code">1<span class="keyword">..</span>8</span>]</span> <span class="atom">&amp;&amp;</span> r' <span class="atom">`elem`</span> <span class="paren2">[<span class="code">1<span class="keyword">..</span>8</span>]</span></span>)</span>
+&nbsp;   return <span class="paren1">(<span class="code">c', r'</span>)</span>
+
+<span class="function">ghci</span><span class="atom">&gt;</span> moveKnight <span class="paren1">(<span class="code">6, 2</span>)</span>
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code">8,1</span>)</span>,<span class="paren2">(<span class="code">8,3</span>)</span>,<span class="paren2">(<span class="code">4,1</span>)</span>,<span class="paren2">(<span class="code">4,3</span>)</span>,<span class="paren2">(<span class="code">7,4</span>)</span>,<span class="paren2">(<span class="code">5,4</span>)</span></span>]</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> moveKnight <span class="paren1">(<span class="code">8, 1</span>)</span>
+<span class="paren1">[<span class="code"><span class="paren2">(<span class="code">6,2</span>)</span>,<span class="paren2">(<span class="code">7,3</span>)</span></span>]</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">declaim<span class="paren2">(<span class="code">ftype<span class="paren3">(<span class="code"><i><span class="symbol">function</span></i><span class="paren4">(<span class="code">knight-pos</span>)</span><span class="paren4">(<span class="code">list knight-pos</span>)</span></span>)</span>move-knight</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> move-knight<span class="paren2">(<span class="code">pos</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind<span class="paren3">(<span class="code">c . r</span>)</span>pos
+    <span class="paren3">(<span class="code">domonad <span class="paren4">(<span class="code">cons c% r%</span>)</span> &lt;- <span class="paren4">(<span class="code">list <span class="paren5">(<span class="code">cons <span class="paren6">(<span class="code">+ c 2</span>)</span><span class="paren6">(<span class="code">1- r</span>)</span></span>)</span>
+                                   <span class="paren5">(<span class="code">cons <span class="paren6">(<span class="code">+ c 2</span>)</span><span class="paren6">(<span class="code">1+ r</span>)</span></span>)</span>
+                                   <span class="paren5">(<span class="code">cons <span class="paren6">(<span class="code">- c 2</span>)</span><span class="paren6">(<span class="code">1- r</span>)</span></span>)</span>
+                                   <span class="paren5">(<span class="code">cons <span class="paren6">(<span class="code">- c 2</span>)</span><span class="paren6">(<span class="code">1+ r</span>)</span></span>)</span>
+                                   <span class="paren5">(<span class="code">cons <span class="paren6">(<span class="code">1+ c</span>)</span><span class="paren6">(<span class="code">- r 2</span>)</span></span>)</span>
+                                   <span class="paren5">(<span class="code">cons <span class="paren6">(<span class="code">1+ c</span>)</span><span class="paren6">(<span class="code">+ r 2</span>)</span></span>)</span>
+                                   <span class="paren5">(<span class="code">cons <span class="paren6">(<span class="code">1- c</span>)</span><span class="paren6">(<span class="code">- r 2</span>)</span></span>)</span>
+                                   <span class="paren5">(<span class="code">cons <span class="paren6">(<span class="code">1- c</span>)</span><span class="paren6">(<span class="code">+ r 2</span>)</span></span>)</span></span>)</span>
+             <span class="paren4">(<span class="code">guard<span class="paren5">(<span class="code">and <span class="paren6">(<span class="code">find c% '<span class="paren1">(<span class="code">1 2 3 4 5 6 7 8</span>)</span></span>)</span>
+                        <span class="paren6">(<span class="code">find r% '<span class="paren1">(<span class="code">1 2 3 4 5 6 7 8</span>)</span></span>)</span></span>)</span></span>)</span>
+             <span class="paren4">(<span class="code">.return <span class="paren5">(<span class="code">cons c% r%</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">move-knight '<span class="paren2">(<span class="code">6 . 2</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">8 . 1</span>)</span><span class="paren2">(<span class="code">8 . 3</span>)</span><span class="paren2">(<span class="code">4 . 1</span>)</span><span class="paren2">(<span class="code">4 . 3</span>)</span><span class="paren2">(<span class="code">7 . 4</span>)</span><span class="paren2">(<span class="code">5 . 4</span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">move-knight '<span class="paren2">(<span class="code">8 . 1</span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">6 . 2</span>)</span><span class="paren2">(<span class="code">7 . 3</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code"><span class="function">in3</span> <span class="keyword">::</span> <span class="variable">KnightPos</span> <span class="keyword">-&gt;</span> <span class="paren1">[<span class="code"><span class="variable">KnightPos</span></span>]</span>
+<span class="function">in3</span> start <span class="keyword">=</span> <span class="keyword">do</span>
+&nbsp;   first <span class="keyword">&lt;-</span> moveKnight start
+&nbsp;   second <span class="keyword">&lt;-</span> moveKnight first
+&nbsp;   moveKnight second
+
+<span class="function">canReachIn3</span> <span class="keyword">::</span> <span class="variable">KnightPos</span> <span class="keyword">-&gt;</span> <span class="variable">KnightPos</span> <span class="keyword">-&gt;</span> <span class="variable">Bool</span>
+<span class="function">canReachIn3</span> start end <span class="keyword">=</span> end <span class="atom">`elem`</span> in3 start
+
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code">6, 2</span>)</span> <span class="atom">`canReachIn3`</span> <span class="paren1">(<span class="code">6, 1</span>)</span>
+<span class="variable">True</span>
+<span class="function">ghci</span><span class="atom">&gt;</span> <span class="paren1">(<span class="code">6, 2</span>)</span> <span class="atom">`canReachIn3`</span> <span class="paren1">(<span class="code">7, 3</span>)</span>
+<span class="variable">False</span></span></code></pre>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> in3<span class="paren2">(<span class="code">start</span>)</span>
+  <span class="paren2">(<span class="code">domonad first &lt;- <span class="paren3">(<span class="code">move-knight start</span>)</span>
+           second &lt;- <span class="paren3">(<span class="code">move-knight first</span>)</span>
+           <span class="paren3">(<span class="code">move-knight second</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> reach-in3-p<span class="paren2">(<span class="code">start end</span>)</span>
+  <span class="paren2">(<span class="code">find end <span class="paren3">(<span class="code">in3 start</span>)</span> <span class="keyword">:test</span> #'equal</span>)</span></span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">reach-in3-p '<span class="paren2">(<span class="code">6 . 2</span>)</span>'<span class="paren2">(<span class="code">6 . 1</span>)</span></span>)</span>
+<span class="paren1">(<span class="code">6 . 1</span>)</span>
+
+cl-user&gt; <span class="paren1">(<span class="code">reach-in3-p '<span class="paren2">(<span class="code">6 . 2</span>)</span>'<span class="paren2">(<span class="code">7 . 3</span>)</span></span>)</span>
+NIL</span></code></pre>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
