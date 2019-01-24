@@ -1,0 +1,322 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>bsearch
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>Sequencial saerch faster than binary search in SBCL</h1>
+
+<h2>Meta note</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Common Lisp Evangelist.</li>
+<li><p>SBCL Evangelist.</p>
+
+<h2>Introduction</h2>
+SBCLに於いて線形探索が２分探索より速かったというお話。</li>
+</ul>
+
+<h2>Theory</h2>
+
+<p>線形探索はO(n)で２分探索はO(log n)なので２分探索のほうが速いのは皆様ご承知の通り。
+大胆な発言が許されるなら、要素数が３を超えたら２分探索のほうが理屈上は速くなります。</p>
+
+<h2>Common Lisp comunity</h2>
+
+<p>他の言語は知りませんが、Common Lispという言語とその文化圏では割と速度や効率が重要視される傾向にあるように見えます。
+速いということや効率の良さを謳ったライブラリも散見されます。
+ところがそんなライブラリのソースコードを覗いてみると割と線形探索が多様されており、２分探索をほとんど見ないように思います。
+ALEXANDRIAのような主要なユーティリティライブラリにも２分探索アルゴリズムは含まれておりません。</p>
+
+<h2>bsearch</h2>
+
+<p>「それ、２分探索にしたらそれだけでもっとはやくなるんじゃないの？」
+というわけでさくっと関数を書いてみました。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> bsearch<span class="paren2">(<span class="code">item vector &amp;key <span class="paren3">(<span class="code">key #'identity</span>)</span><span class="paren3">(<span class="code">test #'eql</span>)</span><span class="paren3">(<span class="code">start 0</span>)</span><span class="paren3">(<span class="code">end <span class="paren4">(<span class="code">length vector</span>)</span></span>)</span> <span class="paren3">(<span class="code">compare #'&lt;</span>)</span><span class="paren3">(<span class="code"><i><span class="symbol">default</span></i> nil</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">type fixnum start end</span>)</span>
+       <span class="paren3">(<span class="code">type <i><span class="symbol">function</span></i> key test compare</span>)</span>
+       <span class="paren3">(<span class="code">type simple-vector vector</span>)</span>
+       <span class="paren3">(<span class="code">dynamic-extent key test compare</span>)</span>
+       </span>)</span>
+  <span class="paren2">(<span class="code">assert<span class="paren3">(<span class="code">&lt;= 0 start end <span class="paren4">(<span class="code">length vector</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">ON-THE-NODE<span class="paren5">(<span class="code">center %</span>)</span>
+        <span class="paren5">(<span class="code">declare<span class="paren6">(<span class="code">type fixnum center %</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">zerop center</span>)</span>
+          <span class="paren6">(<span class="code">REACHED-LEAF % <span class="paren1">(<span class="code">+ center start</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">CHECK-CONTENTS<span class="paren1">(<span class="code">+ center start</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">REACHED-LEAF<span class="paren5">(<span class="code">% index</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">i<span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">zerop %</span>)</span> <span class="comment">; (= end start)
+</span>             <span class="paren3">(<span class="code">1+ index</span>)</span>
+             index</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">declare<span class="paren1">(<span class="code">type fixnum i</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">DETERMINE-RETURN-VALUE i <span class="paren1">(<span class="code">svref vector i</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">DETERMINE-RETURN-VALUE<span class="paren5">(<span class="code">index target</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren6">(<span class="code">funcall test item <span class="paren1">(<span class="code">funcall key target</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">values target index</span>)</span>
+          <span class="paren6">(<span class="code">values <i><span class="symbol">default</span></i> nil</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">CHECK-CONTENTS<span class="paren5">(<span class="code">index</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">target<span class="paren2">(<span class="code">svref vector index</span>)</span></span>)</span>
+          <span class="paren1">(<span class="code">elt <span class="paren2">(<span class="code">funcall key target</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren1">(<span class="code">funcall test item elt</span>)</span>
+        <span class="paren1">(<span class="code">values target index</span>)</span>
+        <span class="paren1">(<span class="code">REC elt index</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">REC<span class="paren5">(<span class="code">elt index</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">funcall compare item elt</span>)</span>
+          <span class="paren6">(<span class="code">setf end index</span>)</span>
+          <span class="paren6">(<span class="code">setf start index</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">multiple-value-call</span></i> #'ON-THE-NODE <span class="paren6">(<span class="code">floor <span class="paren1">(<span class="code">- end start</span>)</span>2</span>)</span></span>)</span></span>)</span>
+      </span>)</span>
+    <span class="paren3">(<span class="code">declare<span class="paren4">(<span class="code">inline REACHED-LEAF DETERMINE-RETURN-VALUE CHECK-CONTENTS REC</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">multiple-value-call</span></i> #'ON-THE-NODE <span class="paren4">(<span class="code">floor <span class="paren5">(<span class="code">- end start</span>)</span> 2</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>Bench</h2>
+
+<p>ベンチは以下のようにして取りました。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> vec<span class="paren2">(<span class="code">size</span>)</span>
+  <span class="paren2">(<span class="code">make-array size <span class="keyword">:initial-contents</span> <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:below</span> size <span class="keyword">:collect</span> i</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> bench<span class="paren2">(<span class="code">vector</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">size<span class="paren5">(<span class="code">length vector</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">print <span class="keyword">:find</span></span>)</span>
+    <span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10000</span>)</span>
+       <span class="paren5">(<span class="code">find <span class="paren6">(<span class="code">random size</span>)</span>vector</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">print <span class="keyword">:bsearch</span></span>)</span>
+    <span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10000</span>)</span>
+       <span class="paren5">(<span class="code">bsearch <span class="paren6">(<span class="code">random size</span>)</span>vector</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>CCLでは以下の通り。
+（重要なところのみ抽出してあります）</p>
+
+<pre><code><span class="code">? <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 10</span>)</span></span>)</span>
+:FIND
+took 5 milliseconds
+:BSEARCH
+took 30 milliseconds
+
+? <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 100</span>)</span></span>)</span>
+:FIND
+took 19 milliseconds
+:BSEARCH
+took 52 milliseconds
+
+? <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 1000</span>)</span></span>)</span>
+:FIND
+took 169 milliseconds
+:BSEARCH
+took 75 milliseconds
+
+? <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 10000</span>)</span></span>)</span>
+:FIND
+took 1,640 milliseconds
+:BSEARCH
+took 98 milliseconds</span></code></pre>
+
+<p>２分探索はそれ専用のオーバーヘッドを伴うので、要素数が少ないうちは線形探索のほうが速かったりもしますが、要素数が増えるに従い速度差に開きが出てきています。
+これは想定どおりの結果です。</p>
+
+<h2>SBCL</h2>
+
+<p>さて問題はSBCLです。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 10</span>)</span></span>)</span>
+:FIND
+0.001 seconds
+:BSEARCH
+0.008 seconds
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 100</span>)</span></span>)</span>
+:FIND
+0.002 seconds
+:BSEARCH
+0.008 seconds
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 1000</span>)</span></span>)</span>
+:FIND
+0.001 seconds
+:BSEARCH
+0.011 seconds
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 10000</span>)</span></span>)</span>
+:FIND
+0.002 seconds
+:BSEARCH
+0.014 seconds
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 100000</span>)</span></span>)</span>
+:FIND
+0.001 seconds
+:BSEARCH
+0.018 seconds
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 1000000</span>)</span></span>)</span>
+:FIND
+0.001 seconds
+:BSEARCH
+0.027 seconds</span></code></pre>
+
+<p>驚くべきことにどれだけ要素数を増やしても線形探索に敵いません。
+それどころかむしろ差が開いていく一方です。</p>
+
+<h2>Limitation</h2>
+
+<p>いろいろ試してみたところ、EQxxxファミリー以外の比較関数を指定したり、:keyパラメタを指定したりすると遅くなるようです。</p>
+
+<h3>Specifing :TEST</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> bench<span class="paren2">(<span class="code">vector</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">size<span class="paren5">(<span class="code">length vector</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">print <span class="keyword">:find</span></span>)</span>
+    <span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10000</span>)</span>
+       <span class="paren5">(<span class="code">find <span class="paren6">(<span class="code">random size</span>)</span>vector <span class="keyword">:test</span> #'=</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">print <span class="keyword">:bsearch</span></span>)</span>
+    <span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10000</span>)</span>
+       <span class="paren5">(<span class="code">bsearch <span class="paren6">(<span class="code">random size</span>)</span>vector <span class="keyword">:test</span> #'=</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 10</span>)</span></span>)</span>
+:FIND
+0.006 seconds
+:BSEARCH
+0.006 seconds
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 100</span>)</span></span>)</span>
+:FIND
+0.032 seconds
+:BSEARCH
+0.008 seconds
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 1000</span>)</span></span>)</span>
+:FIND
+0.291 seconds
+:BSEARCH
+0.018 seconds
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 10000</span>)</span></span>)</span>
+:FIND
+2.738 seconds
+:BSEARCH
+0.016 seconds</span></code></pre>
+
+<h3>Specifying :KEY.</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> bench<span class="paren2">(<span class="code">vector</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">size<span class="paren5">(<span class="code">length vector</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">print <span class="keyword">:find</span></span>)</span>
+    <span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10000</span>)</span>
+       <span class="paren5">(<span class="code">find <span class="paren6">(<span class="code">code-char<span class="paren1">(<span class="code">random size</span>)</span></span>)</span>vector <span class="keyword">:key</span> #'code-char</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">print <span class="keyword">:bsearch</span></span>)</span>
+    <span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10000</span>)</span>
+       <span class="paren5">(<span class="code">bsearch <span class="paren6">(<span class="code">code-char<span class="paren1">(<span class="code">random size</span>)</span></span>)</span>vector <span class="keyword">:key</span> #'code-char
+            <span class="keyword">:compare</span> #'char&lt;</span>)</span></span>)</span></span>)</span>
+    </span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 10</span>)</span></span>)</span>
+:FIND
+0.007 seconds
+:BSEARCH
+0.006 seconds
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 100</span>)</span></span>)</span>
+:FIND
+0.030 seconds
+:BSEARCH
+0.008 seconds
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 1000</span>)</span></span>)</span>
+:FIND
+0.283 seconds
+:BSEARCH
+0.011 seconds
+
+* <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 1000</span>)</span></span>)</span>
+:FIND
+1.858 seconds
+:BSEARCH
+0.007 seconds</span></code></pre>
+
+<h2>Conclusion</h2>
+
+<p>SBCLの列関数は謎に速い。
+SBCLのソースコードにまで潜り込んであれこれ見てみたのですが、なぜこんなに速くなるのか分からずじまいでした。</p>
+
+<p>これまで筆者はシーケンスが、例えば文字しか含まないというような場合、:TESTで<code>CHAR=</code>を指定するとかしてたんですが、SBCLに限って言えば速度面に於いてマイナスの効果が出てしまうものであるようです。</p>
+
+<h2>Appendix</h2>
+
+<p>いろいろ試している最中、ローカル関数を使っているのがいけないのでは？と思い、別バージョンも書いてみました。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> bsearch2<span class="paren2">(<span class="code">item vector &amp;key <span class="paren3">(<span class="code">key #'identity</span>)</span><span class="paren3">(<span class="code">test #'eql</span>)</span><span class="paren3">(<span class="code">start 0</span>)</span><span class="paren3">(<span class="code">end <span class="paren4">(<span class="code">length vector</span>)</span></span>)</span> <span class="paren3">(<span class="code">compare #'&lt;</span>)</span><span class="paren3">(<span class="code"><i><span class="symbol">default</span></i> nil</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">type fixnum start end</span>)</span>
+       <span class="paren3">(<span class="code">type <i><span class="symbol">function</span></i> key test compare</span>)</span>
+       <span class="paren3">(<span class="code">dynamic-extent key test compare</span>)</span>
+       <span class="paren3">(<span class="code">type simple-vector vector</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">assert<span class="paren3">(<span class="code">&lt;= 0 start end <span class="paren4">(<span class="code">length vector</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">prog<span class="paren3">(<span class="code">center % index target elt</span>)</span>
+    REC
+    <span class="paren3">(<span class="code">multiple-value-setq<span class="paren4">(<span class="code">center %</span>)</span><span class="paren4">(<span class="code">floor<span class="paren5">(<span class="code">- end start</span>)</span>2</span>)</span></span>)</span>
+    ON-THE-NODE
+    <span class="paren3">(<span class="code"><i><span class="symbol">setq</span></i> index <span class="paren4">(<span class="code">+ center start</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">zerop center</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">go</span></i> REACHED-LEAF</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">go</span></i> CHECK-CONTENTS</span>)</span></span>)</span>
+    REACHED-LEAF
+    <span class="paren3">(<span class="code">when<span class="paren4">(<span class="code">zerop %</span>)</span>
+      <span class="paren4">(<span class="code">incf index</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">setq</span></i> target <span class="paren4">(<span class="code">svref vector index</span>)</span>
+      elt <span class="paren4">(<span class="code">funcall key target</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren4">(<span class="code">funcall test item elt</span>)</span>
+      <span class="paren4">(<span class="code">return <span class="paren5">(<span class="code">values target index</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">return <span class="paren5">(<span class="code">values <i><span class="symbol">default</span></i> nil</span>)</span></span>)</span></span>)</span>
+    CHECK-CONTENTS
+    <span class="paren3">(<span class="code"><i><span class="symbol">setq</span></i> target<span class="paren4">(<span class="code">svref vector index</span>)</span>
+      elt<span class="paren4">(<span class="code">funcall key target</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren4">(<span class="code">funcall test item elt</span>)</span>
+      <span class="paren4">(<span class="code">return<span class="paren5">(<span class="code">values target index</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i>
+    <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">funcall compare item elt</span>)</span>
+      <span class="paren6">(<span class="code">setf end index</span>)</span>
+      <span class="paren6">(<span class="code">setf start index</span>)</span></span>)</span>
+    <span class="paren5">(<span class="code"><i><span class="symbol">go</span></i> REC</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>結論から言うと、SBCLでは関係ないようです。
+<code>INLINE</code>宣言が正しく機能しているようで、速度差は現れませんでした。</p>
+
+<p>しかし、CCLでは有効なようです。
+CCLはローカル関数の<code>INLINE</code>化をしないようで、以下のように速くなりました。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> bench<span class="paren2">(<span class="code">vector</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">size<span class="paren5">(<span class="code">length vector</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">print <span class="keyword">:find</span></span>)</span>
+    <span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10000</span>)</span>
+       <span class="paren5">(<span class="code">find <span class="paren6">(<span class="code">code-char<span class="paren1">(<span class="code">random size</span>)</span></span>)</span>vector <span class="keyword">:key</span> #'code-char</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">print <span class="keyword">:bsearch</span></span>)</span>
+    <span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10000</span>)</span>
+       <span class="paren5">(<span class="code">bsearch <span class="paren6">(<span class="code">code-char<span class="paren1">(<span class="code">random size</span>)</span></span>)</span>vector <span class="keyword">:key</span> #'code-char
+            <span class="keyword">:compare</span> #'char&lt;</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">print <span class="keyword">:bsearch2</span></span>)</span>
+    <span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10000</span>)</span>
+       <span class="paren5">(<span class="code">bsearch2 <span class="paren6">(<span class="code">code-char<span class="paren1">(<span class="code">random size</span>)</span></span>)</span>vector <span class="keyword">:key</span> #'code-char
+            <span class="keyword">:compare</span> #'char&lt;</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+? <span class="paren1">(<span class="code">bench<span class="paren2">(<span class="code">vec 100</span>)</span></span>)</span>
+:FIND
+took 33 milliseconds
+:BSEARCH
+took 55 milliseconds
+:BSEARCH2
+took 26 milliseconds</span></code></pre>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
