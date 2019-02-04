@@ -1,10 +1,12 @@
-# Sequencial saerch faster than binary search in SBCL
+# <del>Sequential search faster than binary search in SBCL</del><br>Hashtable faster than binary search in SBCL.
 ## Meta note
 ### 対象読者
-* Common Lisp Evangelist.
-* SBCL Evangelist.
+* <del>Common Lisp Evangelist.</del>
+* <del>SBCL Evangelist.</del>
+
 ## Introduction
-SBCLに於いて線形探索が２分探索より速かったというお話。
+<del>SBCLに於いて線形探索が２分探索より速かったというお話。</del>
+Hashtableを使った探索が二分探索より速かったというお話。
 
 ## Theory
 線形探索はO(n)で２分探索はO(log n)なので２分探索のほうが速いのは皆様ご承知の通り。
@@ -229,11 +231,98 @@ took 98 milliseconds
 0.007 seconds
 ```
 
-## Conclusion
-SBCLの列関数は謎に速い。
-SBCLのソースコードにまで潜り込んであれこれ見てみたのですが、なぜこんなに速くなるのか分からずじまいでした。
+## Python is wise.
+SBCL Evangelistの[prk](https://twitter.com/prk_2)さんから[情報をいただきました。](https://twitter.com/prk_2/status/1088966680196321282)
+ありがとうございました！
 
-これまで筆者はシーケンスが、例えば文字しか含まないというような場合、:TESTで`CHAR=`を指定するとかしてたんですが、SBCLに限って言えば速度面に於いてマイナスの効果が出てしまうものであるようです。
+> findは（flushableなので）デッドコードとして除去されていると思います。
+
+要するに`FIND`の返り値を使っていないので、Pythonが「これ、計算しなくてもよくね？」と考えてコードを捨ててしまっているということのようです。
+[こちらにあるように](https://gist.github.com/privet-kitty/ed3a9fd5d403a9f573bb25e765b72f7c)`FIND`の返り値を使うようにするとちゃんと計算してくれるようになります。
+
+`:KEY`や`:TEST`を指定すると計算されるようになるのは、与えられた関数に副作用があるかもしれず、デッドコードと判断できなくなるからではないかと思われます。
+
+なお、`FLUSHABLE`等の情報は`DESCRIBE`に尋ねれば教えてもらうことができます。
+
+## Hashtable
+さて、SBCLに於いて線形探索のほうが二分探索より速くなるという誤解は無事とけました。
+が、探索問題といえばハッシュテーブルを無視するわけにはいきません。
+以下のようにしてベンチを取り直してみました。
+
+```lisp
+(defun bench2(size)
+  (let((vector(make-array size :initial-contents(loop :for i :below size :collect i)))
+       (ht(make-hash-table))
+       (nums(loop :repeat 10000 :collect (random size))))
+    (map nil (lambda(x)(setf(gethash x ht) x))vector)
+    #+sbcl(sb-ext:gc :full t)
+    (print :find)
+    (time(print(loop :for elt :in nums :sum (find elt vector))))
+    #+sbcl(sb-ext:gc :full t)
+    (print :gethash)
+    (time(print(loop :for elt :in nums :sum (gethash elt ht))))
+    #+sbcl(sb-ext:gc :full t)
+    (print :bsearch)
+    (time(print(loop :for elt :in nums :sum (bsearch elt vector))))))
+
+* (bench2 100)
+
+:FIND
+494278
+0.023 seconds
+58,857,339 processor cycles
+
+:GETHASH
+494278
+0.002 seconds
+5,438,963 processor cycles
+
+:BSEARCH
+494278
+0.019 seconds
+43,818,473 processor cycles
+
+* (bench2 1000)
+
+:FIND
+5002223
+0.229 seconds
+578,312,184 processor cycles
+
+:GETHASH
+5002223
+0.003 seconds
+7,386,944 processor cycles
+
+:BSEARCH
+5002223
+0.010 seconds
+25,415,090 processor cycles
+
+* (bench2 10000)
+
+:FIND
+49536291
+2.144 seconds
+5,434,340,870 processor cycles
+
+:GETHASH
+49536291
+0.002 seconds
+3,484,944 processor cycles
+
+:BSEARCH
+49536291
+0.006 seconds
+16,313,313 processor cycles
+```
+SIZEを大きくするに従って`FIND`が遅くなっていくのは期待通りですが、ハッシュテーブルの速さが際立っています。
+
+## Conclusion
+Common Lispに於いて二分探索のユーティリティが見当たらないのはハッシュテーブルが充分速いからとみて良さそうです。
+`:KEY`や`:TEST`を柔軟に指定できるので二分探索に存在意義がないわけではないのですが、`'(#\newline #\return #\linefeed #\tab #\space)`にマッチするかの述語`WHITE-CHAR-P`みたいなのを作る場合はハッシュテーブルで実装したほうが良さそうです。
+
+素人が正しい手順でとった出汁より、市販の出汁の素のほうが美味いというような結果になってしまいましたね。
 
 ## Appendix
 いろいろ試している最中、ローカル関数を使っているのがいけないのでは？と思い、別バージョンも書いてみました。

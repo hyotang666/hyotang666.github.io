@@ -9,19 +9,21 @@
     <meta name='generator' content='pages' />
 <link rel='stylesheet' href='../css/css.css' type='text/css' />
   </head>
-<body><h1>Sequencial saerch faster than binary search in SBCL</h1>
+<body><h1><del>Sequential search faster than binary search in SBCL</del><br>Hashtable faster than binary search in SBCL.</h1>
 
 <h2>Meta note</h2>
 
 <h3>対象読者</h3>
 
 <ul>
-<li>Common Lisp Evangelist.</li>
-<li><p>SBCL Evangelist.</p>
+<li><del>Common Lisp Evangelist.</del></li>
+<li><del>SBCL Evangelist.</del></li>
+</ul>
 
 <h2>Introduction</h2>
-SBCLに於いて線形探索が２分探索より速かったというお話。</li>
-</ul>
+
+<p><del>SBCLに於いて線形探索が２分探索より速かったというお話。</del>
+Hashtableを使った探索が二分探索より速かったというお話。</p>
 
 <h2>Theory</h2>
 
@@ -242,12 +244,102 @@ took 98 milliseconds</span></code></pre>
 :BSEARCH
 0.007 seconds</span></code></pre>
 
+<h2>Python is wise.</h2>
+
+<p>SBCL Evangelistの<a href="https://twitter.com/prk_2" >prk</a>さんから<a href="https://twitter.com/prk_2/status/1088966680196321282" >情報をいただきました。</a>
+ありがとうございました！</p>
+
+<blockquote>
+<p>findは（flushableなので）デッドコードとして除去されていると思います。</p>
+</blockquote>
+
+<p>要するに<code>FIND</code>の返り値を使っていないので、Pythonが「これ、計算しなくてもよくね？」と考えてコードを捨ててしまっているということのようです。
+<a href="https://gist.github.com/privet-kitty/ed3a9fd5d403a9f573bb25e765b72f7c" >こちらにあるように</a><code>FIND</code>の返り値を使うようにするとちゃんと計算してくれるようになります。</p>
+
+<p><code>:KEY</code>や<code>:TEST</code>を指定すると計算されるようになるのは、与えられた関数に副作用があるかもしれず、デッドコードと判断できなくなるからではないかと思われます。</p>
+
+<p>なお、<code>FLUSHABLE</code>等の情報は<code>DESCRIBE</code>に尋ねれば教えてもらうことができます。</p>
+
+<h2>Hashtable</h2>
+
+<p>さて、SBCLに於いて線形探索のほうが二分探索より速くなるという誤解は無事とけました。
+が、探索問題といえばハッシュテーブルを無視するわけにはいきません。
+以下のようにしてベンチを取り直してみました。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> bench2<span class="paren2">(<span class="code">size</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">vector<span class="paren5">(<span class="code">make-array size <span class="keyword">:initial-contents</span><span class="paren6">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:below</span> size <span class="keyword">:collect</span> i</span>)</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">ht<span class="paren5">(<span class="code">make-hash-table</span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">nums<span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:repeat</span> 10000 <span class="keyword">:collect</span> <span class="paren6">(<span class="code">random size</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">map nil <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">x</span>)</span><span class="paren5">(<span class="code">setf<span class="paren6">(<span class="code">gethash x ht</span>)</span> x</span>)</span></span>)</span>vector</span>)</span>
+    #+sbcl<span class="paren3">(<span class="code">sb-ext:gc <span class="keyword">:full</span> t</span>)</span>
+    <span class="paren3">(<span class="code">print <span class="keyword">:find</span></span>)</span>
+    <span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">print<span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> elt <span class="keyword">:in</span> nums <span class="keyword">:sum</span> <span class="paren6">(<span class="code">find elt vector</span>)</span></span>)</span></span>)</span></span>)</span>
+    #+sbcl<span class="paren3">(<span class="code">sb-ext:gc <span class="keyword">:full</span> t</span>)</span>
+    <span class="paren3">(<span class="code">print <span class="keyword">:gethash</span></span>)</span>
+    <span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">print<span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> elt <span class="keyword">:in</span> nums <span class="keyword">:sum</span> <span class="paren6">(<span class="code">gethash elt ht</span>)</span></span>)</span></span>)</span></span>)</span>
+    #+sbcl<span class="paren3">(<span class="code">sb-ext:gc <span class="keyword">:full</span> t</span>)</span>
+    <span class="paren3">(<span class="code">print <span class="keyword">:bsearch</span></span>)</span>
+    <span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">print<span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> elt <span class="keyword">:in</span> nums <span class="keyword">:sum</span> <span class="paren6">(<span class="code">bsearch elt vector</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">bench2 100</span>)</span>
+
+:FIND
+494278
+0.023 seconds
+58,857,339 processor cycles
+
+:GETHASH
+494278
+0.002 seconds
+5,438,963 processor cycles
+
+:BSEARCH
+494278
+0.019 seconds
+43,818,473 processor cycles
+
+* <span class="paren1">(<span class="code">bench2 1000</span>)</span>
+
+:FIND
+5002223
+0.229 seconds
+578,312,184 processor cycles
+
+:GETHASH
+5002223
+0.003 seconds
+7,386,944 processor cycles
+
+:BSEARCH
+5002223
+0.010 seconds
+25,415,090 processor cycles
+
+* <span class="paren1">(<span class="code">bench2 10000</span>)</span>
+
+:FIND
+49536291
+2.144 seconds
+5,434,340,870 processor cycles
+
+:GETHASH
+49536291
+0.002 seconds
+3,484,944 processor cycles
+
+:BSEARCH
+49536291
+0.006 seconds
+16,313,313 processor cycles</span></code></pre>
+
+<p>SIZEを大きくするに従って<code>FIND</code>が遅くなっていくのは期待通りですが、ハッシュテーブルの速さが際立っています。</p>
+
 <h2>Conclusion</h2>
 
-<p>SBCLの列関数は謎に速い。
-SBCLのソースコードにまで潜り込んであれこれ見てみたのですが、なぜこんなに速くなるのか分からずじまいでした。</p>
+<p>Common Lispに於いて二分探索のユーティリティが見当たらないのはハッシュテーブルが充分速いからとみて良さそうです。
+<code>:KEY</code>や<code>:TEST</code>を柔軟に指定できるので二分探索に存在意義がないわけではないのですが、<code>'(#\newline #\return #\linefeed #\tab #\space)</code>にマッチするかの述語<code>WHITE-CHAR-P</code>みたいなのを作る場合はハッシュテーブルで実装したほうが良さそうです。</p>
 
-<p>これまで筆者はシーケンスが、例えば文字しか含まないというような場合、:TESTで<code>CHAR=</code>を指定するとかしてたんですが、SBCLに限って言えば速度面に於いてマイナスの効果が出てしまうものであるようです。</p>
+<p>素人が正しい手順でとった出汁より、市販の出汁の素のほうが美味いというような結果になってしまいましたね。</p>
 
 <h2>Appendix</h2>
 
