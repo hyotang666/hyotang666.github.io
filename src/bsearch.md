@@ -3,6 +3,7 @@
 ### 対象読者
 * <del>Common Lisp Evangelist.</del>
 * <del>SBCL Evangelist.</del>
+* 最適化に力をいれたいCLer
 
 ## Introduction
 <del>SBCLに於いて線形探索が２分探索より速かったというお話。</del>
