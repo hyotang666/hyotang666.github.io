@@ -1,0 +1,398 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>warn-in-cl
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>warnの出力抑制はどうやって実現しているのか</h1>
+
+<h2>Introduction</h2>
+
+<p><a href="http://nptcl.hatenablog.com/entry/2019/03/24/101432" >このような記事</a>を目にしたのですが、いろいろと 勘違いなさっているご様子なので僕自身の言葉で解説をしてみようと思う。</p>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Common Lisp に於いて警告の出力抑制がどのように実現されているか興味のあるかた。</li>
+</ul>
+
+<p>初心者CLerは学習に、中級CLerは復習に、ベテランCLerと非CLerはひやかしに見ていただければ幸い。</p>
+
+<h2>Three features of condition system.</h2>
+
+<p>Common Lispのコンディションシステムは大別して３つのパーツからなる。
+各々「シグナラ」、「ハンドラ」、「リスタート」である。
+<code>CL:WARN</code>はシグナラとリスタートの上に実装されている。
+そしてコンディションがシグナルされたときにどのように制御するかを担っているのがハンドラである。</p>
+
+<h2>Typical implementation of CL:SIGNAL</h2>
+
+<p>最も原始的なシグナラ関数は<code>CL:SIGNAL</code>である。
+<code>CL:SIGNAL</code>の仕事は以下の４つである。</p>
+
+<ol>
+<li>コンディションオブジェクトを作る。</li>
+<li>コンディションが<code>*BREAK-ON-SIGNALS*</code>に登録されているならデバッガに入る。</li>
+<li>環境オブジェクトに問い合わせ、対応ハンドラを片っ端からコールして回る。</li>
+<li><code>NIL</code>を返りす。</li>
+</ol>
+
+<p>典型的な実装は以下のようなものになるだろう。
+なお、環境オブジェクトは言語仕様に含まれておらず処理系依存となる。
+ここでは簡便のためにスペシャル変数に連想リストで実装することとする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*handlers*</span> nil</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> %signal<span class="paren2">(<span class="code">datum &amp;rest args</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">condition<span class="paren5">(<span class="code">etypecase datum
+                    <span class="paren6">(<span class="code">condition datum</span>)</span>
+                    <span class="paren6">(<span class="code">string <span class="paren1">(<span class="code">make-condition 'simple-condition
+                                            <span class="keyword">:format-control</span> datum
+                                            <span class="keyword">:format-arguments</span> args</span>)</span></span>)</span>
+                    <span class="paren6">(<span class="code">symbol <span class="paren1">(<span class="code">apply #'make-condition datum args</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">find condition <span class="special">*break-on-signals*</span> <span class="keyword">:test</span> #'typep</span>)</span>
+      <span class="paren4">(<span class="code">invoke-debugger condition</span>)</span>
+      <span class="paren4">(<span class="code">dolist<span class="paren5">(<span class="code">handler <span class="special">*handlers*</span></span>)</span>
+        <span class="paren5">(<span class="code">when<span class="paren6">(<span class="code">typep condition <span class="paren1">(<span class="code">car handler</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">funcall <span class="paren1">(<span class="code">cadr handler</span>)</span>
+                   condition</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;; REPL
+</span>* <span class="paren1">(<span class="code">%signal 'error</span>)</span>
+NIL</span></code></pre>
+
+<h2>Simple implementation of CL:HANDLER-BIND</h2>
+
+<p>ハンドラをコンディションに紐づけて登録する責はマクロ<code>CL:HANDLER-BIND</code>が担う。
+その仕事は主に以下の2つである。</p>
+
+<ol>
+<li>コンディション名とハンドラ関数を紐付ける形で環境オブジェクトを拡張する。</li>
+<li>本体を評価する。</li>
+</ol>
+
+<p>効率度外視でいい加減に実装するなら<code>HANDLER-BIND</code>は以下のようなものになるかもしれない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> %handler-bind<span class="paren2">(<span class="code">handlers &amp;rest body</span>)</span>
+  `<span class="paren2">(<span class="code">call-with-handlers <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code"></span>)</span>,@body</span>)</span>
+                       <span class="paren3">(<span class="code">list ,@<span class="paren4">(<span class="code">nreverse <span class="paren5">(<span class="code">mapcar <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren1">(<span class="code">handler</span>)</span>
+                                                   `<span class="paren1">(<span class="code">list ',<span class="paren2">(<span class="code">car handler</span>)</span>
+                                                          ,<span class="paren2">(<span class="code">cadr handler</span>)</span></span>)</span></span>)</span>
+                                                 handlers</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> call-with-handlers<span class="paren2">(<span class="code">body handlers</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">handlers &amp;optional<span class="paren6">(<span class="code"><span class="special">*handlers*</span> <span class="special">*handlers*</span></span>)</span></span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp handlers</span>)</span>
+              <span class="paren6">(<span class="code">funcall body</span>)</span>
+              <span class="paren6">(<span class="code">rec <span class="paren1">(<span class="code">cdr handlers</span>)</span><span class="paren1">(<span class="code">cons <span class="paren2">(<span class="code">car handlers</span>)</span>
+                                       <span class="special">*handlers*</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">rec handlers</span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;; REPL
+</span>* <span class="paren1">(<span class="code">%handler-bind<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">warning #'print</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">%signal 'warning</span>)</span></span>)</span>
+
+#&lt;WARNING {*******}&gt;  <span class="comment">; &lt;--- side effect of print.
+</span>NIL                   <span class="comment">; &lt;--- return value of %signal.</span></span></code></pre>
+
+<p>上記コード例では<code>SIGNAL</code>が<code>WARNING</code>を発する。
+環境には<code>HANDLER-BIND</code>により<code>WARNING</code>にハンドラが束縛されている。
+この場合ハンドラは<code>PRINT</code>。
+よって<code>PRINT</code>にコンディションオブジェクトを渡す形で呼び出している。
+<code>PRINT</code>関数はプログラムフローを制御しないので<code>SIGNAL</code>はその処理を終え<code>NIL</code>を返す。</p>
+
+<p>プログラムフローを制御する場合は、例えば以下のようになる。</p>
+
+<pre><code><span class="code"><span class="comment">;; RPEL
+</span>* <span class="paren1">(<span class="code"><i><span class="symbol">block</span></i><span class="paren2">(<span class="code"></span>)</span>
+    <span class="paren2">(<span class="code">%handler-bind<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">warning <span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren6">(<span class="code">c</span>)</span>
+                              <span class="paren6">(<span class="code">declare<span class="paren1">(<span class="code">ignore c</span>)</span></span>)</span>
+                              <span class="paren6">(<span class="code">return 1</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren3">(<span class="code">%signal 'warning</span>)</span></span>)</span></span>)</span>
+1</span></code></pre>
+
+<h2>Typical implementation of CL:WARN.</h2>
+
+<p><code>CL:WARN</code>の仕事は以下の5つである。</p>
+
+<ol>
+<li>コンディションオブジェクトを作る。</li>
+<li>リスタートのためのコンテクストを構築する。</li>
+<li>シグナルを発する。</li>
+<li>警告文を出力する。</li>
+<li><code>NIL</code>を返す。</li>
+</ol>
+
+<p>実装は以下のようなものになるだろう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> %warn <span class="paren2">(<span class="code">datum &amp;rest args</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">condition<span class="paren5">(<span class="code">etypecase datum
+                   <span class="paren6">(<span class="code">condition datum</span>)</span>
+                   <span class="paren6">(<span class="code">string <span class="paren1">(<span class="code">make-condition 'simple-warning
+                                           <span class="keyword">:format-control</span> datum
+                                           <span class="keyword">:format-arguments</span> args</span>)</span></span>)</span>
+                   <span class="paren6">(<span class="code">symbol <span class="paren1">(<span class="code">apply #'make-condition datum args</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">restart-case<span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren5">(<span class="code">%signal condition</span>)</span>
+                        <span class="paren5">(<span class="code">format <span class="special">*error-output*</span> <span class="string">"~&amp;;; WARNING: ~A~%"</span> condition</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">muffle-warning<span class="paren5">(<span class="code"></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;; REPL
+</span>* <span class="paren1">(<span class="code">%warn <span class="string">"test"</span></span>)</span>
+<span class="comment">;; WARNING: test                  ; &lt;--- side effect
+</span>NIL                               <span class="comment">; &lt;--- return value of %warn
+</span>
+* <span class="paren1">(<span class="code">%handler-bind<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">warning <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">c</span>)</span>
+                            <span class="paren5">(<span class="code">print c <span class="special">*error-output*</span></span>)</span>
+                            <span class="paren5">(<span class="code">force-output <span class="special">*error-output*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">%warn <span class="string">"test"</span></span>)</span></span>)</span>
+
+#&lt;SIMPLE-WARNING "test" {******}&gt; <span class="comment">; &lt;--- side effect of handler.
+</span><span class="comment">;; WARNING: test                  ; &lt;--- side effect of %warn.
+</span>NIL                               <span class="comment">; &lt;--- return value of %warn.
+</span>
+* <span class="paren1">(<span class="code">%handler-bind<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">warning #'muffle-warning</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">%warn <span class="string">"test"</span></span>)</span></span>)</span>
+NIL                               <span class="comment">; &lt;--- no side effect.</span></span></code></pre>
+
+<p>元記事の作者さんが勘違いしているらしいことの一つは、出力はハンドラで行うという点だ。
+（仕様をちゃんと把握した上で何らかの都合で敢えてこのような実装にしてあるのかどうか文面からは読み取れなかった。）
+<code>CL:WARN</code>は警告を行うが、元記事の<code>WARN!</code>は警告を行わない。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">cl:warn <span class="string">"test"</span></span>)</span>
+WARNING: test       <span class="comment">; &lt;--- side effect.
+</span>NIL                 <span class="comment">; &lt;--- return value.
+</span>
+* <span class="paren1">(<span class="code">warn! <span class="string">"test"</span></span>)</span>
+NIL                 <span class="comment">; &lt;--- no side effect, just return NIL.</span></span></code></pre>
+
+<p><code>CL:WARN</code>が行う出力は<code>CL:WARN</code>自身が提供するリスタートにより抑制される。
+リスタートの名前は<code>muffle-warning</code>といい、同名の関数も提供されている。</p>
+
+<p>すなわち警告出力の抑制を行っているのはリスタート機構である。</p>
+
+<h2>Restart</h2>
+
+<p>リスタートとは誤解を恐れずに大胆に言ってしまうなら、デバッガへのオプション指定機能であり、デバッガからの復帰エントリポイントの提供機構である。</p>
+
+<p>もっともシンプルな使い方は以下のようなものとなる。</p>
+
+<pre><code><span class="code"><span class="comment">;; REPL (case in SBCL)
+</span>* <span class="paren1">(<span class="code">restart-case<span class="paren2">(<span class="code">error <span class="string">"error"</span></span>)</span>
+    <span class="paren2">(<span class="code">test<span class="paren3">(<span class="code"></span>)</span><span class="keyword">:test</span></span>)</span></span>)</span>
+
+debugger invoked on a SIMPLE-ERROR in thread
+#&lt;THREAD "main thread" RUNNING {982EF329}&gt;:
+  error
+
+Type HELP for debugger help, or <span class="paren1">(<span class="code">SB-EXT:EXIT</span>)</span> to exit from SBCL.
+
+restarts <span class="paren1">(<span class="code">invokable by number or by possibly-abbreviated name</span>)</span>:
+  0: [TEST ] TEST
+  1: [ABORT] Exit debugger, returning to top level.
+
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><i><span class="symbol">LAMBDA</span></i> <span class="paren3">(<span class="code"></span>)</span></span>)</span></span>)</span>
+   source: <span class="paren1">(<span class="code"><i><span class="symbol">SB-KERNEL:WITH-SIMPLE-CONDITION-RESTARTS</span></i> 'ERROR NIL <span class="string">"error"</span></span>)</span>
+0] 0
+:TEST
+*</span></code></pre>
+
+<p>上記コード例では、関数<code>CL:ERROR</code>によりデバッガが起動され、デバッガにより動的なリスタートオプションが明示され、ユーザがオプションを指定することでエントリポイントに復帰している。</p>
+
+<p>このオプションはユーザからの指定のみならず、プログラムから自動的に指定することもできる。
+そのためにはハンドラを利用する。</p>
+
+<pre><code><span class="code"><span class="comment">;; REPL
+</span>* <span class="paren1">(<span class="code">handler-bind<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">error <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">c</span>)</span>
+                         <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">restart<span class="paren2">(<span class="code">find-restart 'test c</span>)</span></span>)</span></span>)</span>
+                           <span class="paren6">(<span class="code">when restart
+                             <span class="paren1">(<span class="code">invoke-restart restart</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">restart-case<span class="paren3">(<span class="code">error <span class="string">"test"</span></span>)</span>
+      <span class="paren3">(<span class="code">test <span class="paren4">(<span class="code"></span>)</span> <span class="keyword">:test</span></span>)</span></span>)</span></span>)</span>
+:TEST</span></code></pre>
+
+<p>上記例ではハンドラがリスタートをinvokeすることによりユーザの手を煩わせることなく自動的にリスタートを選択してみせている。</p>
+
+<p>警告の抑制もこれにより行われている。
+では肝心のリスタートの実装がどうなっているのか見ていこう。</p>
+
+<h2>Simple implementation of restart system.</h2>
+
+<h3>restart object</h3>
+
+<p>リスタートオブジェクトの実装については処理系依存となっている。
+言語仕様により唯一要求されていることは<code>CL:RESTART-NAME</code>が名前（シンボル）を返さなければならないということのみだ。</p>
+
+<p>ここでは簡便のためにサブセットを実装することとする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defstruct</span></i> %restart name <i><span class="symbol">function</span></i></span>)</span></span></code></pre>
+
+<h3>restart-bind</h3>
+
+<p>リスタートの登録はマクロ<code>CL:RESTART-BIND</code>が責を担う。
+環境オブジェクトは処理系依存となるので、ここでは<code>HANDLER-BIND</code>と同様にスペシャル変数を用意して対応することとする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*restarts*</span> nil</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> %restart-bind<span class="paren2">(<span class="code">restarts &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code">call-with-restarts <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code"></span>)</span>,@body</span>)</span>
+                       <span class="paren3">(<span class="code">list ,@<span class="paren4">(<span class="code">mapcar <span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren6">(<span class="code">restart</span>)</span>
+                                         `<span class="paren6">(<span class="code">make-%restart <span class="keyword">:name</span> ',<span class="paren1">(<span class="code">car restart</span>)</span>
+                                                         <span class="keyword">:function</span> ,<span class="paren1">(<span class="code">cadr restart</span>)</span></span>)</span></span>)</span>
+                                       <span class="paren5">(<span class="code">reverse restarts</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> call-with-restarts<span class="paren2">(<span class="code">body restarts</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">restarts &amp;optional <span class="paren6">(<span class="code"><span class="special">*restarts*</span> <span class="special">*restarts*</span></span>)</span></span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp restarts</span>)</span>
+              <span class="paren6">(<span class="code">funcall body</span>)</span>
+              <span class="paren6">(<span class="code">rec <span class="paren1">(<span class="code">cdr restarts</span>)</span> <span class="paren1">(<span class="code">cons <span class="paren2">(<span class="code">car restarts</span>)</span> <span class="special">*restarts*</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">rec restarts</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>restart-case</h3>
+
+<p><code>RESTART-BIND</code>はリスタートの登録を行うだけで、エントリポイントの提供は行わない。
+どういう意味かというと、デバッガから呼ばれてもデバッガに留まり続けるという意味である。</p>
+
+<pre><code><span class="code"><span class="comment">;; REPL
+</span>* <span class="paren1">(<span class="code">restart-bind<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">test<span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code"></span>)</span>
+                        <span class="paren5">(<span class="code">print <span class="keyword">:test</span> <span class="special">*debug-io*</span></span>)</span>
+                        <span class="paren5">(<span class="code">force-output <span class="special">*debug-io*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">invoke-debugger <span class="paren3">(<span class="code">make-condition 'error</span>)</span></span>)</span></span>)</span>
+
+1: [TEST ] TEST
+0: [ABORT] Exit debugger, returning to top level.
+
+0] 0
+
+:TEST
+0] 0
+
+:TEST
+0] 1
+*</span></code></pre>
+
+<p>エントリポイントの提供は<code>CL:RESTART-CASE</code>が担う。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> %restart-case<span class="paren2">(<span class="code">form &amp;rest clauses</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">tag<span class="paren5">(<span class="code">gensym <span class="string">"RESTART-BLOCK"</span></span>)</span></span>)</span></span>)</span>
+    `<span class="paren3">(<span class="code"><i><span class="symbol">block</span></i> ,tag
+            <span class="paren4">(<span class="code"><i><span class="symbol">tagbody</span></i>
+              <span class="paren5">(<span class="code">%restart-bind,<span class="paren6">(<span class="code">mapcar<span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren2">(<span class="code">clause</span>)</span>
+                                      `<span class="paren2">(<span class="code">,<span class="paren3">(<span class="code">car clause</span>)</span>
+                                         <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code"></span>)</span><span class="paren4">(<span class="code"><i><span class="symbol">go</span></i> ,<span class="paren5">(<span class="code">car clause</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                               clauses</span>)</span>
+                <span class="paren6">(<span class="code"><i><span class="symbol">return-from</span></i> ,tag ,form</span>)</span></span>)</span>
+              ,@<span class="paren5">(<span class="code">mapcan <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren1">(<span class="code">clause</span>)</span>
+                          `<span class="paren1">(<span class="code">,<span class="paren2">(<span class="code">car clause</span>)</span><span class="paren2">(<span class="code"><i><span class="symbol">return-from</span></i> ,tag
+                                                      <span class="paren3">(<span class="code">funcall <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i>,@<span class="paren5">(<span class="code">cdr clause</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                        clauses</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>find-restart</h3>
+
+<p>リスタートを環境から探してくるのは<code>CL:FIND-RESTART</code>の責である。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> %find-restart<span class="paren2">(<span class="code">name condition</span>)</span>
+  <span class="paren2">(<span class="code">declare<span class="paren3">(<span class="code">ignore condition</span>)</span></span>)</span> <span class="comment">; because this is subset.
+</span>  <span class="paren2">(<span class="code">find name <span class="special">*restarts*</span> <span class="keyword">:key</span> #'%restart-name</span>)</span></span>)</span></span></code></pre>
+
+<h3>invoke-restart</h3>
+
+<p>リスタート時の処理を呼び出すのは<code>CL:INVOKE-RESTART</code>の責である。</p>
+
+<p>本来ならユーザからの入力を受け付ける<code>CL:INVOKE-RESTART-INTERACTIVELY</code>もあるのだが、ここでは簡便のためサポートしない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> %invoke-restart<span class="paren2">(<span class="code">restart</span>)</span>
+  <span class="paren2">(<span class="code">funcall <span class="paren3">(<span class="code">%restart-function restart</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>compute-restarts</h3>
+
+<p>現在有効なリスタートをリストアップするのは<code>CL:COMPUTE-RESTARTS</code>の責である。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> %compute-restarts<span class="paren2">(<span class="code">&amp;optional condition</span>)</span>
+  <span class="paren2">(<span class="code">declare<span class="paren3">(<span class="code">ignore condition</span>)</span></span>)</span> <span class="comment">; because this is subset.
+</span>  <span class="special">*restarts*</span></span>)</span></span></code></pre>
+
+<h3>invoke-debugger</h3>
+
+<p>デバッガを呼び出すのは<code>CL:INVOKE-DEBUGGER</code>の責である。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> %abort<span class="paren2">(<span class="code">condition</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">restart<span class="paren5">(<span class="code">%find-restart '%abort condition</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> restart
+      <span class="paren4">(<span class="code">%invoke-restart restart</span>)</span>
+      <span class="paren4">(<span class="code">error 'program-error</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> %invoke-debugger<span class="paren2">(<span class="code">condition</span>)</span>
+  <span class="paren2">(<span class="code">%restart-case
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">restarts <span class="paren6">(<span class="code">%compute-restarts condition</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+            <span class="keyword">:for</span> restart <span class="keyword">:in</span> restarts
+            <span class="keyword">:do</span> <span class="paren5">(<span class="code">format <span class="special">*debug-io*</span> <span class="string">"~&amp;~D: [~A]"</span> i <span class="paren6">(<span class="code">%restart-name restart</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="paren5">(<span class="code">format <span class="special">*debug-io*</span> <span class="string">"~%&gt; "</span></span>)</span>
+            <span class="paren5">(<span class="code">force-output <span class="special">*debug-io*</span></span>)</span>
+            <span class="paren5">(<span class="code">print <span class="paren6">(<span class="code">debugger-eval <span class="paren1">(<span class="code">read <span class="special">*debug-io*</span></span>)</span>
+                                  restarts</span>)</span>
+                   <span class="special">*debug-io*</span></span>)</span>
+            <span class="paren5">(<span class="code">force-output <span class="special">*debug-io*</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">%abort<span class="paren4">(<span class="code"></span>)</span><span class="paren4">(<span class="code">values</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> debugger-eval<span class="paren2">(<span class="code">form restarts</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">value<span class="paren5">(<span class="code">eval form</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">restart<span class="paren5">(<span class="code">and <span class="paren6">(<span class="code">typep value '<span class="paren1">(<span class="code">integer 0 *</span>)</span></span>)</span>
+                     <span class="paren6">(<span class="code">nth value restarts</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> restart
+      <span class="paren4">(<span class="code">%invoke-restart restart</span>)</span>
+      value</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これでリスタート機構は完成である。
+このリスタート機構に合わせた<code>MUFFLE-WARNING</code>も作って、<code>WARN</code>もそれに合わせて修正しよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> %muffle-warning<span class="paren2">(<span class="code">condition</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">restart<span class="paren5">(<span class="code">%find-restart '%muffle-warning condition</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> restart
+      <span class="paren4">(<span class="code">%invoke-restart restart</span>)</span>
+      <span class="paren4">(<span class="code">error 'program-error</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> %warn <span class="paren2">(<span class="code">datum &amp;rest args</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">condition<span class="paren5">(<span class="code">etypecase datum
+                   <span class="paren6">(<span class="code">condition datum</span>)</span>
+                   <span class="paren6">(<span class="code">string <span class="paren1">(<span class="code">make-condition 'simple-warning
+                                           <span class="keyword">:format-control</span> datum
+                                           <span class="keyword">:format-arguments</span> args</span>)</span></span>)</span>
+                   <span class="paren6">(<span class="code">symbol <span class="paren1">(<span class="code">apply #'make-condition datum args</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">%restart-case<span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren5">(<span class="code">%signal condition</span>)</span>
+                         <span class="paren5">(<span class="code">format <span class="special">*error-output*</span> <span class="string">"~&amp;;; WARNING: ~A~%"</span> condition</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">%muffle-warning<span class="paren5">(<span class="code"></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;; REPL
+</span>* <span class="paren1">(<span class="code">%warn <span class="string">"test"</span></span>)</span>
+<span class="comment">;; WARNING: test
+</span>NIL
+
+* <span class="paren1">(<span class="code">%handler-bind<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">warning #'%muffle-warning</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">%warn <span class="string">"test"</span></span>)</span></span>)</span>
+NIL</span></code></pre>
+
+<h2>Conclusion</h2>
+
+<p>駆け足で見てきたが、これがCommon Lispにおいて警告の出力を抑制する機能のあらましである。
+キモはリスタート機構であることが分かるかと思う。
+リスタート機構は初心者にとっては謎の機能なのだが、見てきたとおり、サブセットだからなおのことだが、さほど大きくもなく複雑でもない。</p>
+
+<p>ある程度実践的なものを作ろうとすると、コンディションシステムは使い倒すことになるのだが、解説は乏しい。
+翻訳されている書籍のなかでは唯一実践Common Lispのみがコンディションシステムについて詳しく触れてくれている。
+あとはCLtL2くらいしか無い。
+本稿がCommon Lispコンディションシステムについての理解の一助となれば幸い。</p>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
