@@ -1,0 +1,164 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>caveman.1
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>Caveman kills ruby on rails - Chapter 1</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>他人の環境に興味のあるCLer</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p>本稿は<a href="https://book.impress.co.jp/books/1117101135" >原著</a>の各章をCommon Lispに翻訳するシリーズの第一章である。
+本章では開発環境構築とcavemanの簡単な導入紹介を行う。</p>
+
+<h2>Cavemanの概要</h2>
+
+<h3>Cavemanとは</h3>
+
+<p>Common Lisp製のWebアプリケーション用フレームワークである。</p>
+
+<h2>Caveman開発環境の構築</h2>
+
+<h3>OS</h3>
+
+<p>筆者のお気に入りのDAW(<a href="https://www.magix.com/us/music/samplitude/" >samplitude</a>)はwindowsしかサポートしてないので、OSはwindowsである。</p>
+
+<h3>IDE</h3>
+
+<p>windows最強のIDEは<a href="https://www.vmware.com/products/workstation-player.html" >VMware</a>である（次点で<a href="https://www.virtualbox.org/" >VirtualBox</a>）。
+筆者はこれに<a href="https://lubuntu.net/" >lubuntu</a>というプラグインを入れて使っている。</p>
+
+<h3>roswell</h3>
+
+<p>処理系の管理に<a href="https://github.com/roswell/roswell" >roswell</a>を使用する。
+インストール方法は<a href="https://github.com/roswell/roswell/wiki/Installation" >ここ</a>を参照。
+lubuntuで<code>ros setup</code>を行うと<a href="https://github.com/roswell/roswell/issues/351" >エラーを吐く</a>がインストール自体は無事終わっているらしく（おそらくは）問題ない。</p>
+
+<h3>Editor</h3>
+
+<p>筆者は<a href="https://www.vim.org/" >vim</a>を愛用している。
+vimとLisp処理系との連携には<a href="https://github.com/l04m33/vlime" >vlime</a>がある。
+が、筆者はより原始的な方法を取っている。
+<a href="https://github.com/tmux/tmux/wiki" >tmux</a>で端末画面を分割し、<a href="https://github.com/hanslub42/rlwrap" >rlwrap</a>で処理系を直接バチバチ叩くというものだ。</p>
+
+<pre><code>rlwrap -m ros run</code></pre>
+
+<p>これでカーソルキーによる、入力のヒストリ参照ができる。
+複雑なコマンドの入力には不向きかもしれないが、Ctl+^でEditorが立ち上がるので、それでなんとかする。</p>
+
+<p>このアプローチのメリットは複雑な操作を覚える必要がないことだ。
+デメリットは処理系を直接叩いていることだ。
+すなわちリモートの処理系にアクセスするというのができない。
+その必要がでてきたなら、vlimeなり<a href="https://github.com/cxxxr/lem" >lem</a>なりを覚えようかと思う。</p>
+
+<h3>caveman</h3>
+
+<p>REPLを立ち上げたら<a href="http://8arrow.org/caveman/" >caveman</a>をインストールする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ql:quickload <span class="keyword">:caveman2</span></span>)</span></span></code></pre>
+
+<h2>アプリケーションの新規作成</h2>
+
+<p>以下のコマンドでプロジェクトスケルトンを作る。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">caveman2:make-project #P<span class="string">"~/roswell/local-projects/your-app"</span> <span class="keyword">:author</span> <span class="string">"Your Name"</span></span>)</span></span></code></pre>
+
+<p>your-appにはお好きな名前をどうぞ。
+本シリーズではyou-appで通す。
+パスも任意の作りたいところで大丈夫。
+ここでは&ldquo;~/.roswell/local-projects/&rdquo;に作ることとする。</p>
+
+<h2>Cavemanを動かしてみよう。</h2>
+
+<p>アプリケーションはスケルトンが作られただけなので、REPLにロードする必要がある。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ql:quickload <span class="keyword">:your-app</span></span>)</span></span></code></pre>
+
+<p>サーバーを立ち上げるには以下のようにする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">your-app:start</span>)</span></span></code></pre>
+
+<p>これでlocalhost:5000に適当なブラウザでアクセスすれば良い。</p>
+
+<p>サーバーを終了するには以下のコマンドを評価する。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">your-app:stop</span>)</span></span></code></pre>
+
+<h2>ルーティングの設定</h2>
+
+<p>ルーティングはsrc/web.lispに記述する。
+デフォルトで以下のコードが書かれている。</p>
+
+<pre><code><span class="code"><span class="comment">;;
+</span><span class="comment">;; Routing rules
+</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/"</span> <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">render #P<span class="string">"index.html"</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>#P&quot;index.html&quot;</code>の所在だが、これは<code>your-app.config:*template-directory*</code>を参照している。
+ここでは~/.roswell/local-projects/your-app/templates/がそれに当たる。</p>
+
+<h2>ビューの作成</h2>
+
+<p><code>#P&quot;index.html&quot;</code>の中身を以下のように編集する。</p>
+
+<pre><code>{% extends "layouts/default.html" %}
+{% block title %}Welcome to Caveman2{% endblock %}
+{% block content %}
+&lt;h2&gt;Hello&lt;/h2&gt;
+&lt;p&gt;Here we go.&lt;/p&gt;
+{% endblock %}</code></pre>
+
+<p>ブラウザをリロードすると変更されているはずだ。</p>
+
+<h2>変数の表示</h2>
+
+<p>上述のdefrouteを以下のように変える。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/"</span> <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">render #P<span class="string">"index.html"</span> '<span class="paren3">(<span class="code"><span class="keyword">:message</span> <span class="string">"Hi!"</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>その上で`#P&ldquo;index.html&rdquo;を以下のように変える。</p>
+
+<pre><code>{% extends "layouts/default.html" %}
+{% block title %}Welcome to Caveman2{% endblock %}
+{% block content %}
+&lt;h2&gt;{{message}}&lt;/h2&gt;
+&lt;p&gt;Here we go.&lt;/p&gt;
+{% endblock %}</code></pre>
+
+<p>htmlファイルの変更はブラウザのリロードだけで反映されたが、Lispソースを改修した場合はプロジェクト自体をリロードしないと変更は反映されない点要注意。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ql:quickload <span class="keyword">:your-app</span></span>)</span></span></code></pre>
+
+<p>プロジェクトのリロード後にブラウザをリロードすれば変更が反映されているはずだ。</p>
+
+<h2>まとめ</h2>
+
+<ul>
+<li>Cavemanは、プログラミング言語Common Lispによるウェブアプリケーション開発のためのフレームワークです。</li>
+<li>Cavemanをインストールするには、roswellをインストールしてから、QL:QUICKLOADでcaveman関連のシステムをインストールします。</li>
+<li>REPLでCAVEMAN2:MAKE-PROJECT関数を評価すると、アプリケーションの骨格を作成できます。</li>
+<li>Cavemanアプリケーションは、ウェブサーバHUNCHENTOOTを動かしながら開発します。</li>
+<li>web.lispにDEFROUTEを追加し、対応するテンプレートを記述するとウェブページができます。</li>
+</ul>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
