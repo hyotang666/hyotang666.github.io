@@ -91,7 +91,7 @@ your-appにはお好きな名前をどうぞ。
 ## ビューの作成
 `#P"index.html"`の中身を以下のように編集する。
 
-```html
+```
 {% extends "layouts/default.html" %}
 {% block title %}Welcome to Caveman2{% endblock %}
 {% block content %}
@@ -111,7 +111,7 @@ your-appにはお好きな名前をどうぞ。
 ```
 その上で`#P"index.html"を以下のように変える。
 
-```html
+```
 {% extends "layouts/default.html" %}
 {% block title %}Welcome to Caveman2{% endblock %}
 {% block content %}
