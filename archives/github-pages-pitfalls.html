@@ -1,0 +1,56 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>github-pages-pitfalls
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><!-- {% raw %} -->
+
+<h1>github pages pitfalls</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<p>Github pagesを使用している方。</p>
+
+<h2>Introduction</h2>
+
+<p>Github pagesを利用していて陥ったPitfall群をまとめていきます。
+追記は先頭にしていきます。</p>
+
+<h2>Does not updated.</h2>
+
+<p>記事をPushしたのに反映されないことがあります。</p>
+
+<p>この場合、登録してあるアドレスにメールが来てます。</p>
+
+<p>さもなくばyour-name/your-name.github.ioページのsettingから状況の確認ができます。</p>
+
+<h2>Page build failed: Unknown tag error</h2>
+
+<p>記事の中にリキッドタグ（{% &hellip; %}というタグ）があるとこのエラーが起きる場合があります。
+本エラーが起きるとビルドがコケて更新が反映されなくなります。</p>
+
+<p>Github pagesはサイトのビルドにJekyllを使用してるようです。
+そしてJekyllのテンプレートエンジンが記事内のリキッドタグに反応してしまって、場合によるとこのエラーが起きます。
+Github pagesがJekyllの使用を強く推奨しているのは、同じツールを使うことでツール間の齟齬によるエラーを回避できるためでしょう。</p>
+
+<p>本エラーはリキッドタグの周囲を<code>{% raw %}...{% endraw %}</code>というリキッドタグで囲めば対応できます。
+ただしそのままだと記事内に<code>{% raw %}...{% endraw %}</code>という余計な文字列が現れてしまうのでコメントアウトしておきましょう。</p>
+
+<p>HTMLないしMarkdownなら<code>&lt;!-- {% raw %} --&gt;</code>というようにします。</p>
+
+<!-- {% endraw %} -->
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
