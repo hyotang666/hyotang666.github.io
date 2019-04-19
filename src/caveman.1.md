@@ -1,3 +1,4 @@
+<!-- {% raw %} -->
 # Caveman kills ruby on rails - Chapter 1
 ## Meta info
 ### 対象読者
@@ -91,7 +92,7 @@ your-appにはお好きな名前をどうぞ。
 ## ビューの作成
 `#P"index.html"`の中身を以下のように編集する。
 
-```
+```html
 {% extends "layouts/default.html" %}
 {% block title %}Welcome to Caveman2{% endblock %}
 {% block content %}
@@ -111,7 +112,7 @@ your-appにはお好きな名前をどうぞ。
 ```
 その上で`#P"index.html"を以下のように変える。
 
-```
+```html
 {% extends "layouts/default.html" %}
 {% block title %}Welcome to Caveman2{% endblock %}
 {% block content %}
@@ -132,3 +133,5 @@ htmlファイルの変更はブラウザのリロードだけで反映された�
 * REPLでCAVEMAN2:MAKE-PROJECT関数を評価すると、アプリケーションの骨格を作成できます。
 * Cavemanアプリケーションは、ウェブサーバHUNCHENTOOTを動かしながら開発します。
 * web.lispにDEFROUTEを追加し、対応するテンプレートを記述するとウェブページができます。
+
+<!-- {% endraw %} -->
