@@ -1,0 +1,280 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>caveman.5
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><!-- {% raw %} -->
+
+<h1>Caveman kills ruby on rails - Chapter 5</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li><a href="http://8arrow.org/caveman/" >Caveman</a>と<a href="http://mmontone.github.io/djula/" >djula</a>について学びたいCLer</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p>本稿は<a href="https://book.impress.co.jp/books/1117101135" >原著</a>の各章をCommon Lispに翻訳するシリーズの第5章である。
+本章ではリソースベースのルーティングを通してCavemanとdjulaの作法を復習していく。</p>
+
+<h2>5.1 REST and routing</h2>
+
+<p>CavemanにはRailsにおけるリソースに相当するものはない。
+レールに乗って素早く動くことはできない。
+自身が進むべき坑道を自身で掘り進むのがCavemanの流儀といったところか。</p>
+
+<h2>5.2 Seven actions</h2>
+
+<h3>INDEX</h3>
+
+<p>templates/shared/header.htmlのリンクを編集する。</p>
+
+<pre><code>&lt;nav class="menubar"&gt;
+        &lt;ul&gt;
+                &lt;li&gt;&lt;a href="/"&gt;Home&lt;/a&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;a href="#"&gt;News&lt;/a&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;a href="#"&gt;Blog&lt;/a&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;a href="/user/index"&gt;Members&lt;/a&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;a href="#"&gt;Settings&lt;/a&gt;&lt;/li&gt;
+        &lt;/ul&gt;
+&lt;/nav&gt;</code></pre>
+
+<p>DEFROUTEは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> index <span class="string">"/user/index"</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"user/index.html"</span> `<span class="paren3">(<span class="code"><span class="keyword">:users</span> ,<span class="paren4">(<span class="code">mito:select-dao 'your-app.model::user
+                                                       <span class="paren5">(<span class="code">sxql:order-by <span class="keyword">:number</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>templates/user/index.htmlを作成し、以下のようにする。</p>
+
+<p>djulaでオブジェクトのスロットへのアクセスには変数名に続き&ldquo;.&rdquo;でスロット名を指定すれば良い。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+{% block title %}{% lisp (title "users list") %}{% endblock %}
+{% block content %}
+&lt;h1&gt;{% lisp (title "users list") %}&lt;/h1&gt;
+{% if users %}
+&lt;table class="list"&gt;
+        &lt;thead&gt;
+                &lt;tr&gt;
+                        &lt;th&gt;背番号&lt;/th&gt;
+                        &lt;th&gt;ユーザー名&lt;/th&gt;
+                        &lt;th&gt;指名&lt;/th&gt;
+                &lt;/tr&gt;
+        &lt;/thead&gt;
+        &lt;tbody&gt;
+                {% for user in users %}
+                &lt;tr&gt;
+                        &lt;td style="text-align: right"&gt;{{user.number}}&lt;/td&gt;
+                        &lt;td&gt;{{user.name}}&lt;/td&gt;
+                        &lt;td&gt;{{user.full-name}}&lt;/td&gt;
+                &lt;/tr&gt;
+                {% endfor %}
+        &lt;/tbody&gt;
+&lt;/table&gt;
+{% else %}
+&lt;p&gt;会員情報がありません&lt;/p&gt;
+{% endif %}
+{% endblock %}</code></pre>
+
+<p><img src="../img/caveman/CkRoR-user-index.png" alt="Screen shot of example" /></p>
+
+<h3>Apply css</h3>
+
+<p>static/css/app.cssに以下のコードを追加する。</p>
+
+<pre><code>/* table */
+table.list, table.attr {
+        font-size: 90%;
+        width: 100%;
+}
+
+table.list th, table.attr th {
+        background-color: #499;
+        color: white;
+        font-weight: normal;
+}
+
+table.list td, table.list th,
+table.attr td, table.attr th {
+        padding: 4px;
+}
+
+table.list th {
+        text-align: left;
+}
+
+table.attr th {
+        text-align: right;
+}
+
+table.list td, table.attr td {
+        background-color: #cee;
+}</code></pre>
+
+<p><img src="../img/caveman/CkRoR-user-index-css.png" alt="Screen shot of example" /></p>
+
+<h3>Links</h3>
+
+<p>各種リンクの追加を行う。
+templates/user/index.htmlを以下のように追加編集する。</p>
+
+<pre><code>&lt;h1&gt;{% lisp (title "users list") %}&lt;/h1&gt;
+
+&lt;div class="toolbar"&gt;&lt;a href="/user/new"&gt;新規登録&lt;/a&gt;&lt;/div&gt;
+
+{% if users %}</code></pre>
+
+<p>static/css/app.cssに以下のコードを追加する。</p>
+
+<pre><code>/* toolbar */
+ul.toolbar,
+div.toolbar {
+        padding: 15px 0;
+        font-size: 90%;
+        text-align: right;
+}</code></pre>
+
+<p>templates/user/index.htmlに編集用のテーブルヘッダを追加する。</p>
+
+<pre><code>        &lt;thead&gt;
+                &lt;tr&gt;
+                        &lt;th&gt;Number&lt;/th&gt;
+                        &lt;th&gt;Name&lt;/th&gt;
+                        &lt;th&gt;Full name&lt;/th&gt;
+                        &lt;th&gt;Operation&lt;/th&gt;
+                &lt;/tr&gt;
+        &lt;/thead&gt;</code></pre>
+
+<p>同様にテーブルデータを追加する。</p>
+
+<pre><code>                {% for user in users %}
+                &lt;tr&gt;
+                        &lt;td style="text-align: right"&gt;{{user.number}}&lt;/td&gt;
+                        &lt;td&gt;
+                                &lt;a href="/user/{{user.id}}/"&gt;{{user.name}}&lt;/a&gt;
+                        &lt;/td&gt;
+                        &lt;td&gt;{{user.full-name}}&lt;/td&gt;
+                        &lt;td&gt;
+                                &lt;a href="/user/{{user.id}}/edit"&gt;Edit&lt;/a&gt;|
+                                &lt;a data-confirm="Really delete it?" rel="nofollow" data-method="delete" href="/user/{{user.id}}"&gt;Delete&lt;/a&gt;
+                        &lt;/td&gt;
+                &lt;/tr&gt;
+                {% endfor %}</code></pre>
+
+<p><img src="../img/caveman/CkRoR-user-index-links.png" alt="Screen shot of example" /></p>
+
+<h3>Search</h3>
+
+<p>検索機能追加のためにsrc/web.lispに以下のコードを追加する。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/user/search"</span><span class="paren2">(<span class="code">&amp;key |q|</span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"user/index.html"</span>
+          `<span class="paren3">(<span class="code"><span class="keyword">:users</span> ,<span class="paren4">(<span class="code">mito:select-dao 'your-app.model::user
+                                     <span class="paren5">(<span class="code">sxql:where `<span class="paren6">(<span class="code"><span class="keyword">:or</span> <span class="paren1">(<span class="code"><span class="keyword">:like</span> <span class="keyword">:name</span> ,|q|</span>)</span>
+                                                       <span class="paren1">(<span class="code"><span class="keyword">:like</span> <span class="keyword">:full-name</span> ,|q|</span>)</span></span>)</span></span>)</span>
+                                     <span class="paren5">(<span class="code">sxql:order-by <span class="keyword">:number</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>templates/user/index.htmlにフォームを追加する。
+便利ヘルパーなど存在しないので、ここでは手でゴリゴリ書く。</p>
+
+<pre><code>&lt;form class="search" action="/user/search" accept-charset="UTF-8" method="get"&gt;
+        &lt;input name="utf8" type="hidden" value="&#x2713;" /&gt;
+        &lt;input type="text" name="q" id="q" /&gt;
+        &lt;input type="submit" name="commit" value="search" data-disable-with="search" /&gt;
+&lt;/form&gt;</code></pre>
+
+<p><img src="../img/caveman/CkRoR-user-search.png" alt="Screen shot of example" /></p>
+
+<h3>Detail</h3>
+
+<p>ユーザーの詳細を見れるページを追加する。
+src/web.lispにルーティングを追加する。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/user/:id"</span><span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code">setf id <span class="paren3">(<span class="code">parse-integer id</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"user/show.html"</span>
+          `<span class="paren3">(<span class="code"><span class="keyword">:user</span> ,<span class="paren4">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上記ルーティングのためのテンプレートを/templates/user/show.htmlとして作る。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+{% block title %}{% lisp (title "User detail") %}{% endblock %}
+{% block content %}
+&lt;h1&gt;User detail&lt;/h1&gt;
+
+&lt;div class="toolbar"&gt;&lt;a href="/user/{{id}}/edit"&gt;Edit&lt;/a&gt;&lt;/div&gt;
+
+&lt;table class="attr"&gt;
+        &lt;tr&gt;
+                &lt;th width="150"&gt;Number&lt;/th&gt;
+                &lt;td&gt;{{user.number}}&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Name&lt;/th&gt;
+                &lt;td&gt;{{user.name}}&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Full name&lt;/th&gt;
+                &lt;td&gt;{{user.full-name}}&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Sex&lt;/th&gt;
+                &lt;td&gt;
+                        {% ifequal user.sex 1 %}
+                        Male
+                        {% else %}
+                        Female
+                        {% endifequal %}
+                &lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Birthday&lt;/th&gt;
+                &lt;td&gt;
+                        {{ user.birthday|
+                        lisp: local-time:timestamp-to-universal|
+                        date: ((:year 4)"年"(:month 2)"月"(:day 2)"日") }}
+                &lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Mail adress&lt;/th&gt;
+                &lt;td&gt;{{user.email}}&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;administrator&lt;/th&gt;
+                &lt;td&gt;
+                        {% if user.administrator %}
+                        ◯
+                        {% else %}
+                        ー
+                        {% endif %}
+                &lt;/td&gt;
+        &lt;/tr&gt;
+&lt;/table&gt;
+{% endblock %}</code></pre>
+
+<p><img src="../img/caveman/CkRoR-user-show.png" alt="Screen shot of example" /></p>
+
+<h2>Summary</h2>
+
+<ul>
+<li>RESTとは、リソースという概念を中心にしてウェブアプリケーションを組み立てる考え方です。</li>
+<li>リソースの一覧ページはindexアクション、詳細情報のページはshowアクションで実装します。
+<!-- {% endraw %} --></li>
+</ul>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
