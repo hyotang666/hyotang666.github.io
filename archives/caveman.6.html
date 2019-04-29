@@ -1,0 +1,388 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>caveman.6
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><!-- {% raw %} -->
+
+<h1>Caveman kills ruby on rails - Chapter 6</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>CavemanでCSRF対策をしたいCLer</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p>本稿は<a href="https://book.impress.co.jp/books/1117101135" >原著</a>の各章をCommon Lispに翻訳するシリーズの第5章である。
+本章ではnew、edit、destroyアクションを作成していきながらCavemanの作法を修めていく。</p>
+
+<h2>6.1 Forms and models</h2>
+
+<h3>CSRF対策</h3>
+
+<p>Cavemanにそんな機能はない。
+幸いCavemanは下層の<a href="https://github.com/fukamachi/lack" >lack</a>-request経由でcookieをサポートしている。
+セッショントークンを取り出すヘルパーは以下のようなコードになるだろう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> token <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">cdr <span class="paren3">(<span class="code">assoc <span class="string">"lack.session"</span> <span class="paren4">(<span class="code">lack.request:request-cookies <span class="special">ningle:*request*</span></span>)</span>
+              <span class="keyword">:test</span> #'string=</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>あとはこれを利用して自前で作ればいい。
+フォームを含むhtmlテンプレートのレンダリングには必ずトークンを引数として渡すようにする。</p>
+
+<h3>new and edit</h3>
+
+<p>Newのルーティングは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/user/new"</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"user/new.html"</span>
+          `<span class="paren3">(<span class="code"><span class="keyword">:user</span> ,<span class="paren4">(<span class="code">make-instance 'your-app.model::user</span>)</span>
+                  <span class="keyword">:token</span> ,<span class="paren4">(<span class="code">token</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>Editのルーティングは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/user/:id/edit"</span><span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">id<span class="paren5">(<span class="code">ignore-errors<span class="paren6">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">user<span class="paren5">(<span class="code">and id <span class="paren6">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> user
+      <span class="paren4">(<span class="code">render <span class="string">"user/edit.html"</span> `<span class="paren5">(<span class="code"><span class="keyword">:user</span> ,user <span class="keyword">:token</span> ,<span class="paren6">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">on-exception <span class="special">*web*</span> 404</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Form template</h3>
+
+<p>Cavemanにはformをいい具合に作ってくれるメソッドなどない。
+手でゴリゴリ書く。</p>
+
+<p>共通する入力フォームを担うテンプレートは以下の通り。
+これをtemplates/user/form.htmlとして作成する。</p>
+
+<pre><code>&lt;table class="attr"&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="user-number"&gt;Number&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input size="8" type="text" name="number" value="{{user.number}}" id="user-number" /&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="user-name"&gt;Name&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input type="text" value="{{user.name}}" name="name" id="user-name" /&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="user-full-name"&gt;Full Name&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input type="text" value="{{user.full-name}}" name="full-name" id="user-full-name" /&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Sex&lt;/th&gt;
+                &lt;td&gt;
+                        &lt;input type="radio" value="1" {%ifequal user.sex 1%}checked="checked"{%endifequal%} name="sex" id="member-sex-1" /&gt;
+                        &lt;label for="member-sex-1"&gt;Male&lt;/label&gt;
+                        &lt;input type="radio" value="2" {%ifequal user.sex 2%}checked="checked"{%endifequal%} name="sex" id="member-sex-2" /&gt;
+                        &lt;label for="member-sex-1"&gt;Female&lt;/label&gt;
+                &lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="user-birthday"&gt;Birthday&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;select id="member-birthday-li" name="birthday-year"&gt;
+                                {{target-year}}
+                                {% for n in year %}
+                                {% ifequal n target-year %}
+                                &lt;option value="{{n}}" selected="selected"&gt;{{n}}&lt;/option&gt;
+                                {% else %}
+                                &lt;option value="{{n}}"&gt;{{n}}&lt;/option&gt;
+                                {% endifequal %}
+                                {% endfor %}
+                        &lt;/select&gt;
+                        &lt;select id="member-birthday-2i" name="birthday-month"&gt;
+                                {% for (m . m-name) in month %}
+                                {% ifequal m target-month %}
+                                &lt;option value="{{m}}" selected="selected"&gt;{{m-name}}&lt;/option&gt;
+                                {% else %}
+                                &lt;option value="{{m}}"&gt;{{m-name}}&lt;/option&gt;
+                                {% endifequal %}
+                                {% endfor %}
+                        &lt;/select&gt;
+                        &lt;select id="birthday-3i" name="birthday-day"&gt;
+                                {% for d in day %}
+                                {% ifequal d target-day %}
+                                &lt;option value="{{d}}" selected="selected"&gt;{{d}}&lt;/option&gt;
+                                {% else %}
+                                &lt;option value="{{d}}"&gt;{{d}}&lt;/option&gt;
+                                {% endifequal %}
+                                {% endfor %}
+                        &lt;/select&gt;
+                &lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="user-email"&gt;Email&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input type="text" name="email" id="user-email" /&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Administrator&lt;/th&gt;
+                &lt;td&gt;
+                        &lt;input name="administrator" type="hidden" value="0" /&gt;
+                        &lt;input type="checkbox" value="1" name="administrator" id="user-administrator" /&gt;
+                        &lt;label for="user-administrator"&gt;Administrator&lt;/label&gt;
+                &lt;/td&gt;
+        &lt;/tr&gt;
+&lt;/table&gt;</code></pre>
+
+<h3>View of NEW.</h3>
+
+<p>New用のテンプレートは以下の通り。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+{% block title %}
+{% lisp (title "New member") %}
+{% endblock %}
+
+{% block content %}
+&lt;h1&gt;New member&lt;/h1&gt;
+
+&lt;form class="new-user" id="new-user" action="/user" method="post"&gt;
+        &lt;input name="authenticity-token" type="hidden" value="{{token}}" /&gt;
+{% lisp (your-app.view:render "user/form.html"
+           (let((current-year(local-time:timestamp-year(local-time:now))))
+               `(:year ,(loop :for i :upfrom 1940 :to current-year
+                              :collect i)
+               :target-year ,(- current-year 20)
+               :month ,(loop :for i :upfrom 1 :to 12
+                               :collect (cons i (aref local-time:+month-names+ i)))
+               :day ,(loop :for i :upfrom 1 :to 31 :collect i))))
+ %}
+        &lt;div&gt;
+                &lt;input type="submit" name="commit" value="create user" /&gt;
+        &lt;/div&gt;
+&lt;/form&gt;
+{% endblock %}</code></pre>
+
+<h3>View of EDIT.</h3>
+
+<p>Edit用のテンプレートは以下の通り。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+{% block title %}
+{% lisp (title "Edit user") %}
+{% endblock %}
+
+{% block content %}
+&lt;h1&gt;Edit user&lt;/h1&gt;
+
+&lt;div class="toolbar"&gt;
+        &lt;a href="/user/{{user.id}}"&gt;Back to user detail&lt;/a&gt;
+&lt;/div&gt;
+&lt;form class="edit-user" id="edit-user" action="/user/{{user.id}}" method="post"&gt;
+        &lt;input name="_method" type="hidden" value="patch" /&gt;
+        &lt;input name="authenticity-token" type="hidden" value="{{token}}" /&gt;
+        {{ user |
+           lisp: (lambda(user)
+                   (your-app.view:render "user/form.html"
+                     `(:user ,user
+                             :year ,(loop :for i :upfrom 1940 :to (local-time:timestamp-year(local-time:now))
+                                          :collect i)
+                             :target-year ,(local-time:timestamp-year(your-app.model::birthday-of user))
+                             :month ,(loop :for i :upfrom 1 :to 12
+                                           :collect (cons i (aref local-time:+month-names+ i)))
+                             :target-month ,(local-time:timestamp-month(your-app.model::birthday-of user))
+                             :day ,(loop :for i :upfrom 1 :to 31 :collect i)
+                             :target-day ,(local-time:timestamp-day(your-app.model::birthday-of user)))
+                     ))|
+           safe }}
+        &lt;div&gt;
+                &lt;input type="submit" name="commit" value="edit user" /&gt;
+        &lt;/div&gt;
+&lt;/form&gt;
+{% endblock %}</code></pre>
+
+<h2>6.2 Create, Update, Destroy</h2>
+
+<h3>Create</h3>
+
+<p>Createのためのルーティングは以下の通り。
+引数のvalidationはTODOである。
+引数<code>|number|</code>と<code>|sex|</code>、<code>|administrator|</code>が空文字列で初期化されているのはコンパイラ（sbcl）がクレームをつけるから。
+というのも各引数が渡されるべき<code>CL:PARSE-INTEGER</code>の第一引数はNILを許さないから。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/user"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key |authenticity-token| <span class="paren3">(<span class="code">|number| <span class="string">""</span></span>)</span> |name| |full-name| <span class="paren3">(<span class="code">|sex| <span class="string">""</span></span>)</span> |birthday-year|
+                                      |birthday-month| |birthday-day| |email| <span class="paren3">(<span class="code">|administrator| <span class="string">""</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= |authenticity-token| <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">403 <span class="paren4">(<span class="code"></span>)</span> <span class="paren4">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">user<span class="paren6">(<span class="code">mito:create-dao 'your-app.model::user
+                               <span class="keyword">:number</span> <span class="paren1">(<span class="code">parse-integer |number| <span class="keyword">:junk-allowed</span> t</span>)</span>
+                               <span class="keyword">:name</span> |name|
+                               <span class="keyword">:full-name</span> |full-name|
+                               <span class="keyword">:sex</span> <span class="paren1">(<span class="code">parse-integer |sex| <span class="keyword">:junk-allowed</span> t</span>)</span>
+                               <span class="keyword">:birthday</span> <span class="paren1">(<span class="code">local-time:parse-timestring <span class="paren2">(<span class="code">format nil <span class="string">"~A-~A-~A"</span> |birthday-year| |birthday-month| |birthday-day|</span>)</span></span>)</span>
+                               <span class="keyword">:email</span> |email|
+                               <span class="keyword">:administrator</span> <span class="paren1">(<span class="code">eq your-app.model::+true+ <span class="paren2">(<span class="code">zerop <span class="paren3">(<span class="code">parse-integer |administrator| <span class="keyword">:junk-allowed</span> t</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">setf<span class="paren5">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Stored!"</span></span>)</span>
+      `<span class="paren4">(<span class="code">303 <span class="paren5">(<span class="code"><span class="keyword">:location</span> ,<span class="paren6">(<span class="code">format nil <span class="string">"/user/~D"</span><span class="paren1">(<span class="code">mito:object-id user</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>templates/layouts/app.htmlの該当部分を以下のように編集。</p>
+
+<pre><code>                &lt;main&gt;
+                {% if notice %}
+                &lt;p class="notice"&gt;{{notice}}&lt;/p&gt;
+                {% endif %}</code></pre>
+
+<p>flashの取り出しは頻出すると思うのでヘルパーにまとめよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> flash-gethash<span class="paren2">(<span class="code">key table</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">value<span class="paren5">(<span class="code">gethash key table</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">remhash key table</span>)</span>
+    value</span>)</span></span>)</span></span></code></pre>
+
+<p>Showへのルーティングに:NOTICE引数を渡すように編集する。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/user/:id"</span><span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">id<span class="paren5">(<span class="code">ignore-errors<span class="paren6">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">null id</span>)</span>
+      <span class="paren4">(<span class="code">myway.mapper:next-route</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">user<span class="paren1">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> user
+          <span class="paren6">(<span class="code">render <span class="string">"user/show.html"</span> `<span class="paren1">(<span class="code"><span class="keyword">:user</span> ,user <span class="keyword">:notice</span> ,<span class="paren2">(<span class="code">flash-gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">on-exception <span class="special">*web*</span> 404</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>CSSに以下を追加。</p>
+
+<pre><code>/* flash */
+p.notice {
+        border: 1px solid blue;
+        padding: 3px;
+        background-color: #ccf;
+}</code></pre>
+
+<p><img src="../img/caveman/CkRoR-new.png" alt="Screen shot of example" /></p>
+
+<h3>Update</h3>
+
+<p>Updateのためのルーティングは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/user/:id"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key |authenticity-token| id <span class="paren3">(<span class="code">|number| <span class="string">""</span></span>)</span> |name| |full-name| <span class="paren3">(<span class="code">|sex| <span class="string">""</span></span>)</span>
+                                          |birthday-year| |birthday-month| |birthday-day| |email| <span class="paren3">(<span class="code">|administrator| <span class="string">""</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= |authenticity-token| <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">403 <span class="paren4">(<span class="code"></span>)</span> <span class="paren4">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">id<span class="paren6">(<span class="code">ignore-errors<span class="paren1">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+         <span class="paren5">(<span class="code">user<span class="paren6">(<span class="code">and id <span class="paren1">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i><span class="paren5">(<span class="code">null user</span>)</span>
+        '<span class="paren5">(<span class="code">500 <span class="paren6">(<span class="code"></span>)</span> <span class="paren6">(<span class="code"><span class="string">"Could not edit unexists user."</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">your-app.model::number-of user</span>)</span> <span class="paren6">(<span class="code">parse-integer |number| <span class="keyword">:junk-allowed</span> t</span>)</span>
+                   <span class="paren6">(<span class="code">your-app.model::name-of user</span>)</span> |name|
+                   <span class="paren6">(<span class="code">your-app.model::full-name-of user</span>)</span> |full-name|
+                   <span class="paren6">(<span class="code">your-app.model::sex-of user</span>)</span> <span class="paren6">(<span class="code">parse-integer |sex| <span class="keyword">:junk-allowed</span> t</span>)</span>
+                   <span class="paren6">(<span class="code">your-app.model::birthday-of user</span>)</span> <span class="paren6">(<span class="code">local-time:parse-timestring <span class="paren1">(<span class="code">format nil <span class="string">"~A-~A-~A"</span> |birthday-year| |birthday-month| |birthday-day|</span>)</span></span>)</span>
+                   <span class="paren6">(<span class="code">your-app.model::email-of user</span>)</span> |email|
+                   <span class="paren6">(<span class="code">your-app.model::administrator-of user</span>)</span> <span class="paren6">(<span class="code">eq your-app.model::+true+ <span class="paren1">(<span class="code">zerop <span class="paren2">(<span class="code">parse-integer |administrator| <span class="keyword">:junk-allowed</span> t</span>)</span></span>)</span></span>)</span></span>)</span>
+             <span class="paren5">(<span class="code">mito:save-dao user</span>)</span>
+             <span class="paren5">(<span class="code">setf<span class="paren6">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Updated"</span></span>)</span>
+             `<span class="paren5">(<span class="code">303 <span class="paren6">(<span class="code"><span class="keyword">:location</span> ,<span class="paren1">(<span class="code">format nil <span class="string">"/user/~D"</span> id</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Destroy</h3>
+
+<p>さて、デリートのためのルーティングだが、CavemanはマイクロフレームワークなためJS周りのサポートは皆無である。
+原著の例ではdeleteをクリックするとポップアップでの確認が出るが、ここでは作らずにすます。
+また、postメソッドで送るため、タグをフォームに変更する。</p>
+
+<p>templates/user/index.htmlの該当する部分を以下のように編集する。</p>
+
+<pre><code>        &lt;tbody&gt;
+                {% for user in users %}
+                &lt;tr&gt;
+                        &lt;td style="text-align: right"&gt;{{user.number}}&lt;/td&gt;
+                        &lt;td&gt;
+                                &lt;a href="/user/{{user.id}}"&gt;{{user.name}}&lt;/a&gt;
+                        &lt;/td&gt;
+                        &lt;td&gt;{{user.full-name}}&lt;/td&gt;
+                        &lt;td&gt;
+                                &lt;a href="/user/{{user.id}}/edit"&gt;Edit&lt;/a&gt;|
+                                &lt;form action="/user/{{user.id}}" method="post"&gt;
+                                        &lt;input type="hidden" name="_method" value="delete"&gt;
+                                        &lt;input type="hidden" name="authenticity-token" value="{{token}}"&gt;
+                                        &lt;input type="submit" value="Delete"&gt;
+                                &lt;/form&gt;
+                        &lt;/td&gt;
+                &lt;/tr&gt;
+                {% endfor %}
+        &lt;/tbody&gt;</code></pre>
+
+<p>上記テンプレートに引数を渡すようにuser/indexのルーティングを以下のように編集する。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> index <span class="string">"/user/index"</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"user/index.html"</span> `<span class="paren3">(<span class="code"><span class="keyword">:users</span> ,<span class="paren4">(<span class="code">mito:select-dao 'your-app.model::user
+                                                       <span class="paren5">(<span class="code">sxql:order-by <span class="keyword">:number</span></span>)</span></span>)</span>
+                                     <span class="keyword">:token</span> ,<span class="paren4">(<span class="code">token</span>)</span>
+                                     <span class="keyword">:notice</span> ,<span class="paren4">(<span class="code">flash-gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>まずはDELETEメソッドのためのルーティングを作成しよう。
+これまでと違い名前付きにしている点要注意。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> delete-user<span class="paren2">(<span class="code"><span class="string">"/user/:id"</span> <span class="keyword">:method</span> <span class="keyword">:delete</span></span>)</span><span class="paren2">(<span class="code">&amp;key |authenticity-token| id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= |authenticity-token| <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+    `<span class="paren3">(<span class="code">403 <span class="paren4">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span><span class="paren4">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">id<span class="paren6">(<span class="code">ignore-errors<span class="paren1">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+          <span class="paren5">(<span class="code">user<span class="paren6">(<span class="code">and id <span class="paren1">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i><span class="paren5">(<span class="code">null user</span>)</span>
+        `<span class="paren5">(<span class="code">500 <span class="paren6">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren6">(<span class="code">,<span class="paren1">(<span class="code">format nil <span class="string">"~%Could not delete unexists user. id ~S"</span> id</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren6">(<span class="code">mito:delete-dao user</span>)</span>
+               <span class="paren6">(<span class="code">setf<span class="paren1">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Deleted."</span></span>)</span>
+               `<span class="paren6">(<span class="code">303 <span class="paren1">(<span class="code"><span class="keyword">:location</span> <span class="string">"/user/index"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これでDELETEのためのAPIはできたが、ブラウザはGETとPOSTしかサポートしていない。
+よってPOSTにはディスパッチを担ってもらう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/user/:id"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key |authenticity-token| id <span class="paren3">(<span class="code">|number| <span class="string">""</span></span>)</span> |name| |full-name| <span class="paren3">(<span class="code">|sex| <span class="string">""</span></span>)</span>
+                                          |birthday-year| |birthday-month| |birthday-day| |email| <span class="paren3">(<span class="code">|administrator| <span class="string">""</span></span>)</span>
+                                          |_method|</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= |authenticity-token| <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">403 <span class="paren4">(<span class="code"></span>)</span> <span class="paren4">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">cond</span></i>
+      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">string= |_method| <span class="string">"delete"</span></span>)</span>
+       <span class="paren5">(<span class="code">funcall #'delete-user <span class="paren6">(<span class="code">acons <span class="string">"ID"</span> id <span class="paren1">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">find |_method| '<span class="paren6">(<span class="code"><span class="string">""</span> <span class="string">"post"</span></span>)</span></span>)</span>
+       <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">id<span class="paren2">(<span class="code">ignore-errors<span class="paren3">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+            <span class="paren1">(<span class="code">user<span class="paren2">(<span class="code">and id <span class="paren3">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span></span>)</span>
+         <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">null user</span>)</span>
+           `<span class="paren1">(<span class="code">500 <span class="paren2">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span>
+             <span class="paren2">(<span class="code">,<span class="paren3">(<span class="code"><i><span class="symbol">with-output-to-string</span></i><span class="paren4">(<span class="code"><span class="special">*standard-output*</span></span>)</span>
+                 <span class="paren4">(<span class="code">dev:peep <span class="special">ningle:*request*</span></span>)</span>
+                 <span class="paren4">(<span class="code">format t <span class="string">"Could not edit unexists user."</span></span>)</span></span>)</span></span>)</span></span>)</span>
+           <span class="paren1">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren2">(<span class="code">setf <span class="paren3">(<span class="code">your-app.model::number-of user</span>)</span> <span class="paren3">(<span class="code">parse-integer |number| <span class="keyword">:junk-allowed</span> t</span>)</span>
+                        <span class="paren3">(<span class="code">your-app.model::name-of user</span>)</span> |name|
+                        <span class="paren3">(<span class="code">your-app.model::full-name-of user</span>)</span> |full-name|
+                        <span class="paren3">(<span class="code">your-app.model::sex-of user</span>)</span> <span class="paren3">(<span class="code">parse-integer |sex| <span class="keyword">:junk-allowed</span> t</span>)</span>
+                        <span class="paren3">(<span class="code">your-app.model::birthday-of user</span>)</span> <span class="paren3">(<span class="code">local-time:parse-timestring <span class="paren4">(<span class="code">format nil <span class="string">"~A-~A-~A"</span> |birthday-year| |birthday-month| |birthday-day|</span>)</span></span>)</span>
+                        <span class="paren3">(<span class="code">your-app.model::email-of user</span>)</span> |email|
+                        <span class="paren3">(<span class="code">your-app.model::administrator-of user</span>)</span> <span class="paren3">(<span class="code">eq your-app.model::+true+ <span class="paren4">(<span class="code">zerop <span class="paren5">(<span class="code">parse-integer |administrator| <span class="keyword">:junk-allowed</span> t</span>)</span></span>)</span></span>)</span></span>)</span>
+                  <span class="paren2">(<span class="code">mito:save-dao user</span>)</span>
+                  <span class="paren2">(<span class="code">setf<span class="paren3">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Updated"</span></span>)</span>
+                  `<span class="paren2">(<span class="code">303 <span class="paren3">(<span class="code"><span class="keyword">:location</span> ,<span class="paren4">(<span class="code">format nil <span class="string">"/user/~D"</span> id</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">t `<span class="paren5">(<span class="code">400 <span class="paren6">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren6">(<span class="code">,<span class="paren1">(<span class="code">format nil <span class="string">"Unsuppoeted method ~S"</span> |_method|</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>先程名前をつけた<code>DELETE-USER</code>ルーティングを明示的に呼び出している点要注意。
+これにあたり<code>NINGLE:*REQUEST*</code>から<code>LACK.REQUEST:REQUEST-BODY-PARAMETERS</code>でパラメタを含むALISTを取り出し<code>CL:ACONS</code>で拡張している点要注目。
+これがないと<code>ID</code>が<code>DELETE-USER</code>に渡らない。</p>
+
+<p><img src="../img/caveman/CkRoR-user-delete.png" alt="Screen shot of example" /></p>
+
+<h2>Summary</h2>
+
+<ul>
+<li>7つのアクションに相当するルーティングは自前でゴリゴリ書きます。</li>
+<li>ブラウザはGETとPOSTしかサポートしていないのでPOSTにディスパッチを担当させます。
+<!-- {% endraw %} --></li>
+</ul>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
