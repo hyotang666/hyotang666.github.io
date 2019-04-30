@@ -343,10 +343,7 @@ templates/user/index.htmlの該当する部分を以下のように編集する�
        (let((id(ignore-errors(parse-integer id)))
             (user(and id (mito:find-dao 'your-app.model::user :id id))))
          (if(null user)
-           `(500 (:content-type "text/plain")
-             (,(with-output-to-string(*standard-output*)
-                 (dev:peep ningle:*request*)
-                 (format t "Could not edit unexists user."))))
+           '(500 (:content-type "text/plain")("Could not edit unexists user."))
            (progn (setf (your-app.model::number-of user) (parse-integer |number| :junk-allowed t)
                         (your-app.model::name-of user) |name|
                         (your-app.model::full-name-of user) |full-name|
