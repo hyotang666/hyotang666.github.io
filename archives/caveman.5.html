@@ -59,9 +59,9 @@
 <p>djulaでオブジェクトのスロットへのアクセスには変数名に続き&ldquo;.&rdquo;でスロット名を指定すれば良い。</p>
 
 <pre><code>{% extends "layouts/app.html" %}
-{% block title %}{% lisp (title "users list") %}{% endblock %}
+{% block title %}{% lisp (title "list of users") %}{% endblock %}
 {% block content %}
-&lt;h1&gt;{% lisp (title "users list") %}&lt;/h1&gt;
+&lt;h1&gt;{% lisp (title "list of users") %}&lt;/h1&gt;
 {% if users %}
 &lt;table class="list"&gt;
         &lt;thead&gt;
