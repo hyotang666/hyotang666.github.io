@@ -61,7 +61,7 @@
 <pre><code>{% extends "layouts/app.html" %}
 {% block title %}{% lisp (title "list of users") %}{% endblock %}
 {% block content %}
-&lt;h1&gt;{% lisp (title "list of users") %}&lt;/h1&gt;
+&lt;h1&gt;List of users&lt;/h1&gt;
 {% if users %}
 &lt;table class="list"&gt;
         &lt;thead&gt;
@@ -128,7 +128,7 @@ table.list td, table.attr td {
 <p>各種リンクの追加を行う。
 templates/user/index.htmlを以下のように追加編集する。</p>
 
-<pre><code>&lt;h1&gt;{% lisp (title "users list") %}&lt;/h1&gt;
+<pre><code>&lt;h1&gt;List of users&lt;/h1&gt;
 
 &lt;div class="toolbar"&gt;&lt;a href="/user/new"&gt;新規登録&lt;/a&gt;&lt;/div&gt;
 

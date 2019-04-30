@@ -46,7 +46,7 @@ djulaでオブジェクトのスロットへのアクセスには変数名に続
 {% extends "layouts/app.html" %}
 {% block title %}{% lisp (title "list of users") %}{% endblock %}
 {% block content %}
-<h1>{% lisp (title "list of users") %}</h1>
+<h1>List of users</h1>
 {% if users %}
 <table class="list">
         <thead>
@@ -114,7 +114,7 @@ table.list td, table.attr td {
 templates/user/index.htmlを以下のように追加編集する。
 
 ```html
-<h1>{% lisp (title "users list") %}</h1>
+<h1>List of users</h1>
 
 <div class="toolbar"><a href="/user/new">新規登録</a></div>
 
