@@ -619,7 +619,8 @@ djulaはそのための機能を提供していないように見える。
 ここでは無視する。
 
 ## 部分テンプレート
-親テンプレートからRENDER関数を呼び出すことで対応する。
+includeタグを使う。
+ただし、親のコンテクストとはことなる独自の引数を渡したいならRENDER関数を呼び出すことで対応できる。
 
 templates/layouts/下にapp.htmlテンプレートを作ろう。
 
@@ -634,7 +635,7 @@ templates/layouts/下にapp.htmlテンプレートを作ろう。
 <body>
         <div id="container">
                 <header>
-                        {% lisp (your-app.view:render "shared/header.html") %}
+                        {% include "shared/header.html" %}
                 </header>
                 <main>
                 {% block content %}{% endblock %}
@@ -645,7 +646,7 @@ templates/layouts/下にapp.htmlテンプレートを作ろう。
                                     :blogs (1 2 3 4 5))) %}
                 </aside>
                 <footer>
-                        {% lisp (your-app.view:render "shared/footer.html") %}
+                        {% include "shared/footer.html" %}
                 </footer>
 </body>
 </html>
@@ -672,7 +673,7 @@ templates/下にsharedディレクトリを掘り、部分テンプレートを�
 sidebar.html
 
 ```html
-{% lisp (your-app.view:render "shared/login_form.html") %}
+{% include "shared/login_form.html" %}
 
 <h2>Latest news</h2>
 <ul>
@@ -692,21 +693,20 @@ sidebar.html
 login_form.html
 
 ```html
-{% lisp (your-app.view:render "shared/login_form.html") %}
-
-<h2>Latest news</h2>
-<ul>
-        {% for n in news %}
-        <li><a href="#">News header</a></li>
-        {% endfor %}
-</ul>
-
-<h2>Member blog</h2>
-<ul>
-        {% for b in blogs %}
-        <li><a href="#">Blog header</a></li>
-        {% endfor %}
-</ul>
+<h2>Login</h2>
+<form id="login_form">
+	<div>
+		<label>user name:</label>
+		<input type="text">
+	</div>
+	<div>
+		<label>password:</label>
+		<input type="password">
+	</div>
+	<div>
+		<input type="submit" value="Login">
+	</div>
+</form>
 ```
 
 footer.html

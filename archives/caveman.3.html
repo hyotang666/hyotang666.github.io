@@ -600,7 +600,8 @@ djulaはそのための機能を提供していないように見える。
 
 <h2>部分テンプレート</h2>
 
-<p>親テンプレートからRENDER関数を呼び出すことで対応する。</p>
+<p>includeタグを使う。
+ただし、親のコンテクストとはことなる独自の引数を渡したいならRENDER関数を呼び出すことで対応できる。</p>
 
 <p>templates/layouts/下にapp.htmlテンプレートを作ろう。</p>
 
@@ -614,7 +615,7 @@ djulaはそのための機能を提供していないように見える。
 &lt;body&gt;
         &lt;div id="container"&gt;
                 &lt;header&gt;
-                        {% lisp (your-app.view:render "shared/header.html") %}
+                        {% include "shared/header.html" %}
                 &lt;/header&gt;
                 &lt;main&gt;
                 {% block content %}{% endblock %}
@@ -625,7 +626,7 @@ djulaはそのための機能を提供していないように見える。
                                     :blogs (1 2 3 4 5))) %}
                 &lt;/aside&gt;
                 &lt;footer&gt;
-                        {% lisp (your-app.view:render "shared/footer.html") %}
+                        {% include "shared/footer.html" %}
                 &lt;/footer&gt;
 &lt;/body&gt;
 &lt;/html&gt;</code></pre>
@@ -648,7 +649,7 @@ djulaはそのための機能を提供していないように見える。
 
 <p>sidebar.html</p>
 
-<pre><code>{% lisp (your-app.view:render "shared/login_form.html") %}
+<pre><code>{% include "shared/login_form.html" %}
 
 &lt;h2&gt;Latest news&lt;/h2&gt;
 &lt;ul&gt;
@@ -666,21 +667,20 @@ djulaはそのための機能を提供していないように見える。
 
 <p>login_form.html</p>
 
-<pre><code>{% lisp (your-app.view:render "shared/login_form.html") %}
-
-&lt;h2&gt;Latest news&lt;/h2&gt;
-&lt;ul&gt;
-        {% for n in news %}
-        &lt;li&gt;&lt;a href="#"&gt;News header&lt;/a&gt;&lt;/li&gt;
-        {% endfor %}
-&lt;/ul&gt;
-
-&lt;h2&gt;Member blog&lt;/h2&gt;
-&lt;ul&gt;
-        {% for b in blogs %}
-        &lt;li&gt;&lt;a href="#"&gt;Blog header&lt;/a&gt;&lt;/li&gt;
-        {% endfor %}
-&lt;/ul&gt;</code></pre>
+<pre><code>&lt;h2&gt;Login&lt;/h2&gt;
+&lt;form id="login_form"&gt;
+    &lt;div&gt;
+        &lt;label&gt;user name:&lt;/label&gt;
+        &lt;input type="text"&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+        &lt;label&gt;password:&lt;/label&gt;
+        &lt;input type="password"&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+        &lt;input type="submit" value="Login"&gt;
+    &lt;/div&gt;
+&lt;/form&gt;</code></pre>
 
 <p>footer.html</p>
 
