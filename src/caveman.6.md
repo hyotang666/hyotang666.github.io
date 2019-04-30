@@ -76,32 +76,48 @@ Cavemanにはformをいい具合に作ってくれるメソッドなどない。
         <tr>
                 <th><label for="user-birthday">Birthday</label></th>
                 <td><select id="member-birthday-li" name="birthday-year">
-                                {{target-year}}
-                                {% for n in year %}
-                                {% ifequal n target-year %}
-                                <option value="{{n}}" selected="selected">{{n}}</option>
-                                {% else %}
-                                <option value="{{n}}">{{n}}</option>
-                                {% endifequal %}
-                                {% endfor %}
+                                {{ user.birthday
+                                 | lisp: (lambda(timestamp)
+                                           (let((current-year(local-time:timestamp-year(local-time:now))))
+                                             (loop :for i :upfrom 1940 :to current-year
+                                                   :with target = (or (and timestamp
+                                                                           (local-time:timestamp-year timestamp))
+                                                                      (- current-year 20))
+                                                   :collect (format nil "<option value=\"~D\"~@[ ~A~]>~2:*~D</option>~%"
+                                                                    i (when(= target i)
+                                                                        "selected=\"selected\"")))))
+                                 | join:""
+                                 | safe
+                                 }}
                         </select>
                         <select id="member-birthday-2i" name="birthday-month">
-                                {% for (m . m-name) in month %}
-                                {% ifequal m target-month %}
-                                <option value="{{m}}" selected="selected">{{m-name}}</option>
-                                {% else %}
-                                <option value="{{m}}">{{m-name}}</option>
-                                {% endifequal %}
-                                {% endfor %}
+                                {{ user.birthday
+                                 | lisp: (lambda(timestamp)
+                                           (loop :for i :upfrom 1 to 12
+                                                 :with target = (or (and timestamp
+                                                                         (local-time:timestamp-month timestamp))
+                                                                    1)
+                                                 :collect (format nil "<option value=\"~D\"~@[ ~A~]>~A</option>~%"
+                                                                  i (when(= target i)
+                                                                      "selected=\"selected\"")
+                                                                  (aref local-time:+month-names+ i))))
+                                 | join:""
+                                 | safe
+                                 }}
                         </select>
                         <select id="birthday-3i" name="birthday-day">
-                                {% for d in day %}
-                                {% ifequal d target-day %}
-                                <option value="{{d}}" selected="selected">{{d}}</option>
-                                {% else %}
-                                <option value="{{d}}">{{d}}</option>
-                                {% endifequal %}
-                                {% endfor %}
+                                {{ user.birthday
+                                 | lisp: (lambda(timestamp)
+                                           (loop :for i :upfrom 1 to 31
+                                                 :with target = (or (and timestamp
+                                                                         (local-time:timestamp-day timestamp))
+                                                                    1)
+                                                 :collect (format nil "<option value=\"~D\"~@[ ~A~]>~2:*~D</option>~%"
+                                                                  i (when(= target i)
+                                                                      "selected=\"selected\""))))
+                                 | join:""
+                                 | safe
+                                 }}
                         </select>
                 </td>
         </tr>
@@ -134,15 +150,7 @@ New用のテンプレートは以下の通り。
 
 <form class="new-user" id="new-user" action="/user" method="post">
         <input name="authenticity-token" type="hidden" value="{{token}}" />
-{% lisp (your-app.view:render "user/form.html"
-           (let((current-year(local-time:timestamp-year(local-time:now))))
-               `(:year ,(loop :for i :upfrom 1940 :to current-year
-                              :collect i)
-               :target-year ,(- current-year 20)
-               :month ,(loop :for i :upfrom 1 :to 12
-                               :collect (cons i (aref local-time:+month-names+ i)))
-               :day ,(loop :for i :upfrom 1 :to 31 :collect i))))
- %}
+        {% include "user/form.html" %}
         <div>
                 <input type="submit" name="commit" value="create user" />
         </div>
@@ -168,20 +176,7 @@ Edit用のテンプレートは以下の通り。
 <form class="edit-user" id="edit-user" action="/user/{{user.id}}" method="post">
         <input name="_method" type="hidden" value="patch" />
         <input name="authenticity-token" type="hidden" value="{{token}}" />
-        {{ user |
-           lisp: (lambda(user)
-                   (your-app.view:render "user/form.html"
-                     `(:user ,user
-                             :year ,(loop :for i :upfrom 1940 :to (local-time:timestamp-year(local-time:now))
-                                          :collect i)
-                             :target-year ,(local-time:timestamp-year(your-app.model::birthday-of user))
-                             :month ,(loop :for i :upfrom 1 :to 12
-                                           :collect (cons i (aref local-time:+month-names+ i)))
-                             :target-month ,(local-time:timestamp-month(your-app.model::birthday-of user))
-                             :day ,(loop :for i :upfrom 1 :to 31 :collect i)
-                             :target-day ,(local-time:timestamp-day(your-app.model::birthday-of user)))
-                     ))|
-           safe }}
+        {% include "user/form.html" %}
         <div>
                 <input type="submit" name="commit" value="edit user" />
         </div>
