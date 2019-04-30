@@ -338,7 +338,7 @@ templates/user/index.htmlの該当する部分を以下のように編集する�
     '(403 () ("Denied"))
     (cond
       ((string= |_method| "delete")
-       (funcall #'delete-user (acons "ID" id (lack.request:request-body-parameters ningle:*request*))))
+       (delete-user (acons "ID" id (lack.request:request-body-parameters ningle:*request*))))
       ((find |_method| '("" "post"))
        (let((id(ignore-errors(parse-integer id)))
             (user(and id (mito:find-dao 'your-app.model::user :id id))))
