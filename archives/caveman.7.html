@@ -1,0 +1,629 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>caveman.7
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><!-- {% raw %} -->
+
+<h1>Caveman kills ruby on rails - Chapter 7</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Cavemanでバリデーションとi18nを行いたいCLer。</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p>本稿は<a href="https://book.impress.co.jp/books/1117101135" >原著</a>の各章をCommon Lispに翻訳するシリーズの第7章である。
+本章ではバリデーションと国際化機能について修めていく。</p>
+
+<h2>7.1 Validation</h2>
+
+<p>Cavemanにvalidationの機能などない。
+必要なら自作せざるを得ない。
+例えば以下のようなヘルパー関数が必要となろう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">alist</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">slot-boundp c 'number</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">number<span class="paren1">(<span class="code">number-of c</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">integerp number</span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> #0=<span class="paren1">(<span class="code">&lt; 0 number 100</span>)</span>
+            <span class="paren1">(<span class="code">when<span class="paren2">(<span class="code">mito:find-dao 'user <span class="keyword">:number</span> number</span>)</span>
+              <span class="paren2">(<span class="code">push <span class="paren3">(<span class="code">cons 'number <span class="paren4">(<span class="code">format nil <span class="string">"Number must unique, already exists."</span></span>)</span></span>)</span>alist</span>)</span></span>)</span>
+            <span class="paren1">(<span class="code">push <span class="paren2">(<span class="code">cons 'number <span class="paren3">(<span class="code">format nil <span class="string">"Number must in range of ~S but ~S"</span>'#0# number</span>)</span></span>)</span> alist</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons 'number <span class="paren2">(<span class="code">format nil <span class="string">"Number must be integer, but ~S"</span><span class="paren3">(<span class="code">type-of number</span>)</span></span>)</span></span>)</span> alist</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">push <span class="paren5">(<span class="code">cons 'number <span class="string">"Number is required."</span></span>)</span> alist</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">slot-boundp c 'name</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">name<span class="paren1">(<span class="code">name-of c</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">ppcre:scan #2=<span class="string">"^[A-Za-z][A-Za-z0-9]*$"</span> name</span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> #1=<span class="paren1">(<span class="code">&lt;= 2 <span class="paren2">(<span class="code">length name</span>)</span> 20</span>)</span>
+            <span class="paren1">(<span class="code">when<span class="paren2">(<span class="code">mito:select-dao 'user <span class="paren3">(<span class="code">sxql:where `<span class="paren4">(<span class="code"><span class="keyword">:like</span> ,name</span>)</span></span>)</span><span class="paren3">(<span class="code">sxql:limit 1</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code">push <span class="paren3">(<span class="code">cons 'name <span class="paren4">(<span class="code">format nil <span class="string">"Name must unique, already exists."</span></span>)</span></span>)</span>alist</span>)</span></span>)</span>
+            <span class="paren1">(<span class="code">push <span class="paren2">(<span class="code">cons 'name <span class="paren3">(<span class="code">format nil <span class="string">"Name must in range of ~S but ~S"</span> '#1# <span class="paren4">(<span class="code">length name</span>)</span></span>)</span></span>)</span> alist</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons 'name <span class="paren2">(<span class="code">format nil <span class="string">"Invalid form. Must satisfies ~S"</span> #2#</span>)</span></span>)</span> alist</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">push <span class="paren5">(<span class="code">cons 'name <span class="paren6">(<span class="code">format nil <span class="string">"Name is required."</span></span>)</span></span>)</span> alist</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">slot-boundp c 'full-name</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">full-name<span class="paren1">(<span class="code">full-name-of c</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">unless #3=<span class="paren6">(<span class="code">&lt;= 0 <span class="paren1">(<span class="code">length full-name</span>)</span> 20</span>)</span>
+          <span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons 'full-name <span class="paren2">(<span class="code">format nil <span class="string">"Full name must in range of ~S but ~S"</span> '#3# <span class="paren3">(<span class="code">length full-name</span>)</span></span>)</span></span>)</span> alist</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">push <span class="paren5">(<span class="code">cons 'full-name <span class="string">"Full name is required."</span></span>)</span> alist</span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">reverse alist</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これはいかにも辛いのでマクロで抽象化しよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-check-validate</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">var</span>)</span><span class="paren3">(<span class="code">&amp;rest assertions</span>)</span></span>)</span>
+  <span class="comment">;; initialize
+</span>  <span class="paren2">(<span class="code">check-type var symbol</span>)</span>
+  <span class="paren2">(<span class="code">setf assertions <span class="paren3">(<span class="code">mapcar <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">assert</span>)</span>
+                             <span class="paren5">(<span class="code">etypecase<span class="paren6">(<span class="code">car assert</span>)</span>
+                               <span class="paren6">(<span class="code">symbol <span class="paren1">(<span class="code">cons <span class="paren2">(<span class="code">list <span class="paren3">(<span class="code">car assert</span>)</span><span class="paren3">(<span class="code">car assert</span>)</span></span>)</span><span class="paren2">(<span class="code">cdr assert</span>)</span></span>)</span></span>)</span>
+                               <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">cons <span class="paren2">(<span class="code">and symbol <span class="paren3">(<span class="code">not <span class="paren4">(<span class="code">or keyword boolean</span>)</span></span>)</span></span>)</span>
+                                      <span class="paren2">(<span class="code">cons <span class="paren3">(<span class="code">and symbol <span class="paren4">(<span class="code">not <span class="paren5">(<span class="code">or keyword boolean</span>)</span></span>)</span></span>)</span>
+                                            null</span>)</span></span>)</span>
+                                <span class="paren1">(<span class="code">assert<span class="paren2">(<span class="code">every <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">clause</span>)</span>
+                                                <span class="paren4">(<span class="code">keywordp <span class="paren5">(<span class="code">car clause</span>)</span></span>)</span></span>)</span>
+                                              <span class="paren3">(<span class="code">cdr assert</span>)</span></span>)</span></span>)</span>
+                                assert</span>)</span></span>)</span></span>)</span>
+                           assertions</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">alist<span class="paren5">(<span class="code">gensym<span class="string">"ALIST"</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">slot<span class="paren5">(<span class="code">gensym <span class="string">"SLOT"</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">name<span class="paren5">(<span class="code">gensym<span class="string">"NAME"</span></span>)</span></span>)</span></span>)</span>
+    <span class="comment">;; body
+</span>    `<span class="paren3">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,alist</span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">dolist<span class="paren5">(<span class="code">,slot <span class="paren6">(<span class="code">c2mop:class-slots <span class="paren1">(<span class="code">class-of ,var</span>)</span></span>)</span></span>)</span>
+         <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">,name<span class="paren2">(<span class="code">c2mop:slot-definition-name ,slot</span>)</span></span>)</span></span>)</span>
+           <span class="paren6">(<span class="code">when<span class="paren1">(<span class="code">and <span class="paren2">(<span class="code">slot-boundp ,var ,name</span>)</span>
+                     <span class="paren2">(<span class="code">equal <span class="string">""</span> <span class="paren3">(<span class="code">slot-value ,var ,name</span>)</span></span>)</span></span>)</span>
+             <span class="paren1">(<span class="code">slot-makunbound ,var ,name</span>)</span></span>)</span></span>)</span></span>)</span>
+       ,@<span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">local-var slot-name</span>)</span> . assertions</span>)</span> <span class="keyword">:in</span> assertions
+               <span class="keyword">:collect</span> <span class="paren5">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">rec<span class="paren2">(<span class="code">assertions</span>)</span>
+                                  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">endp assertions</span>)</span>
+                                    nil
+                                    <span class="paren3">(<span class="code">apply #'body <span class="paren4">(<span class="code">cdr assertions</span>)</span><span class="paren4">(<span class="code">car assertions</span>)</span></span>)</span></span>)</span></span>)</span>
+                                <span class="paren1">(<span class="code">body<span class="paren2">(<span class="code">rest key value &amp;rest format-arguments</span>)</span>
+                                  <span class="paren2">(<span class="code">ecase key
+                                    <span class="paren3">(<span class="code"><span class="keyword">:type</span>
+                                      `<span class="paren4">(<span class="code"><i><span class="symbol">if</span></i><span class="paren5">(<span class="code">typep ,local-var ',value</span>)</span>
+                                         ,<span class="paren5">(<span class="code">rec rest</span>)</span>
+                                         <span class="paren5">(<span class="code">push <span class="paren6">(<span class="code">cons ',slot-name
+                                                     ,<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> format-arguments
+                                                        `<span class="paren2">(<span class="code">format nil ,@format-arguments</span>)</span>
+                                                        `<span class="paren2">(<span class="code">format nil <span class="string">"Not type-of ~S"</span>',value</span>)</span></span>)</span></span>)</span>
+                                               ,alist</span>)</span></span>)</span></span>)</span>
+                                    <span class="paren3">(<span class="code"><span class="keyword">:assert</span>
+                                      `<span class="paren4">(<span class="code"><i><span class="symbol">if</span></i> ,value
+                                         ,<span class="paren5">(<span class="code">rec rest</span>)</span>
+                                         <span class="paren5">(<span class="code">PUSH <span class="paren6">(<span class="code">CONS ',slot-name ,<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> format-arguments
+                                                                    `<span class="paren2">(<span class="code">format nil ,@format-arguments</span>)</span>
+                                                                    `<span class="paren2">(<span class="code">FORMAT NIL <span class="string">"Must satisfies ~S but ~S"</span>
+                                                                             ',value
+                                                                             ,local-var</span>)</span></span>)</span></span>)</span>
+                                               ,alist</span>)</span></span>)</span></span>)</span>
+                                    <span class="paren3">(<span class="code"><span class="keyword">:unique</span>
+                                      `<span class="paren4">(<span class="code">unless<span class="paren5">(<span class="code">mito:object-id ,var</span>)</span>
+                                         <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">null<span class="paren1">(<span class="code">mito:select-dao <span class="paren2">(<span class="code">class-of ,var</span>)</span> <span class="paren2">(<span class="code">sxql:where ,value</span>)</span><span class="paren2">(<span class="code">sxql:limit 1</span>)</span></span>)</span></span>)</span>
+                                           ,<span class="paren6">(<span class="code">rec rest</span>)</span>
+                                           <span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons ',slot-name <span class="string">"Duplicated"</span></span>)</span>,alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">equal '<span class="paren2">(<span class="code"><span class="keyword">:require</span> t</span>)</span> <span class="paren2">(<span class="code">car assertions</span>)</span></span>)</span>
+                            `<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i><span class="paren2">(<span class="code">slot-boundp ,var ',slot-name</span>)</span>
+                               <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">,local-var <span class="paren5">(<span class="code">slot-value ,var ',slot-name</span>)</span></span>)</span></span>)</span>
+                                 ,<span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">cdr assertions</span>)</span></span>)</span></span>)</span>
+                               <span class="paren2">(<span class="code">push <span class="paren3">(<span class="code">cons ',slot-name ,<span class="string">"Required"</span></span>)</span> ,alist</span>)</span></span>)</span>
+                            <span class="paren1">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren2">(<span class="code">when<span class="paren3">(<span class="code">equal '<span class="paren4">(<span class="code"><span class="keyword">:require</span> nil</span>)</span> <span class="paren4">(<span class="code">car assertions</span>)</span></span>)</span>
+                                     <span class="paren3">(<span class="code">pop assertions</span>)</span></span>)</span>
+                                   `<span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">slot-boundp ,var ',slot-name</span>)</span>
+                                      <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,local-var<span class="paren6">(<span class="code">slot-value ,var ',slot-name</span>)</span></span>)</span></span>)</span>
+                                        ,<span class="paren4">(<span class="code">rec assertions</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">reverse ,alist</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで先のコードは以下のように書けるようになる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">user</span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">number <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+             <span class="paren5">(<span class="code"><span class="keyword">:type</span> integer</span>)</span>
+             <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt; 0 number 100</span>)</span></span>)</span>
+             <span class="paren5">(<span class="code"><span class="keyword">:unique</span> <span class="paren6">(<span class="code"><span class="keyword">:=</span> <span class="keyword">:number</span> number</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">name <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">ppcre:scan <span class="string">"^[A-Za-z][A-Za-z0-9]*$"</span> name</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 2 <span class="paren1">(<span class="code">length name</span>)</span> 20</span>)</span> <span class="string">"Name length must be (&lt;= 2 x 20) but ~D"</span><span class="paren6">(<span class="code">length name</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:unique</span> <span class="paren6">(<span class="code"><span class="keyword">:like</span> <span class="keyword">:name</span> name</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">n full-name</span>)</span> <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+                    <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
+                    <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 1 <span class="paren1">(<span class="code">length n</span>)</span> 20</span>)</span> <span class="string">"Full-name length must be (&lt;= 1 x 20) but ~D"</span><span class="paren6">(<span class="code">length n</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Checking of mail adress</h3>
+
+<p>原著ではemailのvalidationも行うのだが、ここでは省略する。
+というのも、Common Lisp界隈にはそれに相当するものがないからだ。
+ただ、補足のために記しておくなら、Rubyのそれも完全なものではない。
+「email validation」でググると闇の一端を垣間見ることができるだろう。</p>
+
+<h3>Templates for error mesages.</h3>
+
+<p>エラーメッセージのための部分テンプレートは以下の通り。
+templates/shared/errors.htmlに作成する。</p>
+
+<pre><code>{% if errors %}
+&lt;div id="errors"&gt;
+        &lt;h3&gt;Error&lt;/h3&gt;
+        &lt;ul&gt;
+                {% for (slot . message) in errors %}
+                &lt;li&gt;{{slot}} - {{message}}&lt;/li&gt;
+                {% endfor %}
+        &lt;/ul&gt;
+&lt;/div&gt;
+{% endif %}</code></pre>
+
+<p>上記部分テンプレートを以下のような形でtemplates/user/form.htmlの冒頭に追加する。</p>
+
+<pre><code>{% include "shared/errors.html" %}</code></pre>
+
+<p>New用のルーティングを修正しなければいけないが、ついでにリファクタリングもしておこう。</p>
+
+<p>REST-API的にはNewアクションはPUTメソッドで実現されるべきだろう。
+という訳で名前付きルーティングを以下のように作る。
+<code>MITO:CREATE-DAO</code>を叩かず、<code>CL:MAKE-INSTANCE</code>した後に<code>VALIDATE-USER</code>を叩き、エラーがなければ<code>MITO:INSERT-DAO</code>を叩くという処理になっている点要注意。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> put-user<span class="paren2">(<span class="code"><span class="string">"/user"</span> <span class="keyword">:method</span> <span class="keyword">:put</span></span>)</span><span class="paren2">(<span class="code">&amp;key |authenticity-token| <span class="paren3">(<span class="code">|number| <span class="string">""</span></span>)</span> |name| |full-name| <span class="paren3">(<span class="code">|sex| <span class="string">""</span></span>)</span>
+                                              |birthday-year| |birthday-month| |birthday-day| |email|
+                                              <span class="paren3">(<span class="code">|administrator| <span class="string">""</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= |authenticity-token| <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+    `<span class="paren3">(<span class="code">403 <span class="paren4">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="string">"Denied"</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">user <span class="paren6">(<span class="code">make-instance 'your-app.model::user
+                               <span class="keyword">:number</span> <span class="paren1">(<span class="code">or <span class="paren2">(<span class="code">parse-integer |number| <span class="keyword">:junk-allowed</span> t</span>)</span>
+                                           |number|</span>)</span>
+                               <span class="keyword">:name</span> |name|
+                               <span class="keyword">:full-name</span> |full-name|
+                               <span class="keyword">:sex</span> <span class="paren1">(<span class="code">or <span class="paren2">(<span class="code">parse-integer |sex| <span class="keyword">:junk-allowed</span> t</span>)</span>
+                                        |sex|</span>)</span>
+                               <span class="keyword">:birthday</span> <span class="paren1">(<span class="code">local-time:parse-timestring <span class="paren2">(<span class="code">format nil <span class="string">"~A-~A-~A"</span> |birthday-year| |birthday-month| |birthday-day|</span>)</span></span>)</span>
+                               <span class="keyword">:email</span> |email|
+                               <span class="keyword">:administrator</span> <span class="paren1">(<span class="code">eq your-app.model::+true+ <span class="paren2">(<span class="code">zerop <span class="paren3">(<span class="code">parse-integer |administrator| <span class="keyword">:junk-allowed</span> t</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren5">(<span class="code">errors<span class="paren6">(<span class="code">your-app.model::validate-user user</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i> errors
+        `<span class="paren5">(<span class="code">400 <span class="paren6">(<span class="code"></span>)</span><span class="paren6">(<span class="code">,<span class="paren1">(<span class="code">render <span class="string">"user/new.html"</span> `<span class="paren2">(<span class="code"><span class="keyword">:user</span> ,user <span class="keyword">:errors</span> ,errors <span class="keyword">:token</span>,<span class="paren3">(<span class="code">token</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren6">(<span class="code">setf<span class="paren1">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Stored!"</span></span>)</span>
+               <span class="paren6">(<span class="code">mito:insert-dao user</span>)</span>
+               `<span class="paren6">(<span class="code">303 <span class="paren1">(<span class="code"><span class="keyword">:location</span> ,<span class="paren2">(<span class="code">format nil <span class="string">"/user/~D"</span><span class="paren3">(<span class="code">mito:object-id user</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>POSTメソッドは単にディスパッチャとして以下のように修正する。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/user"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key |_method|</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">string= <span class="string">"put"</span> |_method|</span>)</span>
+     <span class="paren4">(<span class="code">put-user <span class="paren5">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">t `<span class="paren4">(<span class="code">400 <span class="paren5">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">format nil <span class="string">"Unknown method ~S"</span>|_method|</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>NewのUIフォームが正しくPUTメソッドを送るようにテンプレートを修正。</p>
+
+<pre><code>        &lt;input name="authenticity-token" type="hidden" value="{{token}}" /&gt;
+        &lt;input name="_method" type="hidden" value="put" /&gt;
+        {% include "user/form.html" %}</code></pre>
+
+<p>同様にEditのためのルーティングもリファクタリングしていく。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/user/:id"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key id |_method|</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">string= |_method| <span class="string">"delete"</span></span>)</span>
+     <span class="paren4">(<span class="code">delete-user <span class="paren5">(<span class="code">acons <span class="string">"ID"</span> id <span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">find |_method| '<span class="paren5">(<span class="code"><span class="string">""</span> <span class="string">"post"</span> nil</span>)</span> <span class="keyword">:test</span> #'equal</span>)</span>
+     <span class="paren4">(<span class="code">post-user <span class="paren5">(<span class="code">acons <span class="string">"id"</span> id <span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">t `<span class="paren4">(<span class="code">400 <span class="paren5">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">format nil <span class="string">"Unsuppoeted method ~S"</span> |_method|</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>見通しの良さのため、本来のPOSTメソッドとしての処理は個別の<code>POST-USER</code>として定義する。
+Cavemanが自動的に作る名前付き関数を、代わりに手動で書くことになるが、まぁ、よしとする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> post-user<span class="paren2">(<span class="code">request</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind<span class="paren3">(<span class="code">&amp;key authenticity-token id <span class="paren4">(<span class="code">number <span class="string">""</span></span>)</span> name full-name <span class="paren4">(<span class="code">sex <span class="string">""</span></span>)</span> birthday-year birthday-month
+                           birthday-day email <span class="paren4">(<span class="code">administrator <span class="string">""</span></span>)</span> &amp;allow-other-keys</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren4">(<span class="code">key . value</span>)</span> <span class="keyword">:in</span> request
+          <span class="keyword">:collect</span> <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code"><span class="special">*package*</span><span class="paren1">(<span class="code">find-package <span class="keyword">:keyword</span></span>)</span></span>)</span></span>)</span>
+                     <span class="paren5">(<span class="code">read-from-string key</span>)</span></span>)</span>
+          <span class="keyword">:collect</span> value</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">not<span class="paren5">(<span class="code">string= authenticity-token <span class="paren6">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+      `<span class="paren4">(<span class="code">403 <span class="paren5">(<span class="code"></span>)</span> <span class="paren5">(<span class="code">,<span class="paren6">(<span class="code"><i><span class="symbol">with-output-to-string</span></i><span class="paren1">(<span class="code"><span class="special">*standard-output*</span></span>)</span>
+                   <span class="paren1">(<span class="code">dev:peep <span class="special">ningle:*request*</span></span>)</span>
+                   <span class="paren1">(<span class="code">print <span class="keyword">:denied</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">id<span class="paren1">(<span class="code">ignore-errors<span class="paren2">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+           <span class="paren6">(<span class="code">user<span class="paren1">(<span class="code">and id <span class="paren2">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">null user</span>)</span>
+          `<span class="paren6">(<span class="code">500 <span class="paren1">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span>
+            <span class="paren1">(<span class="code">,<span class="paren2">(<span class="code"><i><span class="symbol">with-output-to-string</span></i><span class="paren3">(<span class="code"><span class="special">*standard-output*</span></span>)</span>
+                <span class="paren3">(<span class="code">dev:peep <span class="special">ningle:*request*</span></span>)</span>
+                <span class="paren3">(<span class="code">format t <span class="string">"Could not edit unexists user."</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">your-app.model::number-of user</span>)</span> <span class="paren2">(<span class="code">or <span class="paren3">(<span class="code">parse-integer number <span class="keyword">:junk-allowed</span> t</span>)</span>
+                                                            number</span>)</span>
+                       <span class="paren2">(<span class="code">your-app.model::name-of user</span>)</span> name
+                       <span class="paren2">(<span class="code">your-app.model::full-name-of user</span>)</span> full-name
+                       <span class="paren2">(<span class="code">your-app.model::sex-of user</span>)</span> <span class="paren2">(<span class="code">or <span class="paren3">(<span class="code">parse-integer sex <span class="keyword">:junk-allowed</span> t</span>)</span>
+                                                         sex</span>)</span>
+                       <span class="paren2">(<span class="code">your-app.model::birthday-of user</span>)</span> <span class="paren2">(<span class="code">local-time:parse-timestring <span class="paren3">(<span class="code">format nil <span class="string">"~A-~A-~A"</span> birthday-year birthday-month birthday-day</span>)</span></span>)</span>
+                       <span class="paren2">(<span class="code">your-app.model::email-of user</span>)</span> email
+                       <span class="paren2">(<span class="code">your-app.model::administrator-of user</span>)</span> <span class="paren2">(<span class="code">eq your-app.model::+true+ <span class="paren3">(<span class="code">zerop <span class="paren4">(<span class="code">parse-integer administrator <span class="keyword">:junk-allowed</span> t</span>)</span></span>)</span></span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">errors<span class="paren4">(<span class="code">your-app.model::validate-user user</span>)</span></span>)</span></span>)</span>
+                   <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> errors
+                     `<span class="paren3">(<span class="code">400 <span class="paren4">(<span class="code"></span>)</span><span class="paren4">(<span class="code">,<span class="paren5">(<span class="code">render <span class="string">"user/edit.html"</span> `<span class="paren6">(<span class="code"><span class="keyword">:user</span> ,user <span class="keyword">:errors</span> ,errors <span class="keyword">:token</span>,<span class="paren1">(<span class="code">token</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                     <span class="paren3">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren4">(<span class="code">mito:save-dao user</span>)</span>
+                            <span class="paren4">(<span class="code">setf<span class="paren5">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Updated"</span></span>)</span>
+                            `<span class="paren4">(<span class="code">303 <span class="paren5">(<span class="code"><span class="keyword">:location</span> ,<span class="paren6">(<span class="code">format nil <span class="string">"/user/~D"</span> id</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/caveman/CkRoR-user-errors.png" alt="Screen shot of example" /></p>
+
+<h2>Internationalization.</h2>
+
+<p>CavemanがテンプレートエンジンにDjulaを使用しているのは既に承知のことだが、Djulaは<a href="https://github.com/fukamachi/cl-locale" >cl-locale</a>を使用したi18nをサポートしている。
+もっとも、「使い方についてはdemoを参照してくれ」としかドキュメントにはなく、肝心のdemoも走らせるとi18nに関してはエラーとなるのだが。
+とはいえcl-localeは非常に小さなライブラリなのでコードを追うのもそこまで苦ではない。
+使い方を見ていこう。</p>
+
+<h3>setup</h3>
+
+<p>cl-localeは非常に小さなライブラリなのは既に述べた通りだが、そのままだと少々小さすぎる。
+使い勝手が悪いのでユーティリティを自作しておこう。</p>
+
+<p>/src/locale.lispを用意し、your-app.asdの該当箇所を以下のように修正する。</p>
+
+<pre><code><span class="code">  :components <span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><span class="keyword">:module</span> <span class="string">"src"</span>
+                <span class="keyword">:components</span>
+                <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="keyword">:file</span> <span class="string">"main"</span> <span class="keyword">:depends-on</span> <span class="paren5">(<span class="code"><span class="string">"config"</span> <span class="string">"view"</span> <span class="string">"db"</span></span>)</span></span>)</span>
+                 <span class="paren4">(<span class="code"><span class="keyword">:file</span> <span class="string">"web"</span> <span class="keyword">:depends-on</span> <span class="paren5">(<span class="code"><span class="string">"view"</span> <span class="string">"model"</span></span>)</span></span>)</span>
+                 <span class="paren4">(<span class="code"><span class="keyword">:file</span> <span class="string">"view"</span> <span class="keyword">:depends-on</span> <span class="paren5">(<span class="code"><span class="string">"config"</span></span>)</span></span>)</span>
+                 <span class="paren4">(<span class="code"><span class="keyword">:file</span> <span class="string">"db"</span> <span class="keyword">:depends-on</span> <span class="paren5">(<span class="code"><span class="string">"config"</span></span>)</span></span>)</span>
+                 <span class="paren4">(<span class="code"><span class="keyword">:file</span> <span class="string">"model"</span> <span class="keyword">:depends-on</span> <span class="paren5">(<span class="code"><span class="string">"db"</span></span>)</span></span>)</span>
+                 <span class="paren4">(<span class="code"><span class="keyword">:file</span> <span class="string">"locale"</span> <span class="keyword">:depends-on</span> <span class="paren5">(<span class="code"><span class="string">"config"</span></span>)</span></span>)</span> <span class="comment">; &lt;--- This!
+</span>                 <span class="paren4">(<span class="code"><span class="keyword">:file</span> <span class="string">"config"</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>/src/locale.lispの先頭はお定まりのものだ。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defpackage</span></i> <span class="keyword">:your-app.locale</span><span class="paren2">(<span class="code"><span class="keyword">:use</span> <span class="keyword">:cl</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">in-package <span class="keyword">:your-app.locale</span></span>)</span></span></code></pre>
+
+<p>cl-localeの作法に則って、以下のような辞書を定義することになろう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">cl-locale:define-dictionary</span></i> your-app
+  <span class="paren2">(<span class="code"><span class="string">"ja"</span> <span class="paren3">(<span class="code">merge-pathnames <span class="string">"locale/ja-jp.lisp"</span>
+                         <span class="special">your-app.config:*static-directory*</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="string">"ja-JP"</span> <span class="paren3">(<span class="code">merge-pathnames <span class="string">"locale/ja-jp.lisp"</span>
+                            <span class="special">your-app.config:*static-directory*</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>ところがこのままだと少々使い勝手が悪い。
+辞書ファイルは/static/locale/*.lispとして配置していくのだが、開発中はこのファイルのみを編集することも少なくない。
+すなわちアプリケーションのコードには変更が施されないこともままあるということだ。
+その場合何が起きるかというと、ASDFは賢くもソースコードに変更が無いことを見極め、ファイルのロードを行わない。
+すなわち辞書ファイルの変更が反映されない。
+ASDFの:COMPONENTには:STATIC-FILEの指定も可能なのだが、たとえこれを指定しても変更が反映されるようなことはない。
+:STATIC-FILEはLispイメージ外のものだからだ。</p>
+
+<p>そこで辞書ファイルのリロードを行いたいのだが、そのような機能はcl-localeには無い。
+アプリケーションのロードに:FORCE Tを指定すれば再ロードは行われるが、その場合必要のない全体コンパイルが走るのでできれば避けたい。
+そこで辞書ファイルのリロードを行うヘルパーがあると便利だ。
+という訳でそれを作っていくのだが、それにあたり問題が２つほどある。</p>
+
+<p>一つはcl-localeがアプリケーション志向で言語志向ではないという点だ。
+どういう意味かというと、使うためのAPIは公開されているが、拡張するためのAPIは公開されていないという意味だ。
+cl-localeは１パッケージパーファイルのスタイルで開発されているので、各下層パッケージからはエクスポートされている場合もあるがインターフェイスとなるパッケージからは公開されていないものが多い。
+もちろんいずれにせよインターナルなシンボルもある。
+ここでは容赦なくそれらを使っていくこととする。</p>
+
+<p>２つめの問題は定義コードに書くべきパスの管理が煩わしいという点だ。
+リロードするヘルパーはリロードすべきファイルパスを知っていなければならない。
+ところがcl-localeはこの情報を使い捨てにする。
+すなわち、たとえばlocaleオブジェクトのfile-pathスロットに格納しておくというようなことはなく、リテラルなデータとして使用した後はもう動的に取り出すことはできない。</p>
+
+<p>かといってグローバル変数に突っ込んでおくのも使い勝手が悪い。
+今後対応言語辞書が増えていくことを想定したら、１変数にリストなりハッシュテーブルなりで管理するのはいかにもバグの源泉になりそうだ。</p>
+
+<p>というわけでここでは同名のマクロを定義しそれを使っていくこととする。
+コードは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">define-dictionary</span></i><span class="paren2">(<span class="code">name &amp;rest args</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">Progn</span></i> <span class="paren3">(<span class="code"><i><span class="symbol">cl-locale:define-dictionary</span></i> ,name ,@args</span>)</span>
+          <span class="paren3">(<span class="code"><i><span class="symbol">defun</span></i> reload<span class="paren4">(<span class="code"></span>)</span>
+            <span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren5">(<span class="code">locale dictionary</span>)</span> <span class="keyword">:in</span> <span class="paren5">(<span class="code">list ,@<span class="paren6">(<span class="code">mapcar <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren2">(<span class="code">arg</span>)</span>
+                                                                 `<span class="paren2">(<span class="code">list ,@arg</span>)</span></span>)</span>
+                                                               args</span>)</span></span>)</span>
+                  <span class="keyword">:do</span> <span class="paren5">(<span class="code">cl-locale.core::register-dictionary ',name dictionary <span class="keyword">:locale</span> locale</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>シンタックスは<code>CL-LOCALE:DEFINE-DICTIONARY</code>と全く同じなので、先例のコードから単にパッケープリフィックスを除けば良い。</p>
+
+<h3>WITH-I18N</h3>
+
+<p>cl-localeは作者の好みを反映して<code>CL-LOCALE:CURRENT-DICTIONARY</code>を<code>CL:SETF</code>していくスタイルとなっている。
+僕個人は<code>CL:LET</code>で動的に束縛するほうが好みなので、それを実現したい。
+その上で、そのコードは頻出することになろうからWITH系マクロとしてまとめておきたい。</p>
+
+<p>コードは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-i18n</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">dictionary locale</span>)</span>&amp;body string-generate-form</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">cl-locale.core::*dictionary*</span><span class="paren5">(<span class="code">cl-locale.core::ensure-dictionary ',dictionary</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code"><span class="special">cl-locale.core:*locale*</span> ,locale</span>)</span></span>)</span>
+     <span class="paren3">(<span class="code">cl-locale:i18n <span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i> ,@string-generate-form</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Switching the locale.</h3>
+
+<p>さて、ロケールをどう切り替えるか、だが、HTTPヘッダのaccept-languageを取得しよう。</p>
+
+<p><code>NINGLE:*REQUEST*</code>変数から任意の値を取り出してくる最下層関数は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> accept-language<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">and <span class="special">ningle:*request*</span>
+       <span class="paren3">(<span class="code">gethash <span class="string">"accept-language"</span> <span class="paren4">(<span class="code">getf <span class="paren5">(<span class="code">lack.request:request-env <span class="special">ningle:*request*</span></span>)</span><span class="keyword">:headers</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>取り出されたパラメタをパーズするヘルパーは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> parse-accept-language<span class="paren2">(<span class="code">parameter</span>)</span>
+  <span class="paren2">(<span class="code">mapcar #'car <span class="paren3">(<span class="code">sort <span class="paren4">(<span class="code">mapcar <span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren6">(<span class="code">param</span>)</span>
+                                <span class="paren6">(<span class="code">ppcre:split <span class="string">";q="</span> param</span>)</span></span>)</span>
+                              <span class="paren5">(<span class="code">ppcre:split <span class="character">#\,</span> parameter</span>)</span></span>)</span>
+                      #'&gt;
+                      <span class="keyword">:key</span> <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">x</span>)</span><span class="paren5">(<span class="code">read-from-string<span class="paren6">(<span class="code">or <span class="paren1">(<span class="code">cadr x</span>)</span> <span class="string">"1"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上記ヘルパーは、複数指定されているかもしれない言語を重要度の高い順にリストにくくって返す。
+しかしながら指定された言語が辞書としてサポートされていないかもしれない。
+それを確認する用の下層関数は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> find-locale<span class="paren2">(<span class="code">locale</span>)</span>
+  <span class="paren2">(<span class="code">and <span class="special">cl-locale.core::*dictionary*</span>
+       <span class="paren3">(<span class="code">gethash locale <span class="special">cl-locale.core::*dictionary*</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>ソート済みのリストから最も重要度の高いサポート済みのロケールを返す関数。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> find-acceptable-locale<span class="paren2">(<span class="code">locales</span>)</span>
+  <span class="paren2">(<span class="code">find-if #'find-locale locales</span>)</span></span>)</span></span></code></pre>
+
+<h3>Filter</h3>
+
+<p>さてこれで下準備は整った。
+djula内部マクロを使うことになるが、/src/view.lispのyour-app.djulaパッケージに以下のコードを突っ込む。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">djula::def-filter</span></i> <span class="keyword">:i18n</span><span class="paren2">(<span class="code">it</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">your-app.locale::with-i18n</span></i><span class="paren3">(<span class="code">your-app.locale::your-app <span class="paren4">(<span class="code">your-app.locale::find-acceptable-locale
+                                                          <span class="paren5">(<span class="code">your-app.locale::parse-accept-language
+                                                            <span class="paren6">(<span class="code">your-app.locale::accept-language</span>)</span></span>)</span></span>)</span></span>)</span>
+    it</span>)</span></span>)</span></span></code></pre>
+
+<p>これに合わせてASDファイルの編集をしておくことを忘れぬよう。</p>
+
+<pre><code>  :components ((:module "src"
+                :components
+                ((:file "main" :depends-on ("config" "view" "db"))
+                 (:file "web" :depends-on ("view" "model"))
+                 (:file "view" :depends-on ("config" "locale")) ; &lt;--- This!
+                 (:file "db" :depends-on ("config"))
+                 (:file "model" :depends-on ("db"))
+                 (:file "locale" :depends-on ("config"))
+                 (:file "config"))))</code></pre>
+
+<p>本来ならDjulaが提供するi18n機能を使うべきなのだが、肝心のデモが死んでるので上記フィルターを利用することで無理やり実現していく。</p>
+
+<p>使い方だが、テンプレートの中で対応させたいリテラルをDjulaのフィルタータグで包む。
+たとえば以下のような形だ。</p>
+
+<pre><code>                &lt;th&gt;&lt;label for="user-number"&gt;{% filter i18n %}Number{% endfilter %}&lt;/label&gt;&lt;/th&gt;</code></pre>
+
+<p>辞書ファイルはただのalistだ。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><span class="string">"Number"</span> . <span class="string">"背番号"</span></span>)</span></span>)</span></span></code></pre>
+
+<p>ケースセンシティブな点、要注意。</p>
+
+<p>また、リテラル同士の一対一対応しかできない点も要注意。
+よって動的に生成されるエラーメッセージのi18nは、現行不可能である。</p>
+
+<p>templates/user/form.htmlは以下のようになる。</p>
+
+<pre><code>{% include "shared/errors.html" %}
+&lt;table class="attr"&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="user-number"&gt;{% filter i18n %}Number{% endfilter %}&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input size="8" type="text" name="number" value="{{user.number}}" id="user-number" /&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="user-name"&gt;{% filter i18n %}Name{% endfilter %}&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input type="text" value="{{user.name}}" name="name" id="user-name" /&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="user-full-name"&gt;{% filter i18n %}Full Name{% endfilter %}&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input type="text" value="{{user.full-name}}" name="full-name" id="user-full-name" /&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;{% filter i18n %}Sex{% endfilter %}&lt;/th&gt;
+                &lt;td&gt;
+                        &lt;input type="radio" value="1" {%ifequal user.sex 1%}checked="checked"{%endifequal%} name="sex" id="member-sex-1" /&gt;
+                        &lt;label for="member-sex-1"&gt;{% filter i18n %}Male{% endfilter %}&lt;/label&gt;
+                        &lt;input type="radio" value="2" {%ifequal user.sex 2%}checked="checked"{%endifequal%} name="sex" id="member-sex-2" /&gt;
+                        &lt;label for="member-sex-1"&gt;{% filter i18n %}Female{% endfilter %}&lt;/label&gt;
+                &lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="user-birthday"&gt;{% filter i18n %}Birthday{% endfilter %}&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;select id="member-birthday-li" name="birthday-year"&gt;
+                                {{ user.birthday
+                                 | lisp: (lambda(timestamp)
+                                           (let((current-year(local-time:timestamp-year(local-time:now))))
+                                             (loop :for i :upfrom 1940 :to current-year
+                                                   :with target = (or (and timestamp
+                                                                           (local-time:timestamp-year timestamp))
+                                                                      (- current-year 20))
+                                                   :collect (format nil "&lt;option value=\"~D\"~@[ ~A~]&gt;~2:*~D&lt;/option&gt;~%"
+                                                                    i (when(= target i)
+                                                                        "selected=\"selected\"")))))
+                                 | join:""
+                                 | safe
+                                 }}
+                        &lt;/select&gt;
+                        &lt;select id="member-birthday-2i" name="birthday-month"&gt;
+                                {{ user.birthday
+                                 | lisp: (lambda(timestamp)
+                                           (loop :for i :upfrom 1 to 12
+                                                 :with target = (or (and timestamp
+                                                                         (local-time:timestamp-month timestamp))
+                                                                    1)
+                                                 :collect (format nil "&lt;option value=\"~D\"~@[ ~A~]&gt;~A&lt;/option&gt;~%"
+                                                                  i (when(= target i)
+                                                                      "selected=\"selected\"")
+                                                                  (aref local-time:+month-names+ i))))
+                                 | join:""
+                                 | safe
+                                 }}
+                        &lt;/select&gt;
+                        &lt;select id="birthday-3i" name="birthday-day"&gt;
+                                {{ user.birthday
+                                 | lisp: (lambda(timestamp)
+                                           (loop :for i :upfrom 1 to 31
+                                                 :with target = (or (and timestamp
+                                                                         (local-time:timestamp-day timestamp))
+                                                                    1)
+                                                 :collect (format nil "&lt;option value=\"~D\"~@[ ~A~]&gt;~2:*~D&lt;/option&gt;~%"
+                                                                  i (when(= target i)
+                                                                      "selected=\"selected\""))))
+                                 | join:""
+                                 | safe
+                                 }}
+                        &lt;/select&gt;
+                &lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="user-email"&gt;{% filter i18n %}Email{% endfilter %}&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input type="text" name="email" id="user-email" /&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;{% filter i18n %}Administrator{% endfilter %}&lt;/th&gt;
+                &lt;td&gt;
+                        &lt;input name="administrator" type="hidden" value="0" /&gt;
+                        &lt;input type="checkbox" value="1" name="administrator" id="user-administrator" /&gt;
+                        &lt;label for="user-administrator"&gt;Administrator&lt;/label&gt;
+                &lt;/td&gt;
+        &lt;/tr&gt;
+&lt;/table</code></pre>
+
+<p>templates/shared/errors.htmlは以下のようになる。</p>
+
+<pre><code>{% if errors %}
+&lt;div id="errors"&gt;
+        &lt;h3&gt;Error&lt;/h3&gt;
+        &lt;ul&gt;
+                {% for (slot . message) in errors %}
+                &lt;li&gt;{{slot|capfirst|lisp: (lambda(s)(substitute #\space #\- s))|i18n}} {{message|i18n}}&lt;/li&gt;
+                {% endfor %}
+        &lt;/ul&gt;
+&lt;/div&gt;
+{% endif %}</code></pre>
+
+<p>対応しやすいようにvalidationのエラーメッセージを修正しておく。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-check-validate</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">var</span>)</span><span class="paren3">(<span class="code">&amp;rest assertions</span>)</span></span>)</span>
+  <span class="comment">;; initialize
+</span>  <span class="paren2">(<span class="code">check-type var symbol</span>)</span>
+  <span class="paren2">(<span class="code">setf assertions <span class="paren3">(<span class="code">mapcar <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">assert</span>)</span>
+                             <span class="paren5">(<span class="code">etypecase<span class="paren6">(<span class="code">car assert</span>)</span>
+                               <span class="paren6">(<span class="code">symbol <span class="paren1">(<span class="code">cons <span class="paren2">(<span class="code">list <span class="paren3">(<span class="code">car assert</span>)</span><span class="paren3">(<span class="code">car assert</span>)</span></span>)</span><span class="paren2">(<span class="code">cdr assert</span>)</span></span>)</span></span>)</span>
+                               <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">cons <span class="paren2">(<span class="code">and symbol <span class="paren3">(<span class="code">not <span class="paren4">(<span class="code">or keyword boolean</span>)</span></span>)</span></span>)</span>
+                                      <span class="paren2">(<span class="code">cons <span class="paren3">(<span class="code">and symbol <span class="paren4">(<span class="code">not <span class="paren5">(<span class="code">or keyword boolean</span>)</span></span>)</span></span>)</span>
+                                            null</span>)</span></span>)</span>
+                                <span class="paren1">(<span class="code">assert<span class="paren2">(<span class="code">every <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">clause</span>)</span>
+                                                <span class="paren4">(<span class="code">keywordp <span class="paren5">(<span class="code">car clause</span>)</span></span>)</span></span>)</span>
+                                              <span class="paren3">(<span class="code">cdr assert</span>)</span></span>)</span></span>)</span>
+                                assert</span>)</span></span>)</span></span>)</span>
+                           assertions</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">alist<span class="paren5">(<span class="code">gensym<span class="string">"ALIST"</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">slot<span class="paren5">(<span class="code">gensym <span class="string">"SLOT"</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">name<span class="paren5">(<span class="code">gensym<span class="string">"NAME"</span></span>)</span></span>)</span></span>)</span>
+    <span class="comment">;; body
+</span>    `<span class="paren3">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,alist</span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">dolist<span class="paren5">(<span class="code">,slot <span class="paren6">(<span class="code">c2mop:class-slots <span class="paren1">(<span class="code">class-of ,var</span>)</span></span>)</span></span>)</span>
+         <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">,name<span class="paren2">(<span class="code">c2mop:slot-definition-name ,slot</span>)</span></span>)</span></span>)</span>
+           <span class="paren6">(<span class="code">when<span class="paren1">(<span class="code">and <span class="paren2">(<span class="code">slot-boundp ,var ,name</span>)</span>
+                     <span class="paren2">(<span class="code">equal <span class="string">""</span> <span class="paren3">(<span class="code">slot-value ,var ,name</span>)</span></span>)</span></span>)</span>
+             <span class="paren1">(<span class="code">slot-makunbound ,var ,name</span>)</span></span>)</span></span>)</span></span>)</span>
+       ,@<span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">local-var slot-name</span>)</span> . assertions</span>)</span> <span class="keyword">:in</span> assertions
+               <span class="keyword">:collect</span> <span class="paren5">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">rec<span class="paren2">(<span class="code">assertions</span>)</span>
+                                  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">endp assertions</span>)</span>
+                                    nil
+                                    <span class="paren3">(<span class="code">apply #'body <span class="paren4">(<span class="code">cdr assertions</span>)</span><span class="paren4">(<span class="code">car assertions</span>)</span></span>)</span></span>)</span></span>)</span>
+                                <span class="paren1">(<span class="code">body<span class="paren2">(<span class="code">rest key value &amp;rest format-arguments</span>)</span>
+                                  <span class="paren2">(<span class="code">ecase key
+                                    <span class="paren3">(<span class="code"><span class="keyword">:type</span>
+                                      `<span class="paren4">(<span class="code"><i><span class="symbol">if</span></i><span class="paren5">(<span class="code">typep ,local-var ',value</span>)</span>
+                                         ,<span class="paren5">(<span class="code">rec rest</span>)</span>
+                                         <span class="paren5">(<span class="code">push <span class="paren6">(<span class="code">cons ',slot-name
+                                                     ,<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> format-arguments
+                                                        `<span class="paren2">(<span class="code">format nil ,@format-arguments</span>)</span>
+                                                        `<span class="paren2">(<span class="code">format nil <span class="string">"is not type-of ~S"</span>',value</span>)</span></span>)</span></span>)</span>
+                                               ,alist</span>)</span></span>)</span></span>)</span>
+                                    <span class="paren3">(<span class="code"><span class="keyword">:assert</span>
+                                      `<span class="paren4">(<span class="code"><i><span class="symbol">if</span></i> ,value
+                                         ,<span class="paren5">(<span class="code">rec rest</span>)</span>
+                                         <span class="paren5">(<span class="code">PUSH <span class="paren6">(<span class="code">CONS ',slot-name ,<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> format-arguments
+                                                                    `<span class="paren2">(<span class="code">format nil ,@format-arguments</span>)</span>
+                                                                    `<span class="paren2">(<span class="code">FORMAT NIL <span class="string">"must satisfies ~S but ~S"</span>
+                                                                             ',value
+                                                                             ,local-var</span>)</span></span>)</span></span>)</span>
+                                               ,alist</span>)</span></span>)</span></span>)</span>
+                                    <span class="paren3">(<span class="code"><span class="keyword">:unique</span>
+                                      `<span class="paren4">(<span class="code">unless<span class="paren5">(<span class="code">mito:object-id ,var</span>)</span>
+                                         <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">null<span class="paren1">(<span class="code">mito:select-dao <span class="paren2">(<span class="code">class-of ,var</span>)</span> <span class="paren2">(<span class="code">sxql:where ,value</span>)</span><span class="paren2">(<span class="code">sxql:limit 1</span>)</span></span>)</span></span>)</span>
+                                           ,<span class="paren6">(<span class="code">rec rest</span>)</span>
+                                           <span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons ',slot-name <span class="string">"is already exists"</span></span>)</span>,alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">equal '<span class="paren2">(<span class="code"><span class="keyword">:require</span> t</span>)</span> <span class="paren2">(<span class="code">car assertions</span>)</span></span>)</span>
+                            `<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i><span class="paren2">(<span class="code">slot-boundp ,var ',slot-name</span>)</span>
+                               <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">,local-var <span class="paren5">(<span class="code">slot-value ,var ',slot-name</span>)</span></span>)</span></span>)</span>
+                                 ,<span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">cdr assertions</span>)</span></span>)</span></span>)</span>
+                               <span class="paren2">(<span class="code">push <span class="paren3">(<span class="code">cons ',slot-name ,<span class="string">"is required"</span></span>)</span> ,alist</span>)</span></span>)</span>
+                            <span class="paren1">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren2">(<span class="code">when<span class="paren3">(<span class="code">equal '<span class="paren4">(<span class="code"><span class="keyword">:require</span> nil</span>)</span> <span class="paren4">(<span class="code">car assertions</span>)</span></span>)</span>
+                                     <span class="paren3">(<span class="code">pop assertions</span>)</span></span>)</span>
+                                   `<span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">slot-boundp ,var ',slot-name</span>)</span>
+                                      <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,local-var<span class="paren6">(<span class="code">slot-value ,var ',slot-name</span>)</span></span>)</span></span>)</span>
+                                        ,<span class="paren4">(<span class="code">rec assertions</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">reverse ,alist</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>辞書ファイルは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><span class="string">"hello"</span> . <span class="string">"(=ﾟωﾟ)ﾉぃょぅ"</span></span>)</span>
+ <span class="paren2">(<span class="code"><span class="string">"Number"</span> . <span class="string">"背番号"</span></span>)</span>
+ <span class="paren2">(<span class="code"><span class="string">"Name"</span> . <span class="string">"ユーザー名"</span></span>)</span>
+ <span class="paren2">(<span class="code"><span class="string">"Full Name"</span> . <span class="string">"氏名"</span></span>)</span>
+ <span class="paren2">(<span class="code"><span class="string">"Sex"</span> . <span class="string">"性別"</span></span>)</span>
+ <span class="paren2">(<span class="code"><span class="string">"Male"</span> . <span class="string">"男"</span></span>)</span>
+ <span class="paren2">(<span class="code"><span class="string">"Female"</span> . <span class="string">"女"</span></span>)</span>
+ <span class="paren2">(<span class="code"><span class="string">"Birthday"</span> . <span class="string">"誕生日"</span></span>)</span>
+ <span class="paren2">(<span class="code"><span class="string">"Email"</span> . <span class="string">"メールアドレス"</span></span>)</span>
+ <span class="paren2">(<span class="code"><span class="string">"Administrator"</span> . <span class="string">"管理者"</span></span>)</span>
+ <span class="paren2">(<span class="code"><span class="string">"Create user"</span> . <span class="string">"登録する"</span></span>)</span>
+ <span class="paren2">(<span class="code"><span class="string">"is required"</span> . <span class="string">"を入力してください。"</span></span>)</span>
+ </span>)</span></span></code></pre>
+
+<p>後は必要に応じて各ファイル地道にシコシコと対応していけば良い。</p>
+
+<p><img src="../img/caveman/CkRoR-user-i18n.png" alt="Screen shot of example" /></p>
+
+<p>気をつけなければいけないのは、本i18n機能はHTTPヘッダに依存している点だ。
+ブラウザのロケールを変更しないと機能しないので、ブラウザのロケールを日本以外にしている人は要注意。</p>
+
+<h2>Summary</h2>
+
+<ul>
+<li>フォームの値が正しいかどうかをチェックすることをバリデーションといいます。</li>
+<li>エラーメッセージを日本語化するには、cl-localeを使用します。</li>
+<li>辞書ファイルは連想リスト形式で記述します。
+<!-- {% endraw %} --></li>
+</ul>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
