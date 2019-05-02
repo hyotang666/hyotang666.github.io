@@ -114,20 +114,11 @@ vimとLisp処理系との連携には<a href="https://github.com/l04m33/vlime" >
                <span class="string">"envy"</span>
                ...</span>)</span></span></code></pre>
 
-<p>次にsrc/main.lispの該当部分を以下のように改変する。</p>
+<p>次にsrc/web.lispの該当部分を以下のように改変する。</p>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> start <span class="paren2">(<span class="code">&amp;rest args &amp;key server port debug &amp;allow-other-keys</span>)</span>
-  <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignore server port debug</span>)</span></span>)</span>
-  <span class="paren2">(<span class="code">when <span class="special">*handler*</span>
-    <span class="paren3">(<span class="code">restart-case <span class="paren4">(<span class="code">error <span class="string">"Server is already running."</span></span>)</span>
-      <span class="paren4">(<span class="code">restart-server <span class="paren5">(<span class="code"></span>)</span>
-        <span class="keyword">:report</span> <span class="string">"Restart the server"</span>
-        <span class="paren5">(<span class="code">stop</span>)</span></span>)</span></span>)</span></span>)</span>
-  <span class="paren2">(<span class="code">setf <span class="special">*handler*</span>
-        <span class="paren3">(<span class="code">apply #'clackup <span class="paren4">(<span class="code">funcall <span class="special">clack-errors:*clack-error-middleware*</span>
-                                  <span class="special">*appfile-path*</span>
-                                  <span class="keyword">:debug</span> t</span>)</span>
-               args</span>)</span></span>)</span></span>)</span></span></code></pre>
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*web*</span><span class="paren2">(<span class="code">funcall <span class="special">clack-errors:*clack-error-middleware*</span> 
+                      <span class="paren3">(<span class="code">make-instance '&lt;web&gt;</span>)</span>
+                      <span class="keyword">:debug</span> t</span>)</span></span>)</span></span></code></pre>
 
 <p>これでサーバがエラーを起こせばクライアントにスタックトレースが表示されるようになる。</p>
 

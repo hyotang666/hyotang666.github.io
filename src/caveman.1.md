@@ -91,21 +91,12 @@ ASDファイルの該当部分を以下のように編集する。
                ...)
 ```
 
-次にsrc/main.lispの該当部分を以下のように改変する。
+次にsrc/web.lispの該当部分を以下のように改変する。
 
 ```lisp
-(defun start (&rest args &key server port debug &allow-other-keys)
-  (declare (ignore server port debug))
-  (when *handler*
-    (restart-case (error "Server is already running.")
-      (restart-server ()
-        :report "Restart the server"
-        (stop))))
-  (setf *handler*
-        (apply #'clackup (funcall clack-errors:*clack-error-middleware*
-                                  *appfile-path*
-                                  :debug t)
-               args)))
+(defvar *web*(funcall clack-errors:*clack-error-middleware* 
+                      (make-instance '<web>)
+                      :debug t))
 ```
 これでサーバがエラーを起こせばクライアントにスタックトレースが表示されるようになる。
 
