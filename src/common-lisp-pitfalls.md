@@ -21,6 +21,16 @@ SBCL、CLISP、ECL、CCL
 なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。
 
+## IGNORE-ERRORS with multiple-value.
+マクロ`IGNORE-ERRORS`はformが`ERROR`をシグナルするとそのコンディションを捕まえて`(VALUES NULL CONDITION)`を返す。
+formが`ERROR`をシグナルすることがなければformの返り値をそのまま返す。
+ここでいう「そのまま」は、formが多値を返したならその多値をそのまま返すという意味である。
+よって、たとえば`MULTIPLE-VALUE-BIND`などを用いて「第二返り値があるかないか」だけで失敗か否かをチェックしようとするとformが多値を返したときに混同してしまう。
+
+第二返り値が`CONDITION`型かどうかをチェックしている場合でも、formが成功裏に`CONDITION`を第二返り値として返したら混同してしまう。
+
+`IGNORE-ERRORS`の第二返り値を使いたい場合はめんどくさがらず`HANDLER-CASE`を書くべきである。
+
 ## WRITE, \*PRINT-PRETTY\*
 割と多くの処理系で`(function hoge)`というリストは表示できない。
 `#'hoge`になってしまう。

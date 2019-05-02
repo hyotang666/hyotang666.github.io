@@ -40,6 +40,17 @@
 <p>なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。</p>
 
+<h2>IGNORE-ERRORS with multiple-value.</h2>
+
+<p>マクロ<code>IGNORE-ERRORS</code>はformが<code>ERROR</code>をシグナルするとそのコンディションを捕まえて<code>(VALUES NULL CONDITION)</code>を返す。
+formが<code>ERROR</code>をシグナルすることがなければformの返り値をそのまま返す。
+ここでいう「そのまま」は、formが多値を返したならその多値をそのまま返すという意味である。
+よって、たとえば<code>MULTIPLE-VALUE-BIND</code>などを用いて「第二返り値があるかないか」だけで失敗か否かをチェックしようとするとformが多値を返したときに混同してしまう。</p>
+
+<p>第二返り値が<code>CONDITION</code>型かどうかをチェックしている場合でも、formが成功裏に<code>CONDITION</code>を第二返り値として返したら混同してしまう。</p>
+
+<p><code>IGNORE-ERRORS</code>の第二返り値を使いたい場合はめんどくさがらず<code>HANDLER-CASE</code>を書くべきである。</p>
+
 <h2>WRITE, *PRINT-PRETTY*</h2>
 
 <p>割と多くの処理系で<code>(function hoge)</code>というリストは表示できない。
