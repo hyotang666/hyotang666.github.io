@@ -91,12 +91,33 @@ ASDファイルの該当部分を以下のように編集する。
                ...)
 ```
 
-次にsrc/web.lispの該当部分を以下のように改変する。
+次にapp.lispの該当部分を以下のように改変する。
 
 ```lisp
-(defvar *web*(funcall clack-errors:*clack-error-middleware* 
-                      (make-instance '<web>)
-                      :debug t))
+(funcall clack-errors:*clack-error-middleware* ; <--- This and...
+(builder
+ (:static
+  :path (lambda (path)
+          (if (ppcre:scan "^(?:/images/|/css/|/js/|/robot\\.txt$|/favicon\\.ico$)" path)
+              path
+              nil))
+  :root *static-directory*)
+ (if (productionp)
+     nil
+     :accesslog)
+ (if (getf (config) :error-log)
+     `(:backtrace
+       :output ,(getf (config) :error-log))
+     nil)
+ :session
+ (if (productionp)
+     nil
+     (lambda (app)
+       (lambda (env)
+         (let ((datafly:*trace-sql* t))
+           (funcall app env)))))
+ *web*)
+:debug t) ; <--- This!
 ```
 これでサーバがエラーを起こせばクライアントにスタックトレースが表示されるようになる。
 
