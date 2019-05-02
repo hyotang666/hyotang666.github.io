@@ -75,6 +75,40 @@ your-appにはお好きな名前をどうぞ。
 (your-app:stop)
 ```
 
+## 開発の前に。
+アプリケーション開発中は予期せぬエラーを起こしてしまうことはままある。
+クライアントからサーバにアクセスしようとしてサーバがエラーを吐いた場合、クライアントはサーバからの返信をタイムアウトまで待ち続けることになる。
+これは著しく不便なので代わりにエラーメッセージを返すようにしよう。
+
+ASDファイルの該当部分を以下のように編集する。
+
+```lisp
+  :depends-on ("clack"
+               "lack"
+               "clack-errors" ; <--- This!
+               "caveman2"
+               "envy"
+               ...)
+```
+
+次にsrc/main.lispの該当部分を以下のように改変する。
+
+```lisp
+(defun start (&rest args &key server port debug &allow-other-keys)
+  (declare (ignore server port debug))
+  (when *handler*
+    (restart-case (error "Server is already running.")
+      (restart-server ()
+        :report "Restart the server"
+        (stop))))
+  (setf *handler*
+        (apply #'clackup (funcall clack-errors:*clack-error-middleware*
+                                  *appfile-path*
+                                  :debug t)
+               args)))
+```
+これでサーバがエラーを起こせばクライアントにスタックトレースが表示されるようになる。
+
 ## ルーティングの設定
 ルーティングはsrc/web.lispに記述する。
 デフォルトで以下のコードが書かれている。
