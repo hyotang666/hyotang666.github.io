@@ -30,36 +30,98 @@
 
 <p>Cavemanにvalidationの機能などない。
 必要なら自作せざるを得ない。
-例えば以下のようなヘルパー関数が必要となろう。</p>
+自作に当たっては各種バリデーション用のヘルパーを提供してくれているライブラリ<a href="https://github.com/Shinmera/ratify" >ratify</a>が助けとなろう。</p>
+
+<p>ASDファイルに追加しておこう。</p>
+
+<pre><code><span class="code">  :depends-on <span class="paren1">(<span class="code"><span class="string">"clack"</span>
+               <span class="string">"lack"</span>
+               <span class="string">"clack-errors"</span> <span class="comment">; for debug.
+</span>               <span class="string">"ratify"</span> <span class="comment">; validation.
+</span>               ...</span>)</span></span></code></pre>
+
+<p>さて、バリデーションの設計であるが、これはサーバサイドのバリデーションである。
+本章の例でユーザが自由に入力をできるフォームヶ所は４つである。
+複数ヶ所に不正値があった場合、すべて面倒をみたい。
+一箇所でも不正であれば全体が不正になるので、開発者としてはその時点でエラーとしたいが、それだとUXが悪くなる。
+複数の不正値があるとして、一つしかエラーの指定がない場合、それを修正して送信したあと「後出しで他のエラー指定が出てくる」というのはUXとしては最悪だろう。
+不正値に対してはエラーを投げるのではなくリストに積んで返す設計にしたほうがいいだろう。</p>
+
+<p>また、ここでは引数のバリデーションをして、値が正しい場合にのみオブジェクトを作るのではなく、とにかく不正な値であろうとなかろうとお構いなしにオブジェクトをつくり、その後にバリデーション、正規化を行いたい。
+とうのも、入力した値が不正だったとして、だからといって入力フォームがすべて空になって一から全部入力し直さなければならなくなるのもまた最悪なUXとなろうからだ。</p>
+
+<p>さて、その実装についてであるが、本当は<code>CL:MAKE-INSTANCE</code>を拡張して行いたかった。
+:AROUNDメソッドを定義して、スロットに不正値が入っていたら多値でリストを返すという設計である。
+言語仕様上できておかしくないし、事実REPLトップレベルでは機能するものができた。
+ところが多値を束縛しようとすると機能しない。
+おそらくこれはSBCLのバグだ。
+最適化のため、<code>CL:MAKE-INSTANCE</code>は一引数しか返さないというような管理の仕方がされているのではないか？
+というわけでここでは理想の振る舞いをヘルパーに担わせてしまおう。
+そうすることで将来バグがとれたとき、リファクタリングがしやすくなろうというものだ。</p>
+
+<p>方向性は見えたので、まず下準備としてテーブルの定義を変更する。
+:INITFORMの指定がある場合の値は想定されるユーザー入力にしておく。
+具体的には整数を期待するスロットに整数を初期値として入れるのではなく、整数と解釈できる文字列を入れておく。
+ユーザーの入力はすべて文字列で受け取ることになるからだ。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> user<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">number <span class="keyword">:col-type</span> <span class="keyword">:integer</span>
+           <span class="keyword">:initarg</span> <span class="keyword">:number</span>
+           <span class="keyword">:accessor</span> number-of</span>)</span>
+   <span class="paren3">(<span class="code">name <span class="keyword">:col-type</span> <span class="paren4">(<span class="code"><span class="keyword">:varchar</span> 64</span>)</span>
+         <span class="keyword">:initarg</span> <span class="keyword">:name</span>
+         <span class="keyword">:accessor</span> name-of</span>)</span>
+   <span class="paren3">(<span class="code">full-name <span class="keyword">:col-type</span> <span class="paren4">(<span class="code">or <span class="paren5">(<span class="code"><span class="keyword">:varchar</span> 128</span>)</span> <span class="keyword">:null</span></span>)</span>
+              <span class="keyword">:initarg</span> <span class="keyword">:full-name</span>
+              <span class="keyword">:accessor</span> full-name-of</span>)</span>
+   <span class="paren3">(<span class="code">email <span class="keyword">:col-type</span> <span class="paren4">(<span class="code">or <span class="keyword">:null</span> <span class="keyword">:text</span></span>)</span>
+          <span class="keyword">:initarg</span> <span class="keyword">:email</span>
+          <span class="keyword">:accessor</span> email-of</span>)</span>
+   <span class="paren3">(<span class="code">birthday <span class="keyword">:col-type</span> <span class="paren4">(<span class="code">or <span class="keyword">:null</span> <span class="keyword">:date</span></span>)</span>
+             <span class="keyword">:initarg</span> <span class="keyword">:birthday</span>
+             <span class="keyword">:accessor</span> birthday-of</span>)</span>
+   <span class="paren3">(<span class="code">sex <span class="keyword">:col-type</span> <span class="keyword">:integer</span>
+        <span class="keyword">:initarg</span> <span class="keyword">:sex</span>
+        <span class="keyword">:initform</span> <span class="string">"1"</span>                     <span class="comment">; &lt;--- This!
+</span>        <span class="keyword">:accessor</span> sex-of</span>)</span>
+   <span class="paren3">(<span class="code">administrator <span class="keyword">:col-type</span> <span class="keyword">:boolean</span>
+                  <span class="keyword">:initarg</span> <span class="keyword">:administrator</span>
+                  <span class="keyword">:initform</span> <span class="string">"1"</span> <span class="comment">; as NIL. ; &lt;--- This!
+</span>                  <span class="keyword">:accessor</span> administrator-of</span>)</span>
+   </span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> mito:dao-table-class</span>)</span></span>)</span></span></code></pre>
+
+<p>バリデーション関数には不正のチェックのみならず、期待される正しい値だった場合正規化してスロット値を更新する機能も持たせる。
+想定されるコードは以下のようなものだ。</p>
 
 <pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user</span>)</span>
   <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">alist</span>)</span></span>)</span>
-    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">slot-boundp c 'number</span>)</span>
-      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">number<span class="paren1">(<span class="code">number-of c</span>)</span></span>)</span></span>)</span>
-        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">integerp number</span>)</span>
-          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> #0=<span class="paren1">(<span class="code">&lt; 0 number 100</span>)</span>
-            <span class="paren1">(<span class="code">when<span class="paren2">(<span class="code">mito:find-dao 'user <span class="keyword">:number</span> number</span>)</span>
-              <span class="paren2">(<span class="code">push <span class="paren3">(<span class="code">cons 'number <span class="paren4">(<span class="code">format nil <span class="string">"Number must unique, already exists."</span></span>)</span></span>)</span>alist</span>)</span></span>)</span>
-            <span class="paren1">(<span class="code">push <span class="paren2">(<span class="code">cons 'number <span class="paren3">(<span class="code">format nil <span class="string">"Number must in range of ~S but ~S"</span>'#0# number</span>)</span></span>)</span> alist</span>)</span></span>)</span>
-          <span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons 'number <span class="paren2">(<span class="code">format nil <span class="string">"Number must be integer, but ~S"</span><span class="paren3">(<span class="code">type-of number</span>)</span></span>)</span></span>)</span> alist</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">slot-boundp c 'number</span>)</span>                                   <span class="comment">; check requred.
+</span>      <span class="paren4">(<span class="code">handler-case<span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">number<span class="paren2">(<span class="code">parse-integer<span class="paren3">(<span class="code">number-of user</span>)</span></span>)</span></span>)</span></span>)</span> <span class="comment">; check form.
+</span>                     <span class="paren6">(<span class="code">setf<span class="paren1">(<span class="code">number-of user</span>)</span>number</span>)</span>                <span class="comment">; canonicalize.
+</span>                     <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> #0=<span class="paren1">(<span class="code">&lt; 0 number 100</span>)</span>                     <span class="comment">; check range.
+</span>                       <span class="paren1">(<span class="code">when<span class="paren2">(<span class="code">mito:find-dao 'user <span class="keyword">:number</span> number</span>)</span> <span class="comment">; check uniqueness.
+</span>                         <span class="paren2">(<span class="code">push <span class="paren3">(<span class="code">cons 'number <span class="paren4">(<span class="code">format nil <span class="string">"Number must unique, already exists."</span></span>)</span></span>)</span>alist</span>)</span></span>)</span>
+                       <span class="paren1">(<span class="code">push <span class="paren2">(<span class="code">cons 'number <span class="paren3">(<span class="code">format nil <span class="string">"Number must in range of ~S but ~S"</span>'#0# number</span>)</span></span>)</span> alist</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">error<span class="paren6">(<span class="code">c</span>)</span><span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons 'number <span class="paren2">(<span class="code">princ-to-string c</span>)</span></span>)</span> alist</span>)</span></span>)</span></span>)</span>
       <span class="paren4">(<span class="code">push <span class="paren5">(<span class="code">cons 'number <span class="string">"Number is required."</span></span>)</span> alist</span>)</span></span>)</span>
-    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">slot-boundp c 'name</span>)</span>
-      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">name<span class="paren1">(<span class="code">name-of c</span>)</span></span>)</span></span>)</span>
-        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">ppcre:scan #2=<span class="string">"^[A-Za-z][A-Za-z0-9]*$"</span> name</span>)</span>
-          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> #1=<span class="paren1">(<span class="code">&lt;= 2 <span class="paren2">(<span class="code">length name</span>)</span> 20</span>)</span>
-            <span class="paren1">(<span class="code">when<span class="paren2">(<span class="code">mito:select-dao 'user <span class="paren3">(<span class="code">sxql:where `<span class="paren4">(<span class="code"><span class="keyword">:like</span> ,name</span>)</span></span>)</span><span class="paren3">(<span class="code">sxql:limit 1</span>)</span></span>)</span>
-              <span class="paren2">(<span class="code">push <span class="paren3">(<span class="code">cons 'name <span class="paren4">(<span class="code">format nil <span class="string">"Name must unique, already exists."</span></span>)</span></span>)</span>alist</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">slot-boundp c 'name</span>)</span>                                                       <span class="comment">; check required.
+</span>      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">name<span class="paren1">(<span class="code">name-of c</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">ppcre:scan #2=<span class="string">"^[A-Za-z][A-Za-z0-9]*$"</span> name</span>)</span>                           <span class="comment">; check form.
+</span>          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> #1=<span class="paren1">(<span class="code">&lt;= 2 <span class="paren2">(<span class="code">length name</span>)</span> 20</span>)</span>                                           <span class="comment">; check range.
+</span>            <span class="paren1">(<span class="code">when<span class="paren2">(<span class="code">mito:select-dao 'user <span class="paren3">(<span class="code">sxql:where `<span class="paren4">(<span class="code"><span class="keyword">:like</span> ,name</span>)</span></span>)</span><span class="paren3">(<span class="code">sxql:limit 1</span>)</span></span>)</span> <span class="comment">; check uniqueness.
+</span>              <span class="paren2">(<span class="code">push <span class="paren3">(<span class="code">cons 'name <span class="paren4">(<span class="code">format nil <span class="string">"Name must unique, already exists."</span></span>)</span></span>)</span>alist</span>)</span></span>)</span>
             <span class="paren1">(<span class="code">push <span class="paren2">(<span class="code">cons 'name <span class="paren3">(<span class="code">format nil <span class="string">"Name must in range of ~S but ~S"</span> '#1# <span class="paren4">(<span class="code">length name</span>)</span></span>)</span></span>)</span> alist</span>)</span></span>)</span>
           <span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons 'name <span class="paren2">(<span class="code">format nil <span class="string">"Invalid form. Must satisfies ~S"</span> #2#</span>)</span></span>)</span> alist</span>)</span></span>)</span></span>)</span>
       <span class="paren4">(<span class="code">push <span class="paren5">(<span class="code">cons 'name <span class="paren6">(<span class="code">format nil <span class="string">"Name is required."</span></span>)</span></span>)</span> alist</span>)</span></span>)</span>
-    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">slot-boundp c 'full-name</span>)</span>
-      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">full-name<span class="paren1">(<span class="code">full-name-of c</span>)</span></span>)</span></span>)</span>
-        <span class="paren5">(<span class="code">unless #3=<span class="paren6">(<span class="code">&lt;= 0 <span class="paren1">(<span class="code">length full-name</span>)</span> 20</span>)</span>
-          <span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons 'full-name <span class="paren2">(<span class="code">format nil <span class="string">"Full name must in range of ~S but ~S"</span> '#3# <span class="paren3">(<span class="code">length full-name</span>)</span></span>)</span></span>)</span> alist</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">slot-boundp c 'full-name</span>)</span>               <span class="comment">; check required.
+</span>      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">full-name<span class="paren1">(<span class="code">full-name-of c</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">unless #3=<span class="paren6">(<span class="code">&lt;= 0 <span class="paren1">(<span class="code">length full-name</span>)</span> 20</span>)</span> <span class="comment">; check range.
+</span>          <span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons 'full-name <span class="paren2">(<span class="code">format nil <span class="string">"Full name must in range of ~S but ~S"</span> '#3# <span class="paren3">(<span class="code">length full-name</span>)</span></span>)</span></span>)</span> alist</span>)</span></span>)</span></span>)</span>
       <span class="paren4">(<span class="code">push <span class="paren5">(<span class="code">cons 'full-name <span class="string">"Full name is required."</span></span>)</span> alist</span>)</span></span>)</span>
-   <span class="paren3">(<span class="code">reverse alist</span>)</span></span>)</span></span>)</span></span></code></pre>
+   <span class="paren3">(<span class="code">values user <span class="paren4">(<span class="code">reverse alist</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
-<p>これはいかにも辛いのでマクロで抽象化しよう。</p>
+<p>これはいかにも辛いのでマクロで抽象化したい。</p>
 
 <pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-check-validate</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">var</span>)</span><span class="paren3">(<span class="code">&amp;rest assertions</span>)</span></span>)</span>
   <span class="comment">;; initialize
@@ -98,14 +160,23 @@
                                          <span class="paren5">(<span class="code">push <span class="paren6">(<span class="code">cons ',slot-name
                                                      ,<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> format-arguments
                                                         `<span class="paren2">(<span class="code">format nil ,@format-arguments</span>)</span>
-                                                        `<span class="paren2">(<span class="code">format nil <span class="string">"Not type-of ~S"</span>',value</span>)</span></span>)</span></span>)</span>
+                                                        `<span class="paren2">(<span class="code">format nil <span class="string">"not type-of ~S"</span>',value</span>)</span></span>)</span></span>)</span>
                                                ,alist</span>)</span></span>)</span></span>)</span>
+                                    <span class="paren3">(<span class="code"><span class="keyword">:key</span>
+                                      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">v<span class="paren1">(<span class="code">gensym<span class="string">"CANONICALIZED"</span></span>)</span></span>)</span>
+                                           <span class="paren6">(<span class="code">c<span class="paren1">(<span class="code">gensym<span class="string">"CONDITION"</span></span>)</span></span>)</span></span>)</span>
+                                        `<span class="paren5">(<span class="code">handler-case<span class="paren6">(<span class="code"><i><span class="symbol">let</span></i><span class="paren1">(<span class="code"><span class="paren2">(<span class="code">,v <span class="paren3">(<span class="code">funcall ,value ,local-var</span>)</span></span>)</span></span>)</span>
+                                                        <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">slot-value ,var ',slot-name</span>)</span> ,v
+                                                              ,local-var ,v</span>)</span>
+                                                        ,<span class="paren1">(<span class="code">rec rest</span>)</span></span>)</span>
+                                           <span class="paren6">(<span class="code">error<span class="paren1">(<span class="code">,c</span>)</span><span class="paren1">(<span class="code">push <span class="paren2">(<span class="code">cons ',slot-name <span class="paren3">(<span class="code">princ-to-string ,c</span>)</span></span>)</span>
+                                                           ,alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
                                     <span class="paren3">(<span class="code"><span class="keyword">:assert</span>
                                       `<span class="paren4">(<span class="code"><i><span class="symbol">if</span></i> ,value
                                          ,<span class="paren5">(<span class="code">rec rest</span>)</span>
                                          <span class="paren5">(<span class="code">PUSH <span class="paren6">(<span class="code">CONS ',slot-name ,<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> format-arguments
                                                                     `<span class="paren2">(<span class="code">format nil ,@format-arguments</span>)</span>
-                                                                    `<span class="paren2">(<span class="code">FORMAT NIL <span class="string">"Must satisfies ~S but ~S"</span>
+                                                                    `<span class="paren2">(<span class="code">FORMAT NIL <span class="string">"must satisfies ~S but ~S"</span>
                                                                              ',value
                                                                              ,local-var</span>)</span></span>)</span></span>)</span>
                                                ,alist</span>)</span></span>)</span></span>)</span>
@@ -113,42 +184,81 @@
                                       `<span class="paren4">(<span class="code">unless<span class="paren5">(<span class="code">mito:object-id ,var</span>)</span>
                                          <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">null<span class="paren1">(<span class="code">mito:select-dao <span class="paren2">(<span class="code">class-of ,var</span>)</span> <span class="paren2">(<span class="code">sxql:where ,value</span>)</span><span class="paren2">(<span class="code">sxql:limit 1</span>)</span></span>)</span></span>)</span>
                                            ,<span class="paren6">(<span class="code">rec rest</span>)</span>
-                                           <span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons ',slot-name <span class="string">"Duplicated"</span></span>)</span>,alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                                           <span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons ',slot-name <span class="string">"already exists"</span></span>)</span>,alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
                           <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">equal '<span class="paren2">(<span class="code"><span class="keyword">:require</span> t</span>)</span> <span class="paren2">(<span class="code">car assertions</span>)</span></span>)</span>
                             `<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i><span class="paren2">(<span class="code">slot-boundp ,var ',slot-name</span>)</span>
                                <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">,local-var <span class="paren5">(<span class="code">slot-value ,var ',slot-name</span>)</span></span>)</span></span>)</span>
                                  ,<span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">cdr assertions</span>)</span></span>)</span></span>)</span>
-                               <span class="paren2">(<span class="code">push <span class="paren3">(<span class="code">cons ',slot-name ,<span class="string">"Required"</span></span>)</span> ,alist</span>)</span></span>)</span>
+                               <span class="paren2">(<span class="code">push <span class="paren3">(<span class="code">cons ',slot-name ,<span class="string">"required"</span></span>)</span> ,alist</span>)</span></span>)</span>
                             <span class="paren1">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren2">(<span class="code">when<span class="paren3">(<span class="code">equal '<span class="paren4">(<span class="code"><span class="keyword">:require</span> nil</span>)</span> <span class="paren4">(<span class="code">car assertions</span>)</span></span>)</span>
                                      <span class="paren3">(<span class="code">pop assertions</span>)</span></span>)</span>
                                    `<span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">slot-boundp ,var ',slot-name</span>)</span>
                                       <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,local-var<span class="paren6">(<span class="code">slot-value ,var ',slot-name</span>)</span></span>)</span></span>)</span>
                                         ,<span class="paren4">(<span class="code">rec assertions</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-       <span class="paren4">(<span class="code">reverse ,alist</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+       <span class="paren4">(<span class="code">values ,var <span class="paren5">(<span class="code">reverse ,alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
 <p>これで先のコードは以下のように書けるようになる。</p>
 
 <pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user</span>)</span>
   <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">user</span>)</span>
     <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">number <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
-             <span class="paren5">(<span class="code"><span class="keyword">:type</span> integer</span>)</span>
+             <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'parse-integer</span>)</span>
              <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt; 0 number 100</span>)</span></span>)</span>
              <span class="paren5">(<span class="code"><span class="keyword">:unique</span> <span class="paren6">(<span class="code"><span class="keyword">:=</span> <span class="keyword">:number</span> number</span>)</span></span>)</span></span>)</span>
      <span class="paren4">(<span class="code">name <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
            <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
            <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">ppcre:scan <span class="string">"^[A-Za-z][A-Za-z0-9]*$"</span> name</span>)</span></span>)</span>
-           <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 2 <span class="paren1">(<span class="code">length name</span>)</span> 20</span>)</span> <span class="string">"Name length must be (&lt;= 2 x 20) but ~D"</span><span class="paren6">(<span class="code">length name</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 2 <span class="paren1">(<span class="code">length name</span>)</span> 20</span>)</span> <span class="string">"length must be (&lt;= 2 x 20)"</span></span>)</span>
            <span class="paren5">(<span class="code"><span class="keyword">:unique</span> <span class="paren6">(<span class="code"><span class="keyword">:like</span> <span class="keyword">:name</span> name</span>)</span></span>)</span></span>)</span>
      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">n full-name</span>)</span> <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
                     <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
-                    <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 1 <span class="paren1">(<span class="code">length n</span>)</span> 20</span>)</span> <span class="string">"Full-name length must be (&lt;= 1 x 20) but ~D"</span><span class="paren6">(<span class="code">length n</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+                    <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 1 <span class="paren1">(<span class="code">length n</span>)</span> 20</span>)</span> <span class="string">"length must be (&lt;= 1 x 20)"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
 <h3>Checking of mail adress</h3>
 
-<p>原著ではemailのvalidationも行うのだが、ここでは省略する。
-というのも、Common Lisp界隈にはそれに相当するものがないからだ。
-ただ、補足のために記しておくなら、Rubyのそれも完全なものではない。
-「email validation」でググると闇の一端を垣間見ることができるだろう。</p>
+<p><code>RETIFY:TEST-EMAIL</code>がそれを果たしてくれる。</p>
+
+<p>VALIDATE-USRを以下のように修正。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">user</span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">number <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+             <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'parse-integer</span>)</span>
+             <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt; 0 number 100</span>)</span></span>)</span>
+             <span class="paren5">(<span class="code"><span class="keyword">:unique</span> <span class="paren6">(<span class="code"><span class="keyword">:=</span> <span class="keyword">:number</span> number</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">name <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">ppcre:scan <span class="string">"^[A-Za-z][A-Za-z0-9]*$"</span> name</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 2 <span class="paren1">(<span class="code">length name</span>)</span> 20</span>)</span> <span class="string">"length must be (&lt;= 2 x 20)"</span></span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:unique</span> <span class="paren6">(<span class="code"><span class="keyword">:like</span> <span class="keyword">:name</span> name</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">n full-name</span>)</span> <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+                    <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
+                    <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 1 <span class="paren1">(<span class="code">length n</span>)</span> 20</span>)</span> <span class="string">"length must be (&lt;= 1 x 20)"</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">email <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'ratify:test-email</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span> <span class="comment">; &lt;--- This!</span></span></code></pre>
+
+<p>初期値のあるスロットのチェックも加えて、最終版。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">user</span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">number <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+             <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'parse-integer</span>)</span>
+             <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt; 0 number 100</span>)</span></span>)</span>
+             <span class="paren5">(<span class="code"><span class="keyword">:unique</span> <span class="paren6">(<span class="code"><span class="keyword">:=</span> <span class="keyword">:number</span> number</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">name <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">ppcre:scan <span class="string">"^[A-Za-z][A-Za-z0-9]*$"</span> name</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 2 <span class="paren1">(<span class="code">length name</span>)</span> 20</span>)</span> <span class="string">"length must be (&lt;= 2 x 20)"</span></span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:unique</span> <span class="paren6">(<span class="code"><span class="keyword">:like</span> <span class="keyword">:name</span> name</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">n full-name</span>)</span> <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+                    <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
+                    <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 1 <span class="paren1">(<span class="code">length n</span>)</span> 20</span>)</span> <span class="string">"length must be (&lt;= 1 x 20)"</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">email <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'ratify:test-email</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">birthday <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'local-time:parse-timestring</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">sex <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+          <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'parse-integer</span>)</span>
+          <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 1 sex 2</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">administrator <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+                    <span class="paren5">(<span class="code"><span class="keyword">:key</span> <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren1">(<span class="code">x</span>)</span><span class="paren1">(<span class="code">zerop<span class="paren2">(<span class="code">parse-integer x</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
 <h3>Templates for error mesages.</h3>
 
@@ -173,86 +283,76 @@ templates/shared/errors.htmlに作成する。</p>
 <p>New用のルーティングを修正しなければいけないが、ついでにリファクタリングもしておこう。</p>
 
 <p>REST-API的にはNewアクションはPUTメソッドで実現されるべきだろう。
-という訳で名前付きルーティングを以下のように作る。
-<code>MITO:CREATE-DAO</code>を叩かず、<code>CL:MAKE-INSTANCE</code>した後に<code>VALIDATE-USER</code>を叩き、エラーがなければ<code>MITO:INSERT-DAO</code>を叩くという処理になっている点要注意。</p>
+POSTメソッドは単にディスパッチャとして以下のように修正する。</p>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> put-user<span class="paren2">(<span class="code"><span class="string">"/user"</span> <span class="keyword">:method</span> <span class="keyword">:put</span></span>)</span><span class="paren2">(<span class="code">&amp;key |authenticity-token| <span class="paren3">(<span class="code">|number| <span class="string">""</span></span>)</span> |name| |full-name| <span class="paren3">(<span class="code">|sex| <span class="string">""</span></span>)</span>
-                                              |birthday-year| |birthday-month| |birthday-day| |email|
-                                              <span class="paren3">(<span class="code">|administrator| <span class="string">""</span></span>)</span></span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= |authenticity-token| <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/user"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key method</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">string= <span class="string">"put"</span> method</span>)</span>
+     <span class="paren4">(<span class="code">put-user <span class="paren5">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">t `<span class="paren4">(<span class="code">400 <span class="paren5">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">format nil <span class="string">"Unknown method ~S"</span>method</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>NewのUIフォームが正しくPUTメソッドを送るように、また、引数を縦棒でくるむのがめんどくさすぎるのでテンプレートを各々修正。
+下はその一例。</p>
+
+<pre><code>        &lt;input name="AUTHENTICITY-TOKEN" type="hidden" value="{{token}}" /&gt;
+        &lt;input name="METHOD" type="hidden" value="put" /&gt;
+        {% include "user/form.html" %}</code></pre>
+
+<p>分割したPUTメソッドは名前付きにして以下のように実装。
+引数から縦棒が取り除かれることにより、オブジェクトのinitargとの共通化が行われた結果、引数をまとめて<code>CL:APPLY</code>経由で渡せるようになっている点要注目。
+このとき引数に<code>:ALLOW-OTHER-KEYS T</code>の指定をしておかないとエラーになるので要注意。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> put-user<span class="paren2">(<span class="code"><span class="string">"/user"</span> <span class="keyword">:method</span> <span class="keyword">:put</span></span>)</span><span class="paren2">(<span class="code">&amp;rest args
+                                               &amp;key authenticity-token birthday-year birthday-month birthday-day
+                                               number name full-name email administrator</span>)</span>
+  <span class="paren2">(<span class="code">declare<span class="paren3">(<span class="code">ignore number name full-name email administrator</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= authenticity-token <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
     `<span class="paren3">(<span class="code">403 <span class="paren4">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="string">"Denied"</span></span>)</span>
-    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">user <span class="paren6">(<span class="code">make-instance 'your-app.model::user
-                               <span class="keyword">:number</span> <span class="paren1">(<span class="code">or <span class="paren2">(<span class="code">parse-integer |number| <span class="keyword">:junk-allowed</span> t</span>)</span>
-                                           |number|</span>)</span>
-                               <span class="keyword">:name</span> |name|
-                               <span class="keyword">:full-name</span> |full-name|
-                               <span class="keyword">:sex</span> <span class="paren1">(<span class="code">or <span class="paren2">(<span class="code">parse-integer |sex| <span class="keyword">:junk-allowed</span> t</span>)</span>
-                                        |sex|</span>)</span>
-                               <span class="keyword">:birthday</span> <span class="paren1">(<span class="code">local-time:parse-timestring <span class="paren2">(<span class="code">format nil <span class="string">"~A-~A-~A"</span> |birthday-year| |birthday-month| |birthday-day|</span>)</span></span>)</span>
-                               <span class="keyword">:email</span> |email|
-                               <span class="keyword">:administrator</span> <span class="paren1">(<span class="code">eq your-app.model::+true+ <span class="paren2">(<span class="code">zerop <span class="paren3">(<span class="code">parse-integer |administrator| <span class="keyword">:junk-allowed</span> t</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-          <span class="paren5">(<span class="code">errors<span class="paren6">(<span class="code">your-app.model::validate-user user</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">multiple-value-bind<span class="paren4">(<span class="code">user errors</span>)</span><span class="paren4">(<span class="code">your-app.model::validate-user
+                                       <span class="paren5">(<span class="code">apply #'make-instance 'your-app.model::user
+                                              <span class="keyword">:birthday</span>
+                                              <span class="paren6">(<span class="code">format nil <span class="string">"~A-~A-~A"</span> birthday-year birthday-month birthday-day</span>)</span>
+                                              <span class="keyword">:allow-other-keys</span> t
+                                              args</span>)</span></span>)</span>
       <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i> errors
         `<span class="paren5">(<span class="code">400 <span class="paren6">(<span class="code"></span>)</span><span class="paren6">(<span class="code">,<span class="paren1">(<span class="code">render <span class="string">"user/new.html"</span> `<span class="paren2">(<span class="code"><span class="keyword">:user</span> ,user <span class="keyword">:errors</span> ,errors <span class="keyword">:token</span>,<span class="paren3">(<span class="code">token</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
         <span class="paren5">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren6">(<span class="code">setf<span class="paren1">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Stored!"</span></span>)</span>
-               <span class="paren6">(<span class="code">mito:insert-dao user</span>)</span>
                `<span class="paren6">(<span class="code">303 <span class="paren1">(<span class="code"><span class="keyword">:location</span> ,<span class="paren2">(<span class="code">format nil <span class="string">"/user/~D"</span><span class="paren3">(<span class="code">mito:object-id user</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
-<p>POSTメソッドは単にディスパッチャとして以下のように修正する。</p>
+<p>Editのためのルーティングも同様にリファクタリングしていく。</p>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/user"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key |_method|</span>)</span>
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/user/:id"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key id method</span>)</span>
   <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
-    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">string= <span class="string">"put"</span> |_method|</span>)</span>
-     <span class="paren4">(<span class="code">put-user <span class="paren5">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span>
-    <span class="paren3">(<span class="code">t `<span class="paren4">(<span class="code">400 <span class="paren5">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">format nil <span class="string">"Unknown method ~S"</span>|_method|</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
-
-<p>NewのUIフォームが正しくPUTメソッドを送るようにテンプレートを修正。</p>
-
-<pre><code>        &lt;input name="authenticity-token" type="hidden" value="{{token}}" /&gt;
-        &lt;input name="_method" type="hidden" value="put" /&gt;
-        {% include "user/form.html" %}</code></pre>
-
-<p>同様にEditのためのルーティングもリファクタリングしていく。</p>
-
-<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/user/:id"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key id |_method|</span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
-    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">string= |_method| <span class="string">"delete"</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">string= method <span class="string">"delete"</span></span>)</span>
      <span class="paren4">(<span class="code">delete-user <span class="paren5">(<span class="code">acons <span class="string">"ID"</span> id <span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
-    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">find |_method| '<span class="paren5">(<span class="code"><span class="string">""</span> <span class="string">"post"</span> nil</span>)</span> <span class="keyword">:test</span> #'equal</span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">find method '<span class="paren5">(<span class="code"><span class="string">""</span> <span class="string">"post"</span> nil</span>)</span> <span class="keyword">:test</span> #'equal</span>)</span>
      <span class="paren4">(<span class="code">post-user <span class="paren5">(<span class="code">acons <span class="string">"id"</span> id <span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
-    <span class="paren3">(<span class="code">t `<span class="paren4">(<span class="code">400 <span class="paren5">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">format nil <span class="string">"Unsuppoeted method ~S"</span> |_method|</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+    <span class="paren3">(<span class="code">t `<span class="paren4">(<span class="code">400 <span class="paren5">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">format nil <span class="string">"Unsuppoeted method ~S"</span> method</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
 <p>見通しの良さのため、本来のPOSTメソッドとしての処理は個別の<code>POST-USER</code>として定義する。
 Cavemanが自動的に作る名前付き関数を、代わりに手動で書くことになるが、まぁ、よしとする。</p>
 
 <pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> post-user<span class="paren2">(<span class="code">request</span>)</span>
-  <span class="paren2">(<span class="code">destructuring-bind<span class="paren3">(<span class="code">&amp;key authenticity-token id <span class="paren4">(<span class="code">number <span class="string">""</span></span>)</span> name full-name <span class="paren4">(<span class="code">sex <span class="string">""</span></span>)</span> birthday-year birthday-month
-                           birthday-day email <span class="paren4">(<span class="code">administrator <span class="string">""</span></span>)</span> &amp;allow-other-keys</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind<span class="paren3">(<span class="code">&amp;key authenticity-token id number name full-name sex birthday-year birthday-month
+                           birthday-day email administrator &amp;allow-other-keys</span>)</span>
     <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren4">(<span class="code">key . value</span>)</span> <span class="keyword">:in</span> request
           <span class="keyword">:collect</span> <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code"><span class="special">*package*</span><span class="paren1">(<span class="code">find-package <span class="keyword">:keyword</span></span>)</span></span>)</span></span>)</span>
                      <span class="paren5">(<span class="code">read-from-string key</span>)</span></span>)</span>
           <span class="keyword">:collect</span> value</span>)</span>
     <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">not<span class="paren5">(<span class="code">string= authenticity-token <span class="paren6">(<span class="code">token</span>)</span></span>)</span></span>)</span>
-      `<span class="paren4">(<span class="code">403 <span class="paren5">(<span class="code"></span>)</span> <span class="paren5">(<span class="code">,<span class="paren6">(<span class="code"><i><span class="symbol">with-output-to-string</span></i><span class="paren1">(<span class="code"><span class="special">*standard-output*</span></span>)</span>
-                   <span class="paren1">(<span class="code">dev:peep <span class="special">ningle:*request*</span></span>)</span>
-                   <span class="paren1">(<span class="code">print <span class="keyword">:denied</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      `<span class="paren4">(<span class="code">403 <span class="paren5">(<span class="code"></span>)</span> <span class="paren5">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
       <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">id<span class="paren1">(<span class="code">ignore-errors<span class="paren2">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
            <span class="paren6">(<span class="code">user<span class="paren1">(<span class="code">and id <span class="paren2">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span></span>)</span>
         <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">null user</span>)</span>
-          `<span class="paren6">(<span class="code">500 <span class="paren1">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span>
-            <span class="paren1">(<span class="code">,<span class="paren2">(<span class="code"><i><span class="symbol">with-output-to-string</span></i><span class="paren3">(<span class="code"><span class="special">*standard-output*</span></span>)</span>
-                <span class="paren3">(<span class="code">dev:peep <span class="special">ningle:*request*</span></span>)</span>
-                <span class="paren3">(<span class="code">format t <span class="string">"Could not edit unexists user."</span></span>)</span></span>)</span></span>)</span></span>)</span>
-          <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">your-app.model::number-of user</span>)</span> <span class="paren2">(<span class="code">or <span class="paren3">(<span class="code">parse-integer number <span class="keyword">:junk-allowed</span> t</span>)</span>
-                                                            number</span>)</span>
+          `<span class="paren6">(<span class="code">500 <span class="paren1">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren1">(<span class="code"><span class="string">"Could not edit unexists user."</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">your-app.model::number-of user</span>)</span> number
                        <span class="paren2">(<span class="code">your-app.model::name-of user</span>)</span> name
                        <span class="paren2">(<span class="code">your-app.model::full-name-of user</span>)</span> full-name
-                       <span class="paren2">(<span class="code">your-app.model::sex-of user</span>)</span> <span class="paren2">(<span class="code">or <span class="paren3">(<span class="code">parse-integer sex <span class="keyword">:junk-allowed</span> t</span>)</span>
-                                                         sex</span>)</span>
-                       <span class="paren2">(<span class="code">your-app.model::birthday-of user</span>)</span> <span class="paren2">(<span class="code">local-time:parse-timestring <span class="paren3">(<span class="code">format nil <span class="string">"~A-~A-~A"</span> birthday-year birthday-month birthday-day</span>)</span></span>)</span>
+                       <span class="paren2">(<span class="code">your-app.model::sex-of user</span>)</span> sex
+                       <span class="paren2">(<span class="code">your-app.model::birthday-of user</span>)</span> <span class="paren2">(<span class="code">format nil <span class="string">"~A-~A-~A"</span> birthday-year birthday-month birthday-day</span>)</span>
                        <span class="paren2">(<span class="code">your-app.model::email-of user</span>)</span> email
-                       <span class="paren2">(<span class="code">your-app.model::administrator-of user</span>)</span> <span class="paren2">(<span class="code">eq your-app.model::+true+ <span class="paren3">(<span class="code">zerop <span class="paren4">(<span class="code">parse-integer administrator <span class="keyword">:junk-allowed</span> t</span>)</span></span>)</span></span>)</span></span>)</span>
-                 <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">errors<span class="paren4">(<span class="code">your-app.model::validate-user user</span>)</span></span>)</span></span>)</span>
+                       <span class="paren2">(<span class="code">your-app.model::administrator-of user</span>)</span> administrator</span>)</span>
+                 <span class="paren1">(<span class="code">multiple-value-bind<span class="paren2">(<span class="code">user errors</span>)</span><span class="paren2">(<span class="code">your-app.model::validate-user user</span>)</span>
                    <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> errors
                      `<span class="paren3">(<span class="code">400 <span class="paren4">(<span class="code"></span>)</span><span class="paren4">(<span class="code">,<span class="paren5">(<span class="code">render <span class="string">"user/edit.html"</span> `<span class="paren6">(<span class="code"><span class="keyword">:user</span> ,user <span class="keyword">:errors</span> ,errors <span class="keyword">:token</span>,<span class="paren1">(<span class="code">token</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
                      <span class="paren3">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren4">(<span class="code">mito:save-dao user</span>)</span>
@@ -428,28 +528,28 @@ djula内部マクロを使うことになるが、/src/view.lispのyour-app.djul
 &lt;table class="attr"&gt;
         &lt;tr&gt;
                 &lt;th&gt;&lt;label for="user-number"&gt;{% filter i18n %}Number{% endfilter %}&lt;/label&gt;&lt;/th&gt;
-                &lt;td&gt;&lt;input size="8" type="text" name="number" value="{{user.number}}" id="user-number" /&gt;&lt;/td&gt;
+                &lt;td&gt;&lt;input size="8" type="text" name="NUMBER" value="{{user.number}}" id="user-number" /&gt;&lt;/td&gt;
         &lt;/tr&gt;
         &lt;tr&gt;
                 &lt;th&gt;&lt;label for="user-name"&gt;{% filter i18n %}Name{% endfilter %}&lt;/label&gt;&lt;/th&gt;
-                &lt;td&gt;&lt;input type="text" value="{{user.name}}" name="name" id="user-name" /&gt;&lt;/td&gt;
+                &lt;td&gt;&lt;input type="text" value="{{user.name}}" name="NAME" id="user-name" /&gt;&lt;/td&gt;
         &lt;/tr&gt;
         &lt;tr&gt;
                 &lt;th&gt;&lt;label for="user-full-name"&gt;{% filter i18n %}Full Name{% endfilter %}&lt;/label&gt;&lt;/th&gt;
-                &lt;td&gt;&lt;input type="text" value="{{user.full-name}}" name="full-name" id="user-full-name" /&gt;&lt;/td&gt;
+                &lt;td&gt;&lt;input type="text" value="{{user.full-name}}" name="FULL-NAME" id="user-full-name" /&gt;&lt;/td&gt;
         &lt;/tr&gt;
         &lt;tr&gt;
                 &lt;th&gt;{% filter i18n %}Sex{% endfilter %}&lt;/th&gt;
                 &lt;td&gt;
-                        &lt;input type="radio" value="1" {%ifequal user.sex 1%}checked="checked"{%endifequal%} name="sex" id="member-sex-1" /&gt;
+                        &lt;input type="radio" value="1" {%ifequal user.sex 1%}checked="checked"{%endifequal%} name="SEX" id="member-sex-1" /&gt;
                         &lt;label for="member-sex-1"&gt;{% filter i18n %}Male{% endfilter %}&lt;/label&gt;
-                        &lt;input type="radio" value="2" {%ifequal user.sex 2%}checked="checked"{%endifequal%} name="sex" id="member-sex-2" /&gt;
+                        &lt;input type="radio" value="2" {%ifequal user.sex 2%}checked="checked"{%endifequal%} name="SEX" id="member-sex-2" /&gt;
                         &lt;label for="member-sex-1"&gt;{% filter i18n %}Female{% endfilter %}&lt;/label&gt;
                 &lt;/td&gt;
         &lt;/tr&gt;
         &lt;tr&gt;
                 &lt;th&gt;&lt;label for="user-birthday"&gt;{% filter i18n %}Birthday{% endfilter %}&lt;/label&gt;&lt;/th&gt;
-                &lt;td&gt;&lt;select id="member-birthday-li" name="birthday-year"&gt;
+                &lt;td&gt;&lt;select id="member-birthday-li" name="BIRTHDAY-YEAR"&gt;
                                 {{ user.birthday
                                  | lisp: (lambda(timestamp)
                                            (let((current-year(local-time:timestamp-year(local-time:now))))
@@ -464,7 +564,7 @@ djula内部マクロを使うことになるが、/src/view.lispのyour-app.djul
                                  | safe
                                  }}
                         &lt;/select&gt;
-                        &lt;select id="member-birthday-2i" name="birthday-month"&gt;
+                        &lt;select id="member-birthday-2i" name="BIRTHDAY-MONTH"&gt;
                                 {{ user.birthday
                                  | lisp: (lambda(timestamp)
                                            (loop :for i :upfrom 1 to 12
@@ -479,7 +579,7 @@ djula内部マクロを使うことになるが、/src/view.lispのyour-app.djul
                                  | safe
                                  }}
                         &lt;/select&gt;
-                        &lt;select id="birthday-3i" name="birthday-day"&gt;
+                        &lt;select id="birthday-3i" name="BIRTHDAY-DAY"&gt;
                                 {{ user.birthday
                                  | lisp: (lambda(timestamp)
                                            (loop :for i :upfrom 1 to 31
@@ -497,17 +597,16 @@ djula内部マクロを使うことになるが、/src/view.lispのyour-app.djul
         &lt;/tr&gt;
         &lt;tr&gt;
                 &lt;th&gt;&lt;label for="user-email"&gt;{% filter i18n %}Email{% endfilter %}&lt;/label&gt;&lt;/th&gt;
-                &lt;td&gt;&lt;input type="text" name="email" id="user-email" /&gt;&lt;/td&gt;
+                &lt;td&gt;&lt;input type="text" name="EMAIL" id="user-email" /&gt;&lt;/td&gt;
         &lt;/tr&gt;
         &lt;tr&gt;
                 &lt;th&gt;{% filter i18n %}Administrator{% endfilter %}&lt;/th&gt;
                 &lt;td&gt;
-                        &lt;input name="administrator" type="hidden" value="0" /&gt;
+                        &lt;input name="ADMINISTRATOR" type="hidden" value="0" /&gt;
                         &lt;input type="checkbox" value="1" name="administrator" id="user-administrator" /&gt;
-                        &lt;label for="user-administrator"&gt;Administrator&lt;/label&gt;
                 &lt;/td&gt;
         &lt;/tr&gt;
-&lt;/table</code></pre>
+&lt;/table&gt;</code></pre>
 
 <p>templates/shared/errors.htmlは以下のようになる。</p>
 
@@ -563,6 +662,15 @@ djula内部マクロを使うことになるが、/src/view.lispのyour-app.djul
                                                         `<span class="paren2">(<span class="code">format nil ,@format-arguments</span>)</span>
                                                         `<span class="paren2">(<span class="code">format nil <span class="string">"is not type-of ~S"</span>',value</span>)</span></span>)</span></span>)</span>
                                                ,alist</span>)</span></span>)</span></span>)</span>
+                                    <span class="paren3">(<span class="code"><span class="keyword">:key</span>
+                                      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">v<span class="paren1">(<span class="code">gensym<span class="string">"CANONICALIZED"</span></span>)</span></span>)</span>
+                                           <span class="paren6">(<span class="code">c<span class="paren1">(<span class="code">gensym<span class="string">"CONDITION"</span></span>)</span></span>)</span></span>)</span>
+                                        `<span class="paren5">(<span class="code">handler-case<span class="paren6">(<span class="code"><i><span class="symbol">let</span></i><span class="paren1">(<span class="code"><span class="paren2">(<span class="code">,v <span class="paren3">(<span class="code">funcall ,value ,local-var</span>)</span></span>)</span></span>)</span>
+                                                        <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">slot-value ,var ',slot-name</span>)</span> ,v
+                                                              ,local-var ,v</span>)</span>
+                                                        ,<span class="paren1">(<span class="code">rec rest</span>)</span></span>)</span>
+                                           <span class="paren6">(<span class="code">error<span class="paren1">(<span class="code">,c</span>)</span><span class="paren1">(<span class="code">push <span class="paren2">(<span class="code">cons ',slot-name <span class="paren3">(<span class="code">princ-to-string ,c</span>)</span></span>)</span>
+                                                           ,alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
                                     <span class="paren3">(<span class="code"><span class="keyword">:assert</span>
                                       `<span class="paren4">(<span class="code"><i><span class="symbol">if</span></i> ,value
                                          ,<span class="paren5">(<span class="code">rec rest</span>)</span>
@@ -587,7 +695,7 @@ djula内部マクロを使うことになるが、/src/view.lispのyour-app.djul
                                    `<span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">slot-boundp ,var ',slot-name</span>)</span>
                                       <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,local-var<span class="paren6">(<span class="code">slot-value ,var ',slot-name</span>)</span></span>)</span></span>)</span>
                                         ,<span class="paren4">(<span class="code">rec assertions</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-       <span class="paren4">(<span class="code">reverse ,alist</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+       <span class="paren4">(<span class="code">values ,var <span class="paren5">(<span class="code">reverse ,alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
 <p>辞書ファイルは以下の通り。</p>
 

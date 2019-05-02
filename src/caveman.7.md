@@ -11,37 +11,103 @@
 ## 7.1 Validation
 Cavemanにvalidationの機能などない。
 必要なら自作せざるを得ない。
-例えば以下のようなヘルパー関数が必要となろう。
+自作に当たっては各種バリデーション用のヘルパーを提供してくれているライブラリ[ratify](https://github.com/Shinmera/ratify)が助けとなろう。
+
+ASDファイルに追加しておこう。
+
+```lisp
+  :depends-on ("clack"
+               "lack"
+               "clack-errors" ; for debug.
+               "ratify" ; validation.
+               ...)
+```
+
+さて、バリデーションの設計であるが、これはサーバサイドのバリデーションである。
+本章の例でユーザが自由に入力をできるフォームヶ所は４つである。
+複数ヶ所に不正値があった場合、すべて面倒をみたい。
+一箇所でも不正であれば全体が不正になるので、開発者としてはその時点でエラーとしたいが、それだとUXが悪くなる。
+複数の不正値があるとして、一つしかエラーの指定がない場合、それを修正して送信したあと「後出しで他のエラー指定が出てくる」というのはUXとしては最悪だろう。
+不正値に対してはエラーを投げるのではなくリストに積んで返す設計にしたほうがいいだろう。
+
+また、ここでは引数のバリデーションをして、値が正しい場合にのみオブジェクトを作るのではなく、とにかく不正な値であろうとなかろうとお構いなしにオブジェクトをつくり、その後にバリデーション、正規化を行いたい。
+とうのも、入力した値が不正だったとして、だからといって入力フォームがすべて空になって一から全部入力し直さなければならなくなるのもまた最悪なUXとなろうからだ。
+
+さて、その実装についてであるが、本当は`CL:MAKE-INSTANCE`を拡張して行いたかった。
+:AROUNDメソッドを定義して、スロットに不正値が入っていたら多値でリストを返すという設計である。
+言語仕様上できておかしくないし、事実REPLトップレベルでは機能するものができた。
+ところが多値を束縛しようとすると機能しない。
+おそらくこれはSBCLのバグだ。
+最適化のため、`CL:MAKE-INSTANCE`は一引数しか返さないというような管理の仕方がされているのではないか？
+というわけでここでは理想の振る舞いをヘルパーに担わせてしまおう。
+そうすることで将来バグがとれたとき、リファクタリングがしやすくなろうというものだ。
+
+方向性は見えたので、まず下準備としてテーブルの定義を変更する。
+:INITFORMの指定がある場合の値は想定されるユーザー入力にしておく。
+具体的には整数を期待するスロットに整数を初期値として入れるのではなく、整数と解釈できる文字列を入れておく。
+ユーザーの入力はすべて文字列で受け取ることになるからだ。
+
+```lisp
+(defclass user()
+  ((number :col-type :integer
+           :initarg :number
+           :accessor number-of)
+   (name :col-type (:varchar 64)
+         :initarg :name
+         :accessor name-of)
+   (full-name :col-type (or (:varchar 128) :null)
+              :initarg :full-name
+              :accessor full-name-of)
+   (email :col-type (or :null :text)
+          :initarg :email
+          :accessor email-of)
+   (birthday :col-type (or :null :date)
+             :initarg :birthday
+             :accessor birthday-of)
+   (sex :col-type :integer
+        :initarg :sex
+        :initform "1"                     ; <--- This!
+        :accessor sex-of)
+   (administrator :col-type :boolean
+                  :initarg :administrator
+                  :initform "1" ; as NIL. ; <--- This!
+                  :accessor administrator-of)
+   )
+  (:metaclass mito:dao-table-class))
+```
+
+バリデーション関数には不正のチェックのみならず、期待される正しい値だった場合正規化してスロット値を更新する機能も持たせる。
+想定されるコードは以下のようなものだ。
 
 ```lisp
 (defun validate-user(user)
   (let((alist))
-    (if(slot-boundp c 'number)
-      (let((number(number-of c)))
-        (if(integerp number)
-          (if #0=(< 0 number 100)
-            (when(mito:find-dao 'user :number number)
-              (push (cons 'number (format nil "Number must unique, already exists."))alist))
-            (push (cons 'number (format nil "Number must in range of ~S but ~S"'#0# number)) alist))
-          (push (cons 'number (format nil "Number must be integer, but ~S"(type-of number))) alist)))
+    (if(slot-boundp c 'number)                                   ; check requred.
+      (handler-case(let((number(parse-integer(number-of user)))) ; check form.
+                     (setf(number-of user)number)                ; canonicalize.
+                     (if #0=(< 0 number 100)                     ; check range.
+                       (when(mito:find-dao 'user :number number) ; check uniqueness.
+                         (push (cons 'number (format nil "Number must unique, already exists."))alist))
+                       (push (cons 'number (format nil "Number must in range of ~S but ~S"'#0# number)) alist)))
+        (error(c)(push (cons 'number (princ-to-string c)) alist)))
       (push (cons 'number "Number is required.") alist))
-    (if(slot-boundp c 'name)
+    (if(slot-boundp c 'name)                                                       ; check required.
       (let((name(name-of c)))
-        (if(ppcre:scan #2="^[A-Za-z][A-Za-z0-9]*$" name)
-          (if #1=(<= 2 (length name) 20)
-            (when(mito:select-dao 'user (sxql:where `(:like ,name))(sxql:limit 1))
+        (if(ppcre:scan #2="^[A-Za-z][A-Za-z0-9]*$" name)                           ; check form.
+          (if #1=(<= 2 (length name) 20)                                           ; check range.
+            (when(mito:select-dao 'user (sxql:where `(:like ,name))(sxql:limit 1)) ; check uniqueness.
               (push (cons 'name (format nil "Name must unique, already exists."))alist))
             (push (cons 'name (format nil "Name must in range of ~S but ~S" '#1# (length name))) alist))
           (push (cons 'name (format nil "Invalid form. Must satisfies ~S" #2#)) alist)))
       (push (cons 'name (format nil "Name is required.")) alist))
-    (if(slot-boundp c 'full-name)
+    (if(slot-boundp c 'full-name)               ; check required.
       (let((full-name(full-name-of c)))
-        (unless #3=(<= 0 (length full-name) 20)
+        (unless #3=(<= 0 (length full-name) 20) ; check range.
           (push (cons 'full-name (format nil "Full name must in range of ~S but ~S" '#3# (length full-name))) alist)))
       (push (cons 'full-name "Full name is required.") alist))
-   (reverse alist)))
+   (values user (reverse alist))))
 ```
-これはいかにも辛いのでマクロで抽象化しよう。
+これはいかにも辛いのでマクロで抽象化したい。
 
 ```lisp
 (defmacro with-check-validate((var)(&rest assertions))
@@ -81,14 +147,23 @@ Cavemanにvalidationの機能などない。
                                          (push (cons ',slot-name
                                                      ,(if format-arguments
                                                         `(format nil ,@format-arguments)
-                                                        `(format nil "Not type-of ~S"',value)))
+                                                        `(format nil "not type-of ~S"',value)))
                                                ,alist)))
+                                    (:key
+                                      (let((v(gensym"CANONICALIZED"))
+                                           (c(gensym"CONDITION")))
+                                        `(handler-case(let((,v (funcall ,value ,local-var)))
+                                                        (setf (slot-value ,var ',slot-name) ,v
+                                                              ,local-var ,v)
+                                                        ,(rec rest))
+                                           (error(,c)(push (cons ',slot-name (princ-to-string ,c))
+                                                           ,alist)))))
                                     (:assert
                                       `(if ,value
                                          ,(rec rest)
                                          (PUSH (CONS ',slot-name ,(if format-arguments
                                                                     `(format nil ,@format-arguments)
-                                                                    `(FORMAT NIL "Must satisfies ~S but ~S"
+                                                                    `(FORMAT NIL "must satisfies ~S but ~S"
                                                                              ',value
                                                                              ,local-var)))
                                                ,alist)))
@@ -96,18 +171,18 @@ Cavemanにvalidationの機能などない。
                                       `(unless(mito:object-id ,var)
                                          (if(null(mito:select-dao (class-of ,var) (sxql:where ,value)(sxql:limit 1)))
                                            ,(rec rest)
-                                           (push (cons ',slot-name "Duplicated"),alist)))))))
+                                           (push (cons ',slot-name "already exists"),alist)))))))
                           (if(equal '(:require t) (car assertions))
                             `(if(slot-boundp ,var ',slot-name)
                                (let((,local-var (slot-value ,var ',slot-name)))
                                  ,(rec (cdr assertions)))
-                               (push (cons ',slot-name ,"Required") ,alist))
+                               (push (cons ',slot-name ,"required") ,alist))
                             (progn (when(equal '(:require nil) (car assertions))
                                      (pop assertions))
                                    `(if(slot-boundp ,var ',slot-name)
                                       (let((,local-var(slot-value ,var ',slot-name)))
                                         ,(rec assertions)))))))
-       (reverse ,alist))))
+       (values ,var (reverse ,alist)))))
 ```
 
 これで先のコードは以下のように書けるようになる。
@@ -116,24 +191,67 @@ Cavemanにvalidationの機能などない。
 (defun validate-user(user)
   (with-check-validate(user)
     ((number (:require t)
-             (:type integer)
+             (:key #'parse-integer)
              (:assert (< 0 number 100))
              (:unique (:= :number number)))
      (name (:require t)
            (:type string)
            (:assert (ppcre:scan "^[A-Za-z][A-Za-z0-9]*$" name))
-           (:assert (<= 2 (length name) 20) "Name length must be (<= 2 x 20) but ~D"(length name))
+           (:assert (<= 2 (length name) 20) "length must be (<= 2 x 20)")
            (:unique (:like :name name)))
      ((n full-name) (:require t)
                     (:type string)
-                    (:assert (<= 1 (length n) 20) "Full-name length must be (<= 1 x 20) but ~D"(length n))))))
+                    (:assert (<= 1 (length n) 20) "length must be (<= 1 x 20)")))))
 ```
 
 ### Checking of mail adress
-原著ではemailのvalidationも行うのだが、ここでは省略する。
-というのも、Common Lisp界隈にはそれに相当するものがないからだ。
-ただ、補足のために記しておくなら、Rubyのそれも完全なものではない。
-「email validation」でググると闇の一端を垣間見ることができるだろう。
+`RETIFY:TEST-EMAIL`がそれを果たしてくれる。
+
+VALIDATE-USRを以下のように修正。
+
+```lisp
+(defun validate-user(user)
+  (with-check-validate(user)
+    ((number (:require t)
+             (:key #'parse-integer)
+             (:assert (< 0 number 100))
+             (:unique (:= :number number)))
+     (name (:require t)
+           (:type string)
+           (:assert (ppcre:scan "^[A-Za-z][A-Za-z0-9]*$" name))
+           (:assert (<= 2 (length name) 20) "length must be (<= 2 x 20)")
+           (:unique (:like :name name)))
+     ((n full-name) (:require t)
+                    (:type string)
+                    (:assert (<= 1 (length n) 20) "length must be (<= 1 x 20)"))
+     (email (:key #'ratify:test-email))))) ; <--- This!
+```
+
+初期値のあるスロットのチェックも加えて、最終版。
+
+```lisp
+(defun validate-user(user)
+  (with-check-validate(user)
+    ((number (:require t)
+             (:key #'parse-integer)
+             (:assert (< 0 number 100))
+             (:unique (:= :number number)))
+     (name (:require t)
+           (:type string)
+           (:assert (ppcre:scan "^[A-Za-z][A-Za-z0-9]*$" name))
+           (:assert (<= 2 (length name) 20) "length must be (<= 2 x 20)")
+           (:unique (:like :name name)))
+     ((n full-name) (:require t)
+                    (:type string)
+                    (:assert (<= 1 (length n) 20) "length must be (<= 1 x 20)"))
+     (email (:key #'ratify:test-email))
+     (birthday (:key #'local-time:parse-timestring))
+     (sex (:require t)
+          (:key #'parse-integer)
+          (:assert (<= 1 sex 2)))
+     (administrator (:require t)
+                    (:key (lambda(x)(zerop(parse-integer x))))))))
+```
 
 ### Templates for error mesages.
 エラーメッセージのための部分テンプレートは以下の通り。
@@ -161,94 +279,84 @@ templates/shared/errors.htmlに作成する。
 New用のルーティングを修正しなければいけないが、ついでにリファクタリングもしておこう。
 
 REST-API的にはNewアクションはPUTメソッドで実現されるべきだろう。
-という訳で名前付きルーティングを以下のように作る。
-`MITO:CREATE-DAO`を叩かず、`CL:MAKE-INSTANCE`した後に`VALIDATE-USER`を叩き、エラーがなければ`MITO:INSERT-DAO`を叩くという処理になっている点要注意。
-
-```lisp
-(defroute put-user("/user" :method :put)(&key |authenticity-token| (|number| "") |name| |full-name| (|sex| "")
-                                              |birthday-year| |birthday-month| |birthday-day| |email|
-                                              (|administrator| ""))
-  (if(not(string= |authenticity-token| (token)))
-    `(403 (:content-type "text/plain") "Denied")
-    (let*((user (make-instance 'your-app.model::user
-                               :number (or (parse-integer |number| :junk-allowed t)
-                                           |number|)
-                               :name |name|
-                               :full-name |full-name|
-                               :sex (or (parse-integer |sex| :junk-allowed t)
-                                        |sex|)
-                               :birthday (local-time:parse-timestring (format nil "~A-~A-~A" |birthday-year| |birthday-month| |birthday-day|))
-                               :email |email|
-                               :administrator (eq your-app.model::+true+ (zerop (parse-integer |administrator| :junk-allowed t)))))
-          (errors(your-app.model::validate-user user)))
-      (if errors
-        `(400 ()(,(render "user/new.html" `(:user ,user :errors ,errors :token,(token)))))
-        (progn (setf(gethash :notice ningle:*session*)"Stored!")
-               (mito:insert-dao user)
-               `(303 (:location ,(format nil "/user/~D"(mito:object-id user)))))))))
-```
-
 POSTメソッドは単にディスパッチャとして以下のように修正する。
 
 ```lisp
-(defroute("/user" :method :post)(&key |_method|)
+(defroute("/user" :method :post)(&key method)
   (cond
-    ((string= "put" |_method|)
+    ((string= "put" method)
      (put-user (lack.request:request-body-parameters ningle:*request*)))
-    (t `(400 (:content-type "text/plain") (,(format nil "Unknown method ~S"|_method|))))))
+    (t `(400 (:content-type "text/plain") (,(format nil "Unknown method ~S"method))))))
 ```
 
-NewのUIフォームが正しくPUTメソッドを送るようにテンプレートを修正。
+NewのUIフォームが正しくPUTメソッドを送るように、また、引数を縦棒でくるむのがめんどくさすぎるのでテンプレートを各々修正。
+下はその一例。
 
 ```html
-        <input name="authenticity-token" type="hidden" value="{{token}}" />
-        <input name="_method" type="hidden" value="put" />
+        <input name="AUTHENTICITY-TOKEN" type="hidden" value="{{token}}" />
+        <input name="METHOD" type="hidden" value="put" />
         {% include "user/form.html" %}
 ```
 
-同様にEditのためのルーティングもリファクタリングしていく。
+分割したPUTメソッドは名前付きにして以下のように実装。
+引数から縦棒が取り除かれることにより、オブジェクトのinitargとの共通化が行われた結果、引数をまとめて`CL:APPLY`経由で渡せるようになっている点要注目。
+このとき引数に`:ALLOW-OTHER-KEYS T`の指定をしておかないとエラーになるので要注意。
+
 
 ```lisp
-(defroute("/user/:id" :method :post)(&key id |_method|)
+(defroute put-user("/user" :method :put)(&rest args
+                                               &key authenticity-token birthday-year birthday-month birthday-day
+                                               number name full-name email administrator)
+  (declare(ignore number name full-name email administrator))
+  (if(not(string= authenticity-token (token)))
+    `(403 (:content-type "text/plain") "Denied")
+    (multiple-value-bind(user errors)(your-app.model::validate-user
+                                       (apply #'make-instance 'your-app.model::user
+                                              :birthday
+                                              (format nil "~A-~A-~A" birthday-year birthday-month birthday-day)
+                                              :allow-other-keys t
+                                              args))
+      (if errors
+        `(400 ()(,(render "user/new.html" `(:user ,user :errors ,errors :token,(token)))))
+        (progn (setf(gethash :notice ningle:*session*)"Stored!")
+               `(303 (:location ,(format nil "/user/~D"(mito:object-id user)))))))))
+```
+Editのためのルーティングも同様にリファクタリングしていく。
+
+```lisp
+(defroute("/user/:id" :method :post)(&key id method)
   (cond
-    ((string= |_method| "delete")
+    ((string= method "delete")
      (delete-user (acons "ID" id (lack.request:request-body-parameters ningle:*request*))))
-    ((find |_method| '("" "post" nil) :test #'equal)
+    ((find method '("" "post" nil) :test #'equal)
      (post-user (acons "id" id (lack.request:request-body-parameters ningle:*request*))))
-    (t `(400 (:content-type "text/plain") (,(format nil "Unsuppoeted method ~S" |_method|))))))
+    (t `(400 (:content-type "text/plain") (,(format nil "Unsuppoeted method ~S" method))))))
 ```
 見通しの良さのため、本来のPOSTメソッドとしての処理は個別の`POST-USER`として定義する。
 Cavemanが自動的に作る名前付き関数を、代わりに手動で書くことになるが、まぁ、よしとする。
 
 ```lisp
 (defun post-user(request)
-  (destructuring-bind(&key authenticity-token id (number "") name full-name (sex "") birthday-year birthday-month
-                           birthday-day email (administrator "") &allow-other-keys)
+  (destructuring-bind(&key authenticity-token id number name full-name sex birthday-year birthday-month
+                           birthday-day email administrator &allow-other-keys)
     (loop :for (key . value) :in request
           :collect (let((*package*(find-package :keyword)))
                      (read-from-string key))
           :collect value)
     (if(not(string= authenticity-token (token)))
-      `(403 () (,(with-output-to-string(*standard-output*)
-                   (dev:peep ningle:*request*)
-                   (print :denied))))
+      `(403 () ("Denied"))
       (let((id(ignore-errors(parse-integer id)))
            (user(and id (mito:find-dao 'your-app.model::user :id id))))
         (if(null user)
-          `(500 (:content-type "text/plain")
-            (,(with-output-to-string(*standard-output*)
-                (dev:peep ningle:*request*)
-                (format t "Could not edit unexists user."))))
-          (progn (setf (your-app.model::number-of user) (or (parse-integer number :junk-allowed t)
-                                                            number)
+          `(500 (:content-type "text/plain") ("Could not edit unexists user."))
+          (progn (setf (your-app.model::number-of user) number
                        (your-app.model::name-of user) name
                        (your-app.model::full-name-of user) full-name
-                       (your-app.model::sex-of user) (or (parse-integer sex :junk-allowed t)
-                                                         sex)
-                       (your-app.model::birthday-of user) (local-time:parse-timestring (format nil "~A-~A-~A" birthday-year birthday-month birthday-day))
+                       (your-app.model::sex-of user) sex
+                       (your-app.model::birthday-of user) (format nil "~A-~A-~A" birthday-year birthday-month birthday-day)
                        (your-app.model::email-of user) email
-                       (your-app.model::administrator-of user) (eq your-app.model::+true+ (zerop (parse-integer administrator :junk-allowed t))))
-                 (let((errors(your-app.model::validate-user user)))
+                       (your-app.model::administrator-of user) administrator)
+                 (multiple-value-bind(user errors)(your-app.model::validate-user user)
                    (if errors
                      `(400 ()(,(render "user/edit.html" `(:user ,user :errors ,errors :token,(token)))))
                      (progn (mito:save-dao user)
@@ -445,28 +553,28 @@ templates/user/form.htmlは以下のようになる。
 <table class="attr">
         <tr>
                 <th><label for="user-number">{% filter i18n %}Number{% endfilter %}</label></th>
-                <td><input size="8" type="text" name="number" value="{{user.number}}" id="user-number" /></td>
+                <td><input size="8" type="text" name="NUMBER" value="{{user.number}}" id="user-number" /></td>
         </tr>
         <tr>
                 <th><label for="user-name">{% filter i18n %}Name{% endfilter %}</label></th>
-                <td><input type="text" value="{{user.name}}" name="name" id="user-name" /></td>
+                <td><input type="text" value="{{user.name}}" name="NAME" id="user-name" /></td>
         </tr>
         <tr>
                 <th><label for="user-full-name">{% filter i18n %}Full Name{% endfilter %}</label></th>
-                <td><input type="text" value="{{user.full-name}}" name="full-name" id="user-full-name" /></td>
+                <td><input type="text" value="{{user.full-name}}" name="FULL-NAME" id="user-full-name" /></td>
         </tr>
         <tr>
                 <th>{% filter i18n %}Sex{% endfilter %}</th>
                 <td>
-                        <input type="radio" value="1" {%ifequal user.sex 1%}checked="checked"{%endifequal%} name="sex" id="member-sex-1" />
+                        <input type="radio" value="1" {%ifequal user.sex 1%}checked="checked"{%endifequal%} name="SEX" id="member-sex-1" />
                         <label for="member-sex-1">{% filter i18n %}Male{% endfilter %}</label>
-                        <input type="radio" value="2" {%ifequal user.sex 2%}checked="checked"{%endifequal%} name="sex" id="member-sex-2" />
+                        <input type="radio" value="2" {%ifequal user.sex 2%}checked="checked"{%endifequal%} name="SEX" id="member-sex-2" />
                         <label for="member-sex-1">{% filter i18n %}Female{% endfilter %}</label>
                 </td>
         </tr>
         <tr>
                 <th><label for="user-birthday">{% filter i18n %}Birthday{% endfilter %}</label></th>
-                <td><select id="member-birthday-li" name="birthday-year">
+                <td><select id="member-birthday-li" name="BIRTHDAY-YEAR">
                                 {{ user.birthday
                                  | lisp: (lambda(timestamp)
                                            (let((current-year(local-time:timestamp-year(local-time:now))))
@@ -481,7 +589,7 @@ templates/user/form.htmlは以下のようになる。
                                  | safe
                                  }}
                         </select>
-                        <select id="member-birthday-2i" name="birthday-month">
+                        <select id="member-birthday-2i" name="BIRTHDAY-MONTH">
                                 {{ user.birthday
                                  | lisp: (lambda(timestamp)
                                            (loop :for i :upfrom 1 to 12
@@ -496,7 +604,7 @@ templates/user/form.htmlは以下のようになる。
                                  | safe
                                  }}
                         </select>
-                        <select id="birthday-3i" name="birthday-day">
+                        <select id="birthday-3i" name="BIRTHDAY-DAY">
                                 {{ user.birthday
                                  | lisp: (lambda(timestamp)
                                            (loop :for i :upfrom 1 to 31
@@ -514,17 +622,16 @@ templates/user/form.htmlは以下のようになる。
         </tr>
         <tr>
                 <th><label for="user-email">{% filter i18n %}Email{% endfilter %}</label></th>
-                <td><input type="text" name="email" id="user-email" /></td>
+                <td><input type="text" name="EMAIL" id="user-email" /></td>
         </tr>
         <tr>
                 <th>{% filter i18n %}Administrator{% endfilter %}</th>
                 <td>
-                        <input name="administrator" type="hidden" value="0" />
+                        <input name="ADMINISTRATOR" type="hidden" value="0" />
                         <input type="checkbox" value="1" name="administrator" id="user-administrator" />
-                        <label for="user-administrator">Administrator</label>
                 </td>
         </tr>
-</table
+</table>
 ```
 
 templates/shared/errors.htmlは以下のようになる。
@@ -583,6 +690,15 @@ templates/shared/errors.htmlは以下のようになる。
                                                         `(format nil ,@format-arguments)
                                                         `(format nil "is not type-of ~S"',value)))
                                                ,alist)))
+                                    (:key
+                                      (let((v(gensym"CANONICALIZED"))
+                                           (c(gensym"CONDITION")))
+                                        `(handler-case(let((,v (funcall ,value ,local-var)))
+                                                        (setf (slot-value ,var ',slot-name) ,v
+                                                              ,local-var ,v)
+                                                        ,(rec rest))
+                                           (error(,c)(push (cons ',slot-name (princ-to-string ,c))
+                                                           ,alist)))))
                                     (:assert
                                       `(if ,value
                                          ,(rec rest)
@@ -607,7 +723,7 @@ templates/shared/errors.htmlは以下のようになる。
                                    `(if(slot-boundp ,var ',slot-name)
                                       (let((,local-var(slot-value ,var ',slot-name)))
                                         ,(rec assertions)))))))
-       (reverse ,alist))))
+       (values ,var (reverse ,alist)))))
 ```
 
 辞書ファイルは以下の通り。
