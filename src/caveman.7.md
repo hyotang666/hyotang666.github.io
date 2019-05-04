@@ -206,9 +206,9 @@ ASDファイルに追加しておこう。
   (defun spec-diverge(g.alist slot-name g.obj local-var rest spec-key spec-value &rest format-arguments)
     (ecase spec-key
       (:type (<type-spec-body> local-var spec-value rest g.alist g.obj slot-name (push-form-generator slot-name g.alist) format-arguments))
-      (:key (<key-spec-body> spec-value local-var g.obj slot-name rest g.alist (push-form-generator slot-name g.alist)))
+      (:key (<key-spec-body> spec-value local-var g.obj slot-name rest g.alist (push-form-generator slot-name g.alist)format-arguments))
       (:assert (<assert-spec-body> spec-value rest g.alist local-var g.obj slot-name (push-form-generator slot-name g.alist) format-arguments))
-      (:unique (<unique-spec-body> g.obj spec-value rest g.alist local-var slot-name (push-form-generator slot-name g.alist)))))
+      (:unique (<unique-spec-body> g.obj spec-value rest g.alist local-var slot-name (push-form-generator slot-name g.alist)format-arguments))))
   )
 
 (defmacro with-check-validate((object-generate-form targets-generate-form)(&rest assertions))
