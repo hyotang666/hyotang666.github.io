@@ -1,0 +1,657 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>caveman.8
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><!-- {% raw %} -->
+
+<h1>Caveman kills ruby on rails - Chapter 8</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Cavemanでauthenticationを行いたいCLer</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p>本稿は<a href="https://book.impress.co.jp/books/1117101135" >原著</a>の各章をCommon Lispに翻訳するシリーズの第8章である。
+本章ではAuthenticationについて修めていく。</p>
+
+<h2>8.1 Singular resource</h2>
+
+<p>Cavemanに於いてそのようなものは概念でしかない。
+自前で以下のようなルーティングを用意することとなろう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/account"</span><span class="paren2">(<span class="code"></span>)</span>
+  </span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/account/new"</span><span class="paren2">(<span class="code"></span>)</span>
+  </span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/account/edit"</span><span class="paren2">(<span class="code"></span>)</span>
+  </span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/account"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code"></span>)</span>
+  </span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/account"</span> <span class="keyword">:method</span> <span class="keyword">:put</span></span>)</span><span class="paren2">(<span class="code"></span>)</span>
+  </span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/account"</span> <span class="keyword">:method</span> <span class="keyword">:delete</span></span>)</span><span class="paren2">(<span class="code"></span>)</span>
+  </span>)</span></span></code></pre>
+
+<h2>8.2 login with session</h2>
+
+<p>Cavemanに於いてセッションは<code>NINGLE:*SESSION*</code>に<code>CL:HASH-TABLE</code>オブジェクトとして格納されている。</p>
+
+<h3>Hermetic</h3>
+
+<p>Common Lispに於いて暗号と言えば<a href="https://github.com/sharplispers/ironclad" >ironclad</a>がデファクトスタンダードだ。
+ここではその上に作られた<a href="https://github.com/eudoxia0/hermetic" >hermetic</a>を使用する。
+hermeticはclackベースのアプリケーション用に作られたauthenticationシステムとのこと。</p>
+
+<p>まずはASDファイルにhermeticを追加。</p>
+
+<pre><code><span class="code">  :depends-on <span class="paren1">(<span class="code"><span class="string">"clack"</span>
+               <span class="string">"lack"</span>
+               <span class="string">"clack-errors"</span> <span class="comment">; for debug.
+</span>               <span class="string">"hermetic"</span> <span class="comment">; authentication</span></span></span></span></code></pre>
+
+<p>/src/web.lispにセットアップコードを追加。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">hermetic:setup
+  <span class="keyword">:user-p</span> <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">name</span>)</span><span class="paren3">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:name</span> name</span>)</span></span>)</span>
+  <span class="keyword">:user-pass</span> <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">name</span>)</span><span class="paren3">(<span class="code">your-app.model::password-of<span class="paren4">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:name</span> name</span>)</span></span>)</span></span>)</span>
+  <span class="keyword">:user-roles</span> <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">name</span>)</span><span class="paren3">(<span class="code">cons <span class="keyword">:logged-in</span>
+                                 <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">user<span class="paren1">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:name</span> name</span>)</span></span>)</span></span>)</span>
+                                   <span class="paren5">(<span class="code">and user
+                                        <span class="paren6">(<span class="code">your-app.model::administrator-of user</span>)</span>
+                                        '<span class="paren6">(<span class="code"><span class="keyword">:administrator</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="keyword">:session</span> <span class="special">ningle:*session*</span>
+  <span class="keyword">:denied</span> <span class="paren2">(<span class="code">constantly '<span class="paren3">(<span class="code">400 <span class="paren4">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren4">(<span class="code"><span class="string">"Authenticate denied"</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Adding column.</h3>
+
+<p>ユーザ認証を行えるようにモデルにpasswordスロットを追加。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> user<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">number <span class="keyword">:col-type</span> <span class="keyword">:integer</span>
+           <span class="keyword">:initarg</span> <span class="keyword">:number</span>
+           <span class="keyword">:accessor</span> number-of</span>)</span>
+   ...
+   <span class="paren3">(<span class="code">password <span class="keyword">:col-type</span> <span class="keyword">:text</span>
+             <span class="keyword">:initarg</span> <span class="keyword">:password</span>
+             <span class="keyword">:accessor</span> password-of
+             <span class="keyword">:inflate</span> #'cl-pass:hash
+             </span>)</span>
+   </span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> mito:dao-table-class</span>)</span></span>)</span></span></code></pre>
+
+<h3>Seeds</h3>
+
+<p>シード関数にも対応する初期化引数を追加。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> seeds<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">names #<span class="paren5">(<span class="code"><span class="string">"Taro"</span> <span class="string">"Jiro"</span> <span class="string">"Hana"</span> <span class="string">"John"</span> <span class="string">"Mike"</span> <span class="string">"Sophy"</span> <span class="string">"Bill"</span> <span class="string">"Alex"</span> <span class="string">"Mary"</span> <span class="string">"Tom"</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">fnames #<span class="paren5">(<span class="code"><span class="string">"佐藤"</span> <span class="string">"鈴木"</span> <span class="string">"高橋"</span> <span class="string">"田中"</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">gnames #<span class="paren5">(<span class="code"><span class="string">"太郎"</span> <span class="string">"次郎"</span> <span class="string">"花子"</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-connection</span></i><span class="paren4">(<span class="code">db</span>)</span>
+      <span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10</span>)</span>
+        <span class="paren5">(<span class="code">mito:create-dao 'user
+                         <span class="keyword">:number</span> <span class="paren6">(<span class="code">+ x 10</span>)</span>
+                         <span class="keyword">:name</span> <span class="paren6">(<span class="code">aref names x</span>)</span>
+                         <span class="keyword">:full-name</span> <span class="paren6">(<span class="code">format nil <span class="string">"~A ~A"</span><span class="paren1">(<span class="code">aref fnames <span class="paren2">(<span class="code">rem x 4</span>)</span></span>)</span>
+                                            <span class="paren1">(<span class="code">aref gnames <span class="paren2">(<span class="code">rem x 3</span>)</span></span>)</span></span>)</span>
+                         <span class="keyword">:email</span> <span class="paren6">(<span class="code">format nil <span class="string">"~A@example.com"</span><span class="paren1">(<span class="code">aref names x</span>)</span></span>)</span>
+                         <span class="keyword">:birthday</span> <span class="string">"1981-12-01"</span>
+                         <span class="keyword">:sex</span> <span class="paren6">(<span class="code">nth <span class="paren1">(<span class="code">rem x 3</span>)</span>'<span class="paren1">(<span class="code">1 1 2</span>)</span></span>)</span>
+                         <span class="keyword">:administrator</span> <span class="paren6">(<span class="code">zerop x</span>)</span>
+                         <span class="keyword">:password</span> <span class="string">"asagao!"</span> <span class="comment">; &lt;--- This!
+</span>                         </span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>REPLで<code>REBUILD</code>を叩いておくこと。</p>
+
+<h3>Actions about session.</h3>
+
+<p>クライアントとのセッションを確立するAPIを定義していく。</p>
+
+<h4>Edit</h4>
+
+<p>POSTメソッドはディスパッチャとして実装。
+<code>LOGOUT</code>関数は後に名前付きルーティングとして実装する点要注意。
+また<code>POST-SESSION</code>も自作することになる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/session"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key method</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">string= <span class="string">"delete"</span> method</span>)</span>
+     <span class="paren4">(<span class="code">logout <span class="paren5">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">string= <span class="string">"post"</span> method</span>)</span>
+     <span class="paren4">(<span class="code">post-session<span class="paren5">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">t `<span class="paren4">(<span class="code">400 <span class="paren5">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">format nil <span class="string">"Unknown method ~S"</span> method</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>本来のPOSTメソッドは独立した関数として実装。</p>
+
+<p>ブラウザがGETとPOSTとしか扱えない以上、この設計は頻出することとなろう。
+独立した関数として本来のPOSTメソッドを実装することも頻出することとなる。
+ヘルパーがあると便利なのでまずはヘルパーを定義しておく。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> request-params<span class="paren2">(<span class="code">request</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren3">(<span class="code">key . value</span>)</span> <span class="keyword">:in</span> request
+        <span class="keyword">:collect</span> <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code"><span class="special">*package*</span><span class="paren6">(<span class="code">find-package <span class="keyword">:keyword</span></span>)</span></span>)</span></span>)</span>
+                   <span class="paren4">(<span class="code">read-from-string key</span>)</span></span>)</span>
+        <span class="keyword">:collect</span> value</span>)</span></span>)</span></span></code></pre>
+
+<p><code>POST-SESSION</code>の実装は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> post-session<span class="paren2">(<span class="code">request</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind<span class="paren3">(<span class="code">&amp;key name password authenticity-token &amp;allow-other-keys</span>)</span><span class="paren3">(<span class="code">request-params request</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">not<span class="paren5">(<span class="code">string= authenticity-token <span class="paren6">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+      `<span class="paren4">(<span class="code">403 <span class="paren5">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren5">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">params<span class="paren1">(<span class="code">list <span class="keyword">:|username|</span> name <span class="keyword">:|password|</span> password</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">hermetic:login params
+          <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">gethash <span class="keyword">:id</span> <span class="special">ningle:*session*</span></span>)</span>
+                       <span class="paren2">(<span class="code">mito:object-id<span class="paren3">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:name</span> name</span>)</span></span>)</span>
+                       <span class="paren2">(<span class="code">gethash <span class="keyword">:password</span> <span class="special">ningle:*session*</span></span>)</span>
+                       password</span>)</span>
+                 '<span class="paren1">(<span class="code">303 <span class="paren2">(<span class="code"><span class="keyword">:location</span> <span class="string">"/"</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">gethash <span class="keyword">:alert</span> <span class="special">ningle:*session*</span></span>)</span>
+                       <span class="string">"Name and password is not matched."</span></span>)</span>
+                 '<span class="paren1">(<span class="code">303 <span class="paren2">(<span class="code"><span class="keyword">:location</span> <span class="string">"/"</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">gethash <span class="keyword">:alert</span> <span class="special">ningle:*session*</span></span>)</span>
+                       <span class="string">"No such user"</span></span>)</span>
+                 '<span class="paren1">(<span class="code">303 <span class="paren2">(<span class="code"><span class="keyword">:location</span> <span class="string">"/"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上記コードでキーワードを縦棒エスケープした小文字のものを使用している点要注目。
+これはこの表記でなければならない。
+hermeticの仕様である。
+ドキュメントに解説がないのは不親切だと思う。</p>
+
+<p>また、<code>CL:LET</code>で束縛した<code>PARAM</code>変数を渡している点も要注目。
+<code>HERMETIC:LOGIN</code>は不衛生なマクロでこうしないとPARAMSが複数回評価される。
+ドキュメントに解説がないのは不親切だと思う。</p>
+
+<h4>Destroy</h4>
+
+<p>destroyアクションの実装は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> logout<span class="paren2">(<span class="code"><span class="string">"/session"</span> <span class="keyword">:method</span> <span class="keyword">:delete</span></span>)</span><span class="paren2">(<span class="code">&amp;key authenticity-token</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= authenticity-token <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+    `<span class="paren3">(<span class="code">403 <span class="paren4">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren4">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">hermetic::logout
+      <span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren5">(<span class="code">flash-gethash <span class="keyword">:id</span> <span class="special">ningle:*session*</span></span>)</span>
+             '<span class="paren5">(<span class="code">303 <span class="paren6">(<span class="code"><span class="keyword">:location</span> <span class="string">"/"</span></span>)</span></span>)</span></span>)</span>
+      '<span class="paren4">(<span class="code">303 <span class="paren5">(<span class="code"><span class="keyword">:location</span> <span class="string">"/"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>HERMETIC::LOGOUT</code>は、おそらくポカミスによるエクスポート忘れ。
+というのもHERMETICのデモではこのシンボルが使われているから。
+というわけでここでは容赦なく使っていく。</p>
+
+<h3>Login form.</h3>
+
+<p>ログインフォームを実装していく。</p>
+
+<h4>templates/shared/login_form.html</h4>
+
+<pre><code>&lt;h2&gt;Login&lt;/h2&gt;
+{% if alert %}
+&lt;p class="alert"&gt;{{alert}}&lt;/p&gt;
+{% endif %}
+&lt;form id="login_form" action="/session" method="post"&gt;
+        &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}"&gt;
+        &lt;input type="hidden" name="METHOD" value="post"&gt;
+        &lt;div&gt;
+                &lt;label&gt;user name:&lt;/label&gt;
+                &lt;input type="text" name="NAME"&gt;
+        &lt;/div&gt;
+        &lt;div&gt;
+                &lt;label&gt;password:&lt;/label&gt;
+                &lt;input type="password" name="PASSWORD"&gt;
+        &lt;/div&gt;
+        &lt;div&gt;
+                &lt;input type="submit" value="Login"&gt;
+        &lt;/div&gt;
+&lt;/form&gt;</code></pre>
+
+<h4>roles</h4>
+
+<p>ユーザがログインしているか否かで表示するコンテンツを切り替えたい場合はままある。
+HERMETICはもちろんそのための機能を提供しているが、それは表示すべきファイルをごっそり切り替えたい場合のものとして設計されている。</p>
+
+<p>ここでは表示すべきテンプレートは同じに、そのコンテンツの一部をテンプレート側で判断して切り替えたい。
+すなわち引数として渡したい。
+よって簡単なヘルパーを定義しておく。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> roles<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> role <span class="keyword">:in</span> <span class="paren3">(<span class="code">hermetic:roles</span>)</span>
+        <span class="keyword">:collect</span> role <span class="keyword">:collect</span> t</span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/shared/sidebar.html</h4>
+
+<p>冒頭を以下のように編集。</p>
+
+<pre><code>{% if not logged-in %}
+{% include "shared/login_form.html" %}
+{% endif %}</code></pre>
+
+<h4>templates/shared/header.html</h4>
+
+<p>冒頭を以下のように編集。</p>
+
+<pre><code>&lt;img src="/images/lisplogo.svg" width="272" height="48" alt="Your app"&gt;
+
+{% if logged-in %}
+&lt;ul class="account-menu"&gt;
+        &lt;li&gt;
+                &lt;form id="logout-form" action="/session" method="post"&gt;
+                        &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}"&gt;
+                        &lt;input type="hidden" name="METHOD" value="delete"&gt;
+                        &lt;input type="submit" value="Logout"&gt;
+                &lt;/form&gt;
+        &lt;/li&gt;
+&lt;/ul&gt;
+{% endif %}</code></pre>
+
+<h4>before login</h4>
+
+<p><img src="../img/caveman/before-login.png" alt="Screen shot of example" /></p>
+
+<h4>after login</h4>
+
+<p><img src="../img/caveman/after-login.png" alt="Screen shot of example" /></p>
+
+<h4>when failed login</h4>
+
+<p><img src="../img/caveman/login-failed.png" alt="Screen shot of example" /></p>
+
+<h2>8.3 Action callback</h2>
+
+<p>CavemanにAction callback相当の機能はおそらくない。
+lackの機能は相当するように思えるが、おそらくはアプリケーション単位の処理であろう。
+アクション単位ではないはずだ。</p>
+
+<p>どうしてもほしいならマクロでなんとかすればいい。
+ここでは手で書くこととする。</p>
+
+<h3>Only member contents</h3>
+
+<h4>templates/shared/header.html</h4>
+
+<pre><code><span class="code">&lt;nav class="menubar"&gt;
+        &lt;ul&gt;
+                &lt;li&gt;&lt;a href="/"&gt;Home&lt;/a&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;a href="#"&gt;News&lt;/a&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;a href="#"&gt;Blog&lt;/a&gt;&lt;/li&gt;
+                {% if logged-in %}
+                &lt;li&gt;&lt;a href="/user/index"&gt;Members&lt;/a&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;a href="#"&gt;Settings&lt;/a&gt;&lt;/li&gt;
+                {% endif %}
+        &lt;/ul&gt;
+&lt;/nav&gt;</span></code></pre>
+
+<h2>8.4 Making my account page.</h2>
+
+<h3>Utils</h3>
+
+<p>今ログインしているユーザを参照したいことは多いのでヘルパーを定義しておく。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> current-user<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:id</span> <span class="paren3">(<span class="code">gethash <span class="keyword">:id</span> <span class="special">ningle:*session*</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Show</h3>
+
+<p>showアクションの実装は以下の通り。
+401の実装はいまのところいい加減なものである点要注意。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/account"</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">hermetic:logged-in-p</span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">401 <span class="paren4">(<span class="code"></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">render <span class="string">"accounts/show.html"</span>
+            `<span class="paren4">(<span class="code"><span class="keyword">:user</span> ,<span class="paren5">(<span class="code">current-user</span>)</span> 
+                    <span class="keyword">:news</span> <span class="paren5">(<span class="code">1 2 3 4 5</span>)</span>
+                    <span class="keyword">:blogs</span><span class="paren5">(<span class="code">1 2 3 4 5</span>)</span>
+                    ,@<span class="paren5">(<span class="code">roles</span>)</span>
+                    <span class="keyword">:token</span>,<span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/user/body.html</h4>
+
+<p>共有部分を切り離すためtemplates/user/show.htmlのtableタグをごっそりコピペする。</p>
+
+<h4>templates/user/show.html</h4>
+
+<p>上記テーブルタグを部分テンプレートとしてincludeするように編集。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+{% block title %}{% lisp (title "User detail") %}{% endblock %}
+{% block content %}
+&lt;h1&gt;User detail&lt;/h1&gt;
+
+&lt;div class="toolbar"&gt;&lt;a href="/user/{{user.id}}/edit"&gt;Edit&lt;/a&gt;&lt;/div&gt;
+
+{% include "user/body.html" %}
+
+{% endblock %}</code></pre>
+
+<h4>templates/accounts/show.html</h4>
+
+<p>共有部分をincludeしつつ作成。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+{% block title %}
+{% lisp (title "My account") %}
+{% endblock %}
+
+{% block content %}
+&lt;h1&gt;My account&lt;/h1&gt;
+
+&lt;ul class="toolbar"&gt;
+        &lt;a href="/account/edit"&gt;Edit account info&lt;/a&gt;
+&lt;/ul&gt;
+
+{% include "user/body.html" %}
+{% endblock %}</code></pre>
+
+<h4>templates/shared/header.html</h4>
+
+<p>名前の表示を追加。</p>
+
+<pre><code>&lt;ul class="account-menu"&gt;
+        &lt;li&gt;&lt;a href="/account"&gt;{{user.name}}-San&lt;/a&gt;&lt;/li&gt;
+        &lt;li&gt;</code></pre>
+
+<h3>Edit account info.</h3>
+
+<p>アカウント情報を編集できるようにする。</p>
+
+<h4>templates/user/new.html</h4>
+
+<p>以下のように編集。</p>
+
+<pre><code>        &lt;input name="AUTHENTICITY-TOKEN" type="hidden" value="{{token}}" /&gt;
+        &lt;input name="METHOD" type="hidden" value="put" /&gt;
+        {% include "shared/user-form.html" %}
+        &lt;div&gt;
+                &lt;input type="submit" name="COMMIT" value="{% filter i18n %}Create user{% endfilter %}" /&gt;
+        &lt;/div&gt;</code></pre>
+
+<h4>templates/user/edit.html</h4>
+
+<p>同様の編集をこちらにも。</p>
+
+<pre><code>        &lt;input name="AUTHENTICITY-TOKEN" type="hidden" value="{{token}}" /&gt;
+        &lt;input name="METHOD" type="hidden" value="post" /&gt;
+        {% include "shared/user-form.html" %}
+        &lt;div&gt;
+                &lt;input type="submit" name="COMMIT" value="Edit user" /&gt;
+        &lt;/div&gt;</code></pre>
+
+<h4>templates/accounts/edit.html</h4>
+
+<p>以下のように作成。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+{% block title %}
+{% lisp (title "Edit account info") %}
+{% endblock %}
+
+{% block content %}
+&lt;h1&gt;Edit account info&lt;/h1&gt;
+
+&lt;div class="toolbar"&gt;
+        &lt;a href="/account"&gt;Go back my account&lt;/a&gt;
+&lt;/div&gt;
+
+&lt;form class="edit_account" id="edit_account" action="/account" method="post"&gt;
+        &lt;input type="hidden" name="METHOD" value="post"&gt;
+        &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}"&gt;
+        {% include "shared/user-form.html" %}
+        &lt;div&gt;&lt;input type="submit" name="commit" value="Update"&gt;&lt;/div&gt;
+&lt;/form&gt;
+{% endblock %}</code></pre>
+
+<h4>templates/shared/user-form.html</h4>
+
+<p>管理者フラグは管理者のみ変更できるように修正。</p>
+
+<pre><code>        {% if administrator %}
+        &lt;tr&gt;
+                &lt;th&gt;{% filter i18n %}Administrator{% endfilter %}&lt;/th&gt;
+                &lt;td&gt;
+                        &lt;input name="ADMINISTRATOR" type="hidden" value="0" /&gt;
+                        &lt;input type="checkbox" value="1" name="administrator" id="user-administrator" /&gt;
+                &lt;/td&gt;
+        &lt;/tr&gt;
+        {% endif %}
+&lt;/table&gt;</code></pre>
+
+<h4>edit</h4>
+
+<p>Edit用のルーティングは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/account/edit"</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">hermetic:logged-in-p</span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">401 <span class="paren4">(<span class="code"></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">render <span class="string">"accounts/edit.html"</span>
+            `<span class="paren4">(<span class="code"><span class="keyword">:token</span> ,<span class="paren5">(<span class="code">token</span>)</span>
+                     <span class="keyword">:user</span> ,<span class="paren5">(<span class="code">current-user</span>)</span>
+                     <span class="keyword">:news</span> <span class="paren5">(<span class="code">1 2 3 4 5</span>)</span>
+                     <span class="keyword">:blogs</span> <span class="paren5">(<span class="code">1 2 3 4 5</span>)</span>
+                     ,@<span class="paren5">(<span class="code">roles</span>)</span>
+                     </span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>update</h4>
+
+<p>Update用のルーティングは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/account"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key number name full-name sex birthday-year birthday-month birthday-day
+                                         email <span class="paren3">(<span class="code">administrator <span class="string">"1"</span></span>)</span> authenticity-token</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= authenticity-token <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">403<span class="paren4">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span><span class="paren4">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">not<span class="paren5">(<span class="code">hermetic:logged-in-p</span>)</span></span>)</span>
+      '<span class="paren4">(<span class="code">401 <span class="paren5">(<span class="code"></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">user<span class="paren1">(<span class="code">current-user</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">your-app.model::number-of user</span>)</span> number
+              <span class="paren6">(<span class="code">your-app.model::name-of user</span>)</span> name
+              <span class="paren6">(<span class="code">your-app.model::full-name-of user</span>)</span> full-name
+              <span class="paren6">(<span class="code">your-app.model::sex-of user</span>)</span> sex
+              <span class="paren6">(<span class="code">your-app.model::birthday-of user</span>)</span> <span class="paren6">(<span class="code">format nil <span class="string">"~A-~A-~A"</span> birthday-year birthday-month birthday-day</span>)</span>
+              <span class="paren6">(<span class="code">your-app.model::email-of user</span>)</span> email
+              <span class="paren6">(<span class="code">your-app.model::administrator-of user</span>)</span> administrator
+              <span class="paren6">(<span class="code">your-app.model::password-of user</span>)</span><span class="paren6">(<span class="code">gethash <span class="keyword">:password</span> <span class="special">ningle:*session*</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">multiple-value-bind<span class="paren6">(<span class="code">user errors</span>)</span><span class="paren6">(<span class="code">your-app.model::validate-user user</span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> errors
+            `<span class="paren1">(<span class="code">400 <span class="paren2">(<span class="code"></span>)</span><span class="paren2">(<span class="code">,<span class="paren3">(<span class="code">render <span class="string">"accounts/edit.html"</span> `<span class="paren4">(<span class="code"><span class="keyword">:user</span> ,user
+                                                           <span class="keyword">:errors</span> ,errors
+                                                           <span class="keyword">:news</span> <span class="paren5">(<span class="code">1 2 3 4 5</span>)</span>
+                                                           <span class="keyword">:blogs</span> <span class="paren5">(<span class="code">1 2 3 4 5</span>)</span>
+                                                           ,@<span class="paren5">(<span class="code">roles</span>)</span>
+                                                           <span class="keyword">:token</span>,<span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren2">(<span class="code">mito:save-dao user</span>)</span>
+                   <span class="paren2">(<span class="code">setf<span class="paren3">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Updated"</span></span>)</span>
+                   '<span class="paren2">(<span class="code">303 <span class="paren3">(<span class="code"><span class="keyword">:location</span> <span class="string">"/account"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/caveman/CkRoR-edit-account.png" alt="Screen shot of example" /></p>
+
+<h2>8.5 Changing password.</h2>
+
+<h3>Adding validation.</h3>
+
+<p>バリデーションを追加編集。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user &amp;rest target-slots</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">user target-slots</span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">number <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+              <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'parse-integer</span>)</span>
+              <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt; 0 number 100</span>)</span></span>)</span>
+              <span class="paren5">(<span class="code"><span class="keyword">:unique</span> <span class="paren6">(<span class="code"><span class="keyword">:=</span> <span class="keyword">:number</span> number</span>)</span></span>)</span></span>)</span>
+      ...
+      <span class="paren4">(<span class="code">password <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+                <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
+                <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt; 0 <span class="paren1">(<span class="code">length password</span>)</span></span>)</span> <span class="string">"Empty string is invalid"</span></span>)</span></span>)</span>
+      ...
+      <span class="paren4">(<span class="code">administrator <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+                     <span class="paren5">(<span class="code"><span class="keyword">:key</span> <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren1">(<span class="code">x</span>)</span><span class="paren1">(<span class="code">zerop<span class="paren2">(<span class="code">parse-integer x</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Making form which edit password.</h3>
+
+<h4>show</h4>
+
+<p>Show用のルーティングは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/password"</span><span class="paren2">(<span class="code"></span>)</span> <span class="comment">; as show
+</span>  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">hermetic:logged-in-p</span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">401 <span class="paren4">(<span class="code"></span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">303 <span class="paren4">(<span class="code"><span class="keyword">:location</span> <span class="string">"/account"</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/passwords/edit.html</h4>
+
+<p>テンプレートは以下の通り。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+{% block title %}
+{% lisp (title "Change password") %}
+{% endblock %}
+
+{% block content %}
+&lt;h1&gt;Change password&lt;/h1&gt;
+
+&lt;div class="toolbar"&gt;
+        &lt;a href="/accout"&gt;Go back my accout&lt;/a&gt;
+&lt;/div&gt;
+
+&lt;form action="/password" method="post"&gt;
+        &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}"&gt;
+        {% include "shared/errors.html" %}
+
+        &lt;table class="attr"&gt;
+                &lt;tr&gt;
+                        &lt;th&gt;&lt;label for="accout-current-password"&gt;Current password&lt;/label&gt;&lt;/th&gt;
+                        &lt;td&gt;&lt;input type="password" name="OLD" id="account-current-password" /&gt;&lt;/td&gt;
+                &lt;/tr&gt;
+                &lt;tr&gt;
+                        &lt;th&gt;&lt;label for="accout-password"&gt;Password&lt;/label&gt;&lt;/th&gt;
+                        &lt;td&gt;&lt;input type="password" name="NEW" id="account-password" /&gt;&lt;/td&gt;
+                &lt;/tr&gt;
+                &lt;tr&gt;
+                        &lt;th&gt;&lt;label for="password-confirmation"&gt;Password confirmation&lt;/label&gt;&lt;/th&gt;
+                        &lt;td&gt;&lt;input type="password" name="CONFIRMATION" id="password-confirmation" /&gt;&lt;/td&gt;
+                &lt;/tr&gt;
+        &lt;/table&gt;
+
+        &lt;div&gt;&lt;input type="submit" name="commit" value="Update" /&gt;&lt;/div&gt;
+&lt;/form&gt;
+{% endblock %}</code></pre>
+
+<h4>templates/accounts/show.html</h4>
+
+<p>リンクを追加。</p>
+
+<pre><code>&lt;ul class="toolbar"&gt;
+        &lt;a href="/account/edit"&gt;Edit account info&lt;/a&gt;
+        &lt;a href="/password/edit"&gt;Change password&lt;/a&gt;
+&lt;/ul&gt;</code></pre>
+
+<p><img src="../img/caveman/CkRoR-edit-password.png" alt="Screen shot of example" /></p>
+
+<h3>Saving possword.</h3>
+
+<h4>update</h4>
+
+<p>Update用のルーティングは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/password"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key old new confirmation authenticity-token</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">hermetic:logged-in-p</span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">403<span class="paren4">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span><span class="paren4">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">user<span class="paren6">(<span class="code">current-user</span>)</span></span>)</span>
+          <span class="paren5">(<span class="code">render-args `<span class="paren6">(<span class="code"><span class="keyword">:user</span> ,user <span class="keyword">:token</span> ,<span class="paren1">(<span class="code">token</span>)</span> <span class="keyword">:news</span> <span class="paren1">(<span class="code">1 2 3 4 5</span>)</span> <span class="keyword">:blogs</span> <span class="paren1">(<span class="code">1 2 3 4 5</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i><span class="paren5">(<span class="code">not<span class="paren6">(<span class="code">string= authenticity-token<span class="paren1">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+        `<span class="paren5">(<span class="code">403 <span class="paren6">(<span class="code"><span class="keyword">:content-type</span> <span class="string">"text/plain"</span></span>)</span> <span class="paren6">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">equal <span class="string">""</span> old</span>)</span>
+          <span class="paren6">(<span class="code">render <span class="string">"passwords/edit.html"</span> <span class="paren1">(<span class="code">list* <span class="keyword">:errors</span> '<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">current-password . <span class="string">"is required"</span></span>)</span></span>)</span> render-args</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">not<span class="paren2">(<span class="code">cl-pass:check-password old <span class="paren3">(<span class="code">your-app.model::password-of user</span>)</span></span>)</span></span>)</span>
+            <span class="paren1">(<span class="code">render <span class="string">"passwords/edit.html"</span> <span class="paren2">(<span class="code">list* <span class="keyword">:errors</span> '<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">password . <span class="string">"is not correct"</span></span>)</span></span>)</span> render-args</span>)</span></span>)</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">if</span></i><span class="paren2">(<span class="code">not<span class="paren3">(<span class="code">equal new confirmation</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code">render <span class="string">"passwords/edit.html"</span> <span class="paren3">(<span class="code">list* <span class="keyword">:errors</span> '<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">confirmation . <span class="string">"is failed"</span></span>)</span></span>)</span> render-args</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren3">(<span class="code">setf <span class="paren4">(<span class="code">your-app.model::password-of user</span>)</span> new</span>)</span>
+                     <span class="paren3">(<span class="code">multiple-value-bind<span class="paren4">(<span class="code">user errors</span>)</span><span class="paren4">(<span class="code">your-app.model::validate-user user 'your-app.model::password</span>)</span>
+                       <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i> errors
+                         <span class="paren5">(<span class="code">render <span class="string">"passwords/edit.html"</span> <span class="paren6">(<span class="code">list* <span class="keyword">:errors</span> errors render-args</span>)</span></span>)</span>
+                         <span class="paren5">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren6">(<span class="code">mito:save-dao user</span>)</span>
+                                <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span> <span class="string">"Password is changed"</span></span>)</span>
+                                '<span class="paren6">(<span class="code">303 <span class="paren1">(<span class="code"><span class="keyword">:location</span> <span class="string">"/account"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/shared/user_form.html</h4>
+
+<p>新規作成フォームを編集。</p>
+
+<pre><code>        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="user-email"&gt;{% filter i18n %}Email{% endfilter %}&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input type="text" name="EMAIL" value="{{user.email}}" id="user-email" /&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+
+        {% if not user.id %}
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="password"&gt;Password&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input id="password" type="text" name="PASSWORD" /&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        {% endif %}
+
+        {% if administrator %}</code></pre>
+
+<h4>templates/user/new.html</h4>
+
+<p>参照すべき変数を変更。</p>
+
+<pre><code>&lt;form class="new-user" id="new-user" action="/user" method="post"&gt;
+        &lt;input name="AUTHENTICITY-TOKEN" type="hidden" value="{{token}}" /&gt;
+        &lt;input name="METHOD" type="hidden" value="put" /&gt;
+        {{ new-user
+         | lisp: (lambda(user)
+                   (your-app.view::render "shared/user-form.html" `(:user ,user)))
+         | safe
+         }}
+        &lt;div&gt;
+                &lt;input type="submit" name="COMMIT" value="{% filter i18n %}Create user{% endfilter %}" /&gt;
+        &lt;/div&gt;
+&lt;/form&gt;</code></pre>
+
+<h4>/user/new routing</h4>
+
+<p>テンプレートの呼び出し側も引数を編集。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/user/new"</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"user/new.html"</span>
+          `<span class="paren3">(<span class="code"><span class="keyword">:user</span> ,<span class="paren4">(<span class="code">current-user</span>)</span>
+                  <span class="keyword">:new-user</span> ,<span class="paren4">(<span class="code">your-app.model::validate-user<span class="paren5">(<span class="code">make-instance 'your-app.model::user</span>)</span></span>)</span>
+                  <span class="keyword">:news</span> <span class="paren4">(<span class="code">1 2 3 4 5</span>)</span>
+                  <span class="keyword">:blogs</span> <span class="paren4">(<span class="code">1 2 3 4 5</span>)</span>
+                  ,@<span class="paren4">(<span class="code">roles</span>)</span>
+                  <span class="keyword">:token</span> ,<span class="paren4">(<span class="code">token</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/caveman/CkRoR-new-member-with-password.png" alt="Screen shot of example" /></p>
+
+<h2>Summary</h2>
+
+<ul>
+<li>authentication機能を作るにはhermeticを利用すると便利です。</li>
+<li>複数のページに渡ってブラウザとサーバの間で維持される接続状態をセッションと呼びます。</li>
+<li>ユーザをログイン状態にするには、セッションにidを保存します。セッションからidを取り出せばユーザを識別できます。</li>
+<li>現在ログインしているユーザを取得するCURRENT-USERのようなヘルパー関数を定義しておくと開発しやすくなります。</li>
+<li>ログイン中のユーザだけに特定のページへのアクセスを許可するにはHERMETIC:AUTHを使用します。
+<!-- {% endraw %} --></li>
+</ul>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
