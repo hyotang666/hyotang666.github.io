@@ -123,84 +123,128 @@
 
 <p>これはいかにも辛いのでマクロで抽象化したい。</p>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-check-validate</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">var</span>)</span><span class="paren3">(<span class="code">&amp;rest assertions</span>)</span></span>)</span>
-  <span class="comment">;; initialize
-</span>  <span class="paren2">(<span class="code">check-type var symbol</span>)</span>
-  <span class="paren2">(<span class="code">setf assertions <span class="paren3">(<span class="code">mapcar <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">assert</span>)</span>
-                             <span class="paren5">(<span class="code">etypecase<span class="paren6">(<span class="code">car assert</span>)</span>
-                               <span class="paren6">(<span class="code">symbol <span class="paren1">(<span class="code">cons <span class="paren2">(<span class="code">list <span class="paren3">(<span class="code">car assert</span>)</span><span class="paren3">(<span class="code">car assert</span>)</span></span>)</span><span class="paren2">(<span class="code">cdr assert</span>)</span></span>)</span></span>)</span>
-                               <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">cons <span class="paren2">(<span class="code">and symbol <span class="paren3">(<span class="code">not <span class="paren4">(<span class="code">or keyword boolean</span>)</span></span>)</span></span>)</span>
-                                      <span class="paren2">(<span class="code">cons <span class="paren3">(<span class="code">and symbol <span class="paren4">(<span class="code">not <span class="paren5">(<span class="code">or keyword boolean</span>)</span></span>)</span></span>)</span>
-                                            null</span>)</span></span>)</span>
-                                <span class="paren1">(<span class="code">assert<span class="paren2">(<span class="code">every <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">clause</span>)</span>
-                                                <span class="paren4">(<span class="code">keywordp <span class="paren5">(<span class="code">car clause</span>)</span></span>)</span></span>)</span>
-                                              <span class="paren3">(<span class="code">cdr assert</span>)</span></span>)</span></span>)</span>
-                                assert</span>)</span></span>)</span></span>)</span>
-                           assertions</span>)</span></span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">alist<span class="paren5">(<span class="code">gensym<span class="string">"ALIST"</span></span>)</span></span>)</span>
-       <span class="paren4">(<span class="code">slot<span class="paren5">(<span class="code">gensym <span class="string">"SLOT"</span></span>)</span></span>)</span>
-       <span class="paren4">(<span class="code">name<span class="paren5">(<span class="code">gensym<span class="string">"NAME"</span></span>)</span></span>)</span></span>)</span>
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">eval-when</span></i><span class="paren2">(<span class="code"><span class="keyword">:compile-toplevel</span> <span class="keyword">:load-toplevel</span> <span class="keyword">:execute</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> canonicalize-assertions<span class="paren3">(<span class="code">assertions</span>)</span>
+    <span class="paren3">(<span class="code">mapcar <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">assert</span>)</span>
+              <span class="paren5">(<span class="code">etypecase<span class="paren6">(<span class="code">car assert</span>)</span>
+                <span class="paren6">(<span class="code">SYMBOL
+                  <span class="paren1">(<span class="code">cons <span class="paren2">(<span class="code">list <span class="paren3">(<span class="code">car assert</span>)</span><span class="paren3">(<span class="code">car assert</span>)</span></span>)</span><span class="paren2">(<span class="code">cdr assert</span>)</span></span>)</span></span>)</span>
+                <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">CONS <span class="paren2">(<span class="code">AND SYMBOL <span class="paren3">(<span class="code">NOT <span class="paren4">(<span class="code">OR KEYWORD BOOLEAN</span>)</span></span>)</span></span>)</span>
+                       <span class="paren2">(<span class="code">CONS <span class="paren3">(<span class="code">AND SYMBOL <span class="paren4">(<span class="code">NOT <span class="paren5">(<span class="code">OR KEYWORD BOOLEAN</span>)</span></span>)</span></span>)</span>
+                             NULL</span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">assert<span class="paren2">(<span class="code">every <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">clause</span>)</span>
+                                 <span class="paren4">(<span class="code">keywordp <span class="paren5">(<span class="code">car clause</span>)</span></span>)</span></span>)</span>
+                               <span class="paren3">(<span class="code">cdr assert</span>)</span></span>)</span></span>)</span>
+                 assert</span>)</span></span>)</span></span>)</span>
+            assertions</span>)</span></span>)</span>
+
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> &lt;initialize-slots&gt;<span class="paren3">(<span class="code">var targets</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">alexandria:with-unique-names</span></i><span class="paren4">(<span class="code">slot name</span>)</span>
+      `<span class="paren4">(<span class="code">DOLIST<span class="paren5">(<span class="code">,slot <span class="paren6">(<span class="code">C2MOP:CLASS-SLOTS <span class="paren1">(<span class="code">CLASS-OF ,var</span>)</span></span>)</span></span>)</span>
+         <span class="paren5">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">,name<span class="paren2">(<span class="code">C2MOP:SLOT-DEFINITION-NAME ,slot</span>)</span></span>)</span></span>)</span>
+           <span class="paren6">(<span class="code">WHEN<span class="paren1">(<span class="code"><i><span class="symbol">IF</span></i> <span class="paren2">(<span class="code">AND ,targets
+                         <span class="paren3">(<span class="code">FIND ,name ,targets</span>)</span>
+                         <span class="paren3">(<span class="code">SLOT-BOUNDP ,var ,name</span>)</span>
+                         <span class="paren3">(<span class="code">EQUAL <span class="string">""</span> <span class="paren4">(<span class="code">SLOT-VALUE ,var ,name</span>)</span></span>)</span></span>)</span>
+                    <span class="paren2">(<span class="code">AND <span class="paren3">(<span class="code">SLOT-BOUNDP ,var ,name</span>)</span>
+                         <span class="paren3">(<span class="code">EQUAL <span class="string">""</span> <span class="paren4">(<span class="code">SLOT-VALUE ,var ,name</span>)</span></span>)</span></span>)</span></span>)</span>
+             <span class="paren1">(<span class="code">SLOT-MAKUNBOUND ,var ,name</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> &lt;spec-pair&gt;<span class="paren3">(<span class="code">clause g.obj g.alist</span>)</span>
+    <span class="paren3">(<span class="code">destructuring-bind<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">local-var slot-name</span>)</span> . assertions</span>)</span>clause
+      `<span class="paren4">(<span class="code">CONS ',slot-name ,<span class="paren5">(<span class="code">&lt;spec-function&gt; assertions g.obj slot-name g.alist local-var
+                                           <span class="paren6">(<span class="code">push-form-generator slot-name g.alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> parse-assertions<span class="paren3">(<span class="code">assertions</span>)</span>
+    <span class="paren3">(<span class="code">typecase <span class="paren4">(<span class="code">car assertions</span>)</span>
+      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">CONS <span class="paren6">(<span class="code">EQL <span class="keyword">:REQUIRE</span></span>)</span> <span class="paren6">(<span class="code">CONS <span class="paren1">(<span class="code">EQL T</span>)</span>NULL</span>)</span></span>)</span>
+       <span class="paren5">(<span class="code">values t <span class="paren6">(<span class="code">cdr assertions</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">CONS <span class="paren6">(<span class="code">EQL <span class="keyword">:REQUIRE</span></span>)</span> <span class="paren6">(<span class="code">CONS NULL NULL</span>)</span></span>)</span>
+       <span class="paren5">(<span class="code">values nil <span class="paren6">(<span class="code">cdr assertions</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">T <span class="paren5">(<span class="code">values nil assertions</span>)</span></span>)</span></span>)</span></span>)</span>
+
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> push-form-generator<span class="paren3">(<span class="code">slot-name alist</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">message</span>)</span>
+      `<span class="paren4">(<span class="code">push <span class="paren5">(<span class="code">cons ',slot-name ,message</span>)</span> ,alist</span>)</span></span>)</span></span>)</span>
+
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> &lt;spec-function&gt;<span class="paren3">(<span class="code">assertions g.obj slot-name g.alist local-var generator</span>)</span>
+    <span class="paren3">(<span class="code">multiple-value-bind<span class="paren4">(<span class="code">requirep assertions</span>)</span><span class="paren4">(<span class="code">parse-assertions assertions</span>)</span>
+    `<span class="paren4">(<span class="code"><i><span class="symbol">LAMBDA</span></i><span class="paren5">(<span class="code"></span>)</span>
+       <span class="paren5">(<span class="code"><i><span class="symbol">IF</span></i><span class="paren6">(<span class="code">SLOT-BOUNDP ,g.obj ',slot-name</span>)</span>
+         ,<span class="paren6">(<span class="code"><i><span class="symbol">let</span></i><span class="paren1">(<span class="code"><span class="paren2">(<span class="code">form<span class="paren3">(<span class="code">make-form assertions g.alist local-var g.obj slot-name</span>)</span></span>)</span></span>)</span>
+            <span class="paren1">(<span class="code">when form
+              `<span class="paren2">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">,local-var <span class="paren5">(<span class="code">SLOT-VALUE ,g.obj ',slot-name</span>)</span></span>)</span></span>)</span>
+                  ,form</span>)</span></span>)</span></span>)</span>
+         ,@<span class="paren6">(<span class="code">when requirep 
+             <span class="paren1">(<span class="code">list <span class="paren2">(<span class="code">funcall generator <span class="string">"is required"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> make-form<span class="paren3">(<span class="code">assertions g.alist local-var g.obj slot-name</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">endp assertions</span>)</span>
+      nil
+      <span class="paren4">(<span class="code">apply #'spec-diverge g.alist slot-name g.obj local-var <span class="paren5">(<span class="code">cdr assertions</span>)</span><span class="paren5">(<span class="code">car assertions</span>)</span></span>)</span></span>)</span></span>)</span>
+
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> &lt;type-spec-body&gt;<span class="paren3">(<span class="code">local-var spec-value rest g.alist g.obj slot-name generator format-arguments</span>)</span>
+    `<span class="paren3">(<span class="code"><i><span class="symbol">IF</span></i><span class="paren4">(<span class="code">TYPEP ,local-var ',spec-value</span>)</span>
+       ,<span class="paren4">(<span class="code">make-form rest g.alist local-var g.obj slot-name</span>)</span>
+       ,<span class="paren4">(<span class="code">funcall generator <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> format-arguments
+                             `<span class="paren6">(<span class="code">format nil ,@format-arguments</span>)</span>
+                             `<span class="paren6">(<span class="code">format nil <span class="string">"not type-of ~S"</span> ',spec-value</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> &lt;key-spec-body&gt;<span class="paren3">(<span class="code">spec-value local-var g.obj slot-name rest g.alist generator format-arguments</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">v<span class="paren6">(<span class="code">gensym<span class="string">"CANONICALIZED"</span></span>)</span></span>)</span>
+         <span class="paren5">(<span class="code">c<span class="paren6">(<span class="code">gensym<span class="string">"CONDITION"</span></span>)</span></span>)</span></span>)</span>
+      `<span class="paren4">(<span class="code">handler-case<span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">,v <span class="paren2">(<span class="code">funcall ,spec-value ,local-var</span>)</span></span>)</span></span>)</span>
+                      <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">slot-value ,g.obj ',slot-name</span>)</span> ,v
+                            ,local-var ,v</span>)</span>
+                      ,<span class="paren6">(<span class="code">make-form rest g.alist local-var g.obj slot-name</span>)</span></span>)</span>
+         <span class="paren5">(<span class="code">error<span class="paren6">(<span class="code">,c</span>)</span>,<span class="paren6">(<span class="code">funcall generator <span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> format-arguments
+                                         `<span class="paren2">(<span class="code">format nil ,@format-arguments</span>)</span>
+                                         `<span class="paren2">(<span class="code">princ-to-string ,c</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> &lt;assert-spec-body&gt;<span class="paren3">(<span class="code">spec-value rest g.alist local-var g.obj slot-name generator format-arguments</span>)</span>
+    `<span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> ,spec-value
+       ,<span class="paren4">(<span class="code">make-form rest g.alist local-var g.obj slot-name</span>)</span>
+       ,<span class="paren4">(<span class="code">funcall generator <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> format-arguments
+                             `<span class="paren6">(<span class="code">format nil ,@format-arguments</span>)</span>
+                             `<span class="paren6">(<span class="code">format nil <span class="string">"must satisfies ~S but ~S"</span>',spec-value ,local-var</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> &lt;unique-spec-body&gt;<span class="paren3">(<span class="code">g.obj spec-value rest g.alist local-var slot-name generator format-arguments</span>)</span>
+    `<span class="paren3">(<span class="code">UNLESS<span class="paren4">(<span class="code">MITO:OBJECT-ID ,g.obj</span>)</span>
+       <span class="paren4">(<span class="code"><i><span class="symbol">IF</span></i><span class="paren5">(<span class="code">NULL<span class="paren6">(<span class="code">MITO:SELECT-DAO <span class="paren1">(<span class="code">CLASS-OF ,g.obj</span>)</span> <span class="paren1">(<span class="code">SXQL:WHERE ,spec-value</span>)</span><span class="paren1">(<span class="code">SXQL:LIMIT 1</span>)</span></span>)</span></span>)</span>
+         ,<span class="paren5">(<span class="code">make-form rest g.alist local-var g.obj slot-name</span>)</span>
+         ,<span class="paren5">(<span class="code">funcall generator <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> format-arguments
+                               `<span class="paren1">(<span class="code">format nil ,@format-arguments</span>)</span>
+                               <span class="string">"already exists"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> spec-diverge<span class="paren3">(<span class="code">g.alist slot-name g.obj local-var rest spec-key spec-value &amp;rest format-arguments</span>)</span>
+    <span class="paren3">(<span class="code">ecase spec-key
+      <span class="paren4">(<span class="code"><span class="keyword">:type</span> <span class="paren5">(<span class="code">&lt;type-spec-body&gt; local-var spec-value rest g.alist g.obj slot-name <span class="paren6">(<span class="code">push-form-generator slot-name g.alist</span>)</span> format-arguments</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:key</span> <span class="paren5">(<span class="code">&lt;key-spec-body&gt; spec-value local-var g.obj slot-name rest g.alist <span class="paren6">(<span class="code">push-form-generator slot-name g.alist</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:assert</span> <span class="paren5">(<span class="code">&lt;assert-spec-body&gt; spec-value rest g.alist local-var g.obj slot-name <span class="paren6">(<span class="code">push-form-generator slot-name g.alist</span>)</span> format-arguments</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:unique</span> <span class="paren5">(<span class="code">&lt;unique-spec-body&gt; g.obj spec-value rest g.alist local-var slot-name <span class="paren6">(<span class="code">push-form-generator slot-name g.alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+  </span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-check-validate</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">object-generate-form targets-generate-form</span>)</span><span class="paren3">(<span class="code">&amp;rest assertions</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">setf assertions <span class="paren3">(<span class="code">canonicalize-assertions assertions</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">alexandria:with-unique-names</span></i><span class="paren3">(<span class="code">alist var targets spec</span>)</span>
     <span class="comment">;; body
-</span>    `<span class="paren3">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,alist</span>)</span></span>)</span>
-       <span class="paren4">(<span class="code">dolist<span class="paren5">(<span class="code">,slot <span class="paren6">(<span class="code">c2mop:class-slots <span class="paren1">(<span class="code">class-of ,var</span>)</span></span>)</span></span>)</span>
-         <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">,name<span class="paren2">(<span class="code">c2mop:slot-definition-name ,slot</span>)</span></span>)</span></span>)</span>
-           <span class="paren6">(<span class="code">when<span class="paren1">(<span class="code">and <span class="paren2">(<span class="code">slot-boundp ,var ,name</span>)</span>
-                     <span class="paren2">(<span class="code">equal <span class="string">""</span> <span class="paren3">(<span class="code">slot-value ,var ,name</span>)</span></span>)</span></span>)</span>
-             <span class="paren1">(<span class="code">slot-makunbound ,var ,name</span>)</span></span>)</span></span>)</span></span>)</span>
-       ,@<span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">local-var slot-name</span>)</span> . assertions</span>)</span> <span class="keyword">:in</span> assertions
-               <span class="keyword">:collect</span> <span class="paren5">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">rec<span class="paren2">(<span class="code">assertions</span>)</span>
-                                  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">endp assertions</span>)</span>
-                                    nil
-                                    <span class="paren3">(<span class="code">apply #'body <span class="paren4">(<span class="code">cdr assertions</span>)</span><span class="paren4">(<span class="code">car assertions</span>)</span></span>)</span></span>)</span></span>)</span>
-                                <span class="paren1">(<span class="code">body<span class="paren2">(<span class="code">rest key value &amp;rest format-arguments</span>)</span>
-                                  <span class="paren2">(<span class="code">ecase key
-                                    <span class="paren3">(<span class="code"><span class="keyword">:type</span>
-                                      `<span class="paren4">(<span class="code"><i><span class="symbol">if</span></i><span class="paren5">(<span class="code">typep ,local-var ',value</span>)</span>
-                                         ,<span class="paren5">(<span class="code">rec rest</span>)</span>
-                                         <span class="paren5">(<span class="code">push <span class="paren6">(<span class="code">cons ',slot-name
-                                                     ,<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> format-arguments
-                                                        `<span class="paren2">(<span class="code">format nil ,@format-arguments</span>)</span>
-                                                        `<span class="paren2">(<span class="code">format nil <span class="string">"not type-of ~S"</span>',value</span>)</span></span>)</span></span>)</span>
-                                               ,alist</span>)</span></span>)</span></span>)</span>
-                                    <span class="paren3">(<span class="code"><span class="keyword">:key</span>
-                                      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">v<span class="paren1">(<span class="code">gensym<span class="string">"CANONICALIZED"</span></span>)</span></span>)</span>
-                                           <span class="paren6">(<span class="code">c<span class="paren1">(<span class="code">gensym<span class="string">"CONDITION"</span></span>)</span></span>)</span></span>)</span>
-                                        `<span class="paren5">(<span class="code">handler-case<span class="paren6">(<span class="code"><i><span class="symbol">let</span></i><span class="paren1">(<span class="code"><span class="paren2">(<span class="code">,v <span class="paren3">(<span class="code">funcall ,value ,local-var</span>)</span></span>)</span></span>)</span>
-                                                        <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">slot-value ,var ',slot-name</span>)</span> ,v
-                                                              ,local-var ,v</span>)</span>
-                                                        ,<span class="paren1">(<span class="code">rec rest</span>)</span></span>)</span>
-                                           <span class="paren6">(<span class="code">error<span class="paren1">(<span class="code">,c</span>)</span><span class="paren1">(<span class="code">push <span class="paren2">(<span class="code">cons ',slot-name <span class="paren3">(<span class="code">princ-to-string ,c</span>)</span></span>)</span>
-                                                           ,alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-                                    <span class="paren3">(<span class="code"><span class="keyword">:assert</span>
-                                      `<span class="paren4">(<span class="code"><i><span class="symbol">if</span></i> ,value
-                                         ,<span class="paren5">(<span class="code">rec rest</span>)</span>
-                                         <span class="paren5">(<span class="code">PUSH <span class="paren6">(<span class="code">CONS ',slot-name ,<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> format-arguments
-                                                                    `<span class="paren2">(<span class="code">format nil ,@format-arguments</span>)</span>
-                                                                    `<span class="paren2">(<span class="code">FORMAT NIL <span class="string">"must satisfies ~S but ~S"</span>
-                                                                             ',value
-                                                                             ,local-var</span>)</span></span>)</span></span>)</span>
-                                               ,alist</span>)</span></span>)</span></span>)</span>
-                                    <span class="paren3">(<span class="code"><span class="keyword">:unique</span>
-                                      `<span class="paren4">(<span class="code">unless<span class="paren5">(<span class="code">mito:object-id ,var</span>)</span>
-                                         <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">null<span class="paren1">(<span class="code">mito:select-dao <span class="paren2">(<span class="code">class-of ,var</span>)</span> <span class="paren2">(<span class="code">sxql:where ,value</span>)</span><span class="paren2">(<span class="code">sxql:limit 1</span>)</span></span>)</span></span>)</span>
-                                           ,<span class="paren6">(<span class="code">rec rest</span>)</span>
-                                           <span class="paren6">(<span class="code">push <span class="paren1">(<span class="code">cons ',slot-name <span class="string">"already exists"</span></span>)</span>,alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
-                          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">equal '<span class="paren2">(<span class="code"><span class="keyword">:require</span> t</span>)</span> <span class="paren2">(<span class="code">car assertions</span>)</span></span>)</span>
-                            `<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i><span class="paren2">(<span class="code">slot-boundp ,var ',slot-name</span>)</span>
-                               <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">,local-var <span class="paren5">(<span class="code">slot-value ,var ',slot-name</span>)</span></span>)</span></span>)</span>
-                                 ,<span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">cdr assertions</span>)</span></span>)</span></span>)</span>
-                               <span class="paren2">(<span class="code">push <span class="paren3">(<span class="code">cons ',slot-name ,<span class="string">"required"</span></span>)</span> ,alist</span>)</span></span>)</span>
-                            <span class="paren1">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren2">(<span class="code">when<span class="paren3">(<span class="code">equal '<span class="paren4">(<span class="code"><span class="keyword">:require</span> nil</span>)</span> <span class="paren4">(<span class="code">car assertions</span>)</span></span>)</span>
-                                     <span class="paren3">(<span class="code">pop assertions</span>)</span></span>)</span>
-                                   `<span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">slot-boundp ,var ',slot-name</span>)</span>
-                                      <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,local-var<span class="paren6">(<span class="code">slot-value ,var ',slot-name</span>)</span></span>)</span></span>)</span>
-                                        ,<span class="paren4">(<span class="code">rec assertions</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+</span>    `<span class="paren3">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,alist</span>)</span>
+          <span class="paren5">(<span class="code">,var ,object-generate-form</span>)</span>
+          <span class="paren5">(<span class="code">,targets ,targets-generate-form</span>)</span></span>)</span>
+       ,<span class="paren4">(<span class="code">&lt;initialize-slots&gt; var targets</span>)</span>
+       <span class="paren4">(<span class="code">mapc <span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren6">(<span class="code">,spec</span>)</span>
+               <span class="paren6">(<span class="code">when<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> ,targets
+                      <span class="paren2">(<span class="code">find <span class="paren3">(<span class="code">car ,spec</span>)</span>,targets</span>)</span>
+                      T</span>)</span>
+                 <span class="paren1">(<span class="code">funcall <span class="paren2">(<span class="code">cdr ,spec</span>)</span></span>)</span></span>)</span></span>)</span>
+             <span class="paren5">(<span class="code">list ,@<span class="paren6">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> assert <span class="keyword">:in</span> assertions
+                           <span class="keyword">:collect</span> <span class="paren1">(<span class="code">&lt;spec-pair&gt; assert var alist</span>)</span></span>)</span></span>)</span></span>)</span>
        <span class="paren4">(<span class="code">values ,var <span class="paren5">(<span class="code">reverse ,alist</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
 <p>これで先のコードは以下のように書けるようになる。</p>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user</span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">user</span>)</span>
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user &amp;rest target-slots</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">user target-slots</span>)</span>
     <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">number <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
              <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'parse-integer</span>)</span>
              <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt; 0 number 100</span>)</span></span>)</span>
@@ -214,14 +258,44 @@
                     <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
                     <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 1 <span class="paren1">(<span class="code">length n</span>)</span> 20</span>)</span> <span class="string">"length must be (&lt;= 1 x 20)"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
+<p>なお、マクロのbnfは以下の通り</p>
+
+<pre><code>(with-check-validate(object-generate-form targets-generate-form)&rest clause*)
+
+object-generate-form := form which generate object.
+targets-generate-form := form which generate list which icludes slot-names.
+clause := (var-spec &rest assertion*)
+
+var-spec := [ slot-name | (local-var slot-name) ]
+slot-name := symbol
+local-var := symbol
+
+assertion := [ require-assertion | type-assertion | key-assertion | assert-assertion | unique-assertion ]
+
+require-assertion := (:require boolean)
+
+type-assertion := (:type type-spec &rest format-control)
+type-spec := form which acceptable for TYPEP second arguments.
+
+key-assertion := (:key key-function &rest format-control)
+key-function := as (function * *), but must signal an error when failed.
+
+assert-assertion := (:assert assert-form &rest format-control)
+assert-form := form, but must return nil when failed. In this form local-var is able to be refer.
+
+unique-assertion := (:unique query &rest format-control)
+query := form which acceptable for SXQL:WHERE. In this form local-var is able to be refer.
+
+format-control := which acceptable (apply #'format nil format-control). In this form local-var is able to be refer.</code></pre>
+
 <h3>Checking of mail adress</h3>
 
 <p><code>RETIFY:TEST-EMAIL</code>がそれを果たしてくれる。</p>
 
 <p>VALIDATE-USRを以下のように修正。</p>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user</span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">user</span>)</span>
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user &amp;rest target-slots</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">user target-slots</span>)</span>
     <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">number <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
              <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'parse-integer</span>)</span>
              <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt; 0 number 100</span>)</span></span>)</span>
@@ -238,8 +312,8 @@
 
 <p>初期値のあるスロットのチェックも加えて、最終版。</p>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user</span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">user</span>)</span>
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-user<span class="paren2">(<span class="code">user &amp;rest target-slots</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">user target-slots</span>)</span>
     <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">number <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
              <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'parse-integer</span>)</span>
              <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt; 0 number 100</span>)</span></span>)</span>
@@ -253,6 +327,9 @@
                     <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
                     <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 1 <span class="paren1">(<span class="code">length n</span>)</span> 20</span>)</span> <span class="string">"length must be (&lt;= 1 x 20)"</span></span>)</span></span>)</span>
      <span class="paren4">(<span class="code">email <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'ratify:test-email</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">password <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+               <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
+               <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt; 0 <span class="paren1">(<span class="code">length password</span>)</span></span>)</span> <span class="string">"Empty string is invalid"</span></span>)</span></span>)</span>
      <span class="paren4">(<span class="code">birthday <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'local-time:parse-timestring</span>)</span></span>)</span>
      <span class="paren4">(<span class="code">sex <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
           <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'parse-integer</span>)</span>

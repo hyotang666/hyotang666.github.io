@@ -110,86 +110,130 @@ ASDファイルに追加しておこう。
 これはいかにも辛いのでマクロで抽象化したい。
 
 ```lisp
-(defmacro with-check-validate((var)(&rest assertions))
-  ;; initialize
-  (check-type var symbol)
-  (setf assertions (mapcar (lambda(assert)
-                             (etypecase(car assert)
-                               (symbol (cons (list (car assert)(car assert))(cdr assert)))
-                               ((cons (and symbol (not (or keyword boolean)))
-                                      (cons (and symbol (not (or keyword boolean)))
-                                            null))
-                                (assert(every (lambda(clause)
-                                                (keywordp (car clause)))
-                                              (cdr assert)))
-                                assert)))
-                           assertions))
-  (let((alist(gensym"ALIST"))
-       (slot(gensym "SLOT"))
-       (name(gensym"NAME")))
+(eval-when(:compile-toplevel :load-toplevel :execute)
+  (defun canonicalize-assertions(assertions)
+    (mapcar (lambda(assert)
+              (etypecase(car assert)
+                (SYMBOL
+                  (cons (list (car assert)(car assert))(cdr assert)))
+                ((CONS (AND SYMBOL (NOT (OR KEYWORD BOOLEAN)))
+                       (CONS (AND SYMBOL (NOT (OR KEYWORD BOOLEAN)))
+                             NULL))
+                 (assert(every (lambda(clause)
+                                 (keywordp (car clause)))
+                               (cdr assert)))
+                 assert)))
+            assertions))
+
+  (defun <initialize-slots>(var targets)
+    (alexandria:with-unique-names(slot name)
+      `(DOLIST(,slot (C2MOP:CLASS-SLOTS (CLASS-OF ,var)))
+         (LET((,name(C2MOP:SLOT-DEFINITION-NAME ,slot)))
+           (WHEN(IF (AND ,targets
+                         (FIND ,name ,targets)
+                         (SLOT-BOUNDP ,var ,name)
+                         (EQUAL "" (SLOT-VALUE ,var ,name)))
+                    (AND (SLOT-BOUNDP ,var ,name)
+                         (EQUAL "" (SLOT-VALUE ,var ,name))))
+             (SLOT-MAKUNBOUND ,var ,name))))))
+
+  (defun <spec-pair>(clause g.obj g.alist)
+    (destructuring-bind((local-var slot-name) . assertions)clause
+      `(CONS ',slot-name ,(<spec-function> assertions g.obj slot-name g.alist local-var
+                                           (push-form-generator slot-name g.alist)))))
+
+  (defun parse-assertions(assertions)
+    (typecase (car assertions)
+      ((CONS (EQL :REQUIRE) (CONS (EQL T)NULL))
+       (values t (cdr assertions)))
+      ((CONS (EQL :REQUIRE) (CONS NULL NULL))
+       (values nil (cdr assertions)))
+      (T (values nil assertions))))
+
+  (defun push-form-generator(slot-name alist)
+    (lambda(message)
+      `(push (cons ',slot-name ,message) ,alist)))
+
+  (defun <spec-function>(assertions g.obj slot-name g.alist local-var generator)
+    (multiple-value-bind(requirep assertions)(parse-assertions assertions)
+    `(LAMBDA()
+       (IF(SLOT-BOUNDP ,g.obj ',slot-name)
+         ,(let((form(make-form assertions g.alist local-var g.obj slot-name)))
+            (when form
+              `(LET((,local-var (SLOT-VALUE ,g.obj ',slot-name)))
+                  ,form)))
+         ,@(when requirep 
+             (list (funcall generator "is required")))))))
+
+  (defun make-form(assertions g.alist local-var g.obj slot-name)
+    (if(endp assertions)
+      nil
+      (apply #'spec-diverge g.alist slot-name g.obj local-var (cdr assertions)(car assertions))))
+
+  (defun <type-spec-body>(local-var spec-value rest g.alist g.obj slot-name generator format-arguments)
+    `(IF(TYPEP ,local-var ',spec-value)
+       ,(make-form rest g.alist local-var g.obj slot-name)
+       ,(funcall generator (if format-arguments
+                             `(format nil ,@format-arguments)
+                             `(format nil "not type-of ~S" ',spec-value)))))
+
+  (defun <key-spec-body>(spec-value local-var g.obj slot-name rest g.alist generator format-arguments)
+    (let((v(gensym"CANONICALIZED"))
+         (c(gensym"CONDITION")))
+      `(handler-case(let((,v (funcall ,spec-value ,local-var)))
+                      (setf (slot-value ,g.obj ',slot-name) ,v
+                            ,local-var ,v)
+                      ,(make-form rest g.alist local-var g.obj slot-name))
+         (error(,c),(funcall generator (if format-arguments
+                                         `(format nil ,@format-arguments)
+                                         `(princ-to-string ,c)))))))
+
+  (defun <assert-spec-body>(spec-value rest g.alist local-var g.obj slot-name generator format-arguments)
+    `(if ,spec-value
+       ,(make-form rest g.alist local-var g.obj slot-name)
+       ,(funcall generator (if format-arguments
+                             `(format nil ,@format-arguments)
+                             `(format nil "must satisfies ~S but ~S"',spec-value ,local-var)))))
+
+  (defun <unique-spec-body>(g.obj spec-value rest g.alist local-var slot-name generator format-arguments)
+    `(UNLESS(MITO:OBJECT-ID ,g.obj)
+       (IF(NULL(MITO:SELECT-DAO (CLASS-OF ,g.obj) (SXQL:WHERE ,spec-value)(SXQL:LIMIT 1)))
+         ,(make-form rest g.alist local-var g.obj slot-name)
+         ,(funcall generator (if format-arguments
+                               `(format nil ,@format-arguments)
+                               "already exists")))))
+
+  (defun spec-diverge(g.alist slot-name g.obj local-var rest spec-key spec-value &rest format-arguments)
+    (ecase spec-key
+      (:type (<type-spec-body> local-var spec-value rest g.alist g.obj slot-name (push-form-generator slot-name g.alist) format-arguments))
+      (:key (<key-spec-body> spec-value local-var g.obj slot-name rest g.alist (push-form-generator slot-name g.alist)))
+      (:assert (<assert-spec-body> spec-value rest g.alist local-var g.obj slot-name (push-form-generator slot-name g.alist) format-arguments))
+      (:unique (<unique-spec-body> g.obj spec-value rest g.alist local-var slot-name (push-form-generator slot-name g.alist)))))
+  )
+
+(defmacro with-check-validate((object-generate-form targets-generate-form)(&rest assertions))
+  (setf assertions (canonicalize-assertions assertions))
+  (alexandria:with-unique-names(alist var targets spec)
     ;; body
-    `(LET((,alist))
-       (dolist(,slot (c2mop:class-slots (class-of ,var)))
-         (let((,name(c2mop:slot-definition-name ,slot)))
-           (when(and (slot-boundp ,var ,name)
-                     (equal "" (slot-value ,var ,name)))
-             (slot-makunbound ,var ,name))))
-       ,@(loop :for ((local-var slot-name) . assertions) :in assertions
-               :collect (labels((rec(assertions)
-                                  (if(endp assertions)
-                                    nil
-                                    (apply #'body (cdr assertions)(car assertions))))
-                                (body(rest key value &rest format-arguments)
-                                  (ecase key
-                                    (:type
-                                      `(if(typep ,local-var ',value)
-                                         ,(rec rest)
-                                         (push (cons ',slot-name
-                                                     ,(if format-arguments
-                                                        `(format nil ,@format-arguments)
-                                                        `(format nil "not type-of ~S"',value)))
-                                               ,alist)))
-                                    (:key
-                                      (let((v(gensym"CANONICALIZED"))
-                                           (c(gensym"CONDITION")))
-                                        `(handler-case(let((,v (funcall ,value ,local-var)))
-                                                        (setf (slot-value ,var ',slot-name) ,v
-                                                              ,local-var ,v)
-                                                        ,(rec rest))
-                                           (error(,c)(push (cons ',slot-name (princ-to-string ,c))
-                                                           ,alist)))))
-                                    (:assert
-                                      `(if ,value
-                                         ,(rec rest)
-                                         (PUSH (CONS ',slot-name ,(if format-arguments
-                                                                    `(format nil ,@format-arguments)
-                                                                    `(FORMAT NIL "must satisfies ~S but ~S"
-                                                                             ',value
-                                                                             ,local-var)))
-                                               ,alist)))
-                                    (:unique
-                                      `(unless(mito:object-id ,var)
-                                         (if(null(mito:select-dao (class-of ,var) (sxql:where ,value)(sxql:limit 1)))
-                                           ,(rec rest)
-                                           (push (cons ',slot-name "already exists"),alist)))))))
-                          (if(equal '(:require t) (car assertions))
-                            `(if(slot-boundp ,var ',slot-name)
-                               (let((,local-var (slot-value ,var ',slot-name)))
-                                 ,(rec (cdr assertions)))
-                               (push (cons ',slot-name ,"required") ,alist))
-                            (progn (when(equal '(:require nil) (car assertions))
-                                     (pop assertions))
-                                   `(if(slot-boundp ,var ',slot-name)
-                                      (let((,local-var(slot-value ,var ',slot-name)))
-                                        ,(rec assertions)))))))
+    `(LET((,alist)
+          (,var ,object-generate-form)
+          (,targets ,targets-generate-form))
+       ,(<initialize-slots> var targets)
+       (mapc (lambda(,spec)
+               (when(if ,targets
+                      (find (car ,spec),targets)
+                      T)
+                 (funcall (cdr ,spec))))
+             (list ,@(loop :for assert :in assertions
+                           :collect (<spec-pair> assert var alist))))
        (values ,var (reverse ,alist)))))
 ```
 
 これで先のコードは以下のように書けるようになる。
 
 ```lisp
-(defun validate-user(user)
-  (with-check-validate(user)
+(defun validate-user(user &rest target-slots)
+  (with-check-validate(user target-slots)
     ((number (:require t)
              (:key #'parse-integer)
              (:assert (< 0 number 100))
@@ -204,14 +248,46 @@ ASDファイルに追加しておこう。
                     (:assert (<= 1 (length n) 20) "length must be (<= 1 x 20)")))))
 ```
 
+なお、マクロのbnfは以下の通り
+
+```
+(with-check-validate(object-generate-form targets-generate-form)&rest clause*)
+
+object-generate-form := form which generate object.
+targets-generate-form := form which generate list which icludes slot-names.
+clause := (var-spec &rest assertion*)
+
+var-spec := [ slot-name | (local-var slot-name) ]
+slot-name := symbol
+local-var := symbol
+
+assertion := [ require-assertion | type-assertion | key-assertion | assert-assertion | unique-assertion ]
+
+require-assertion := (:require boolean)
+
+type-assertion := (:type type-spec &rest format-control)
+type-spec := form which acceptable for TYPEP second arguments.
+
+key-assertion := (:key key-function &rest format-control)
+key-function := as (function * *), but must signal an error when failed.
+
+assert-assertion := (:assert assert-form &rest format-control)
+assert-form := form, but must return nil when failed. In this form local-var is able to be refer.
+
+unique-assertion := (:unique query &rest format-control)
+query := form which acceptable for SXQL:WHERE. In this form local-var is able to be refer.
+
+format-control := which acceptable (apply #'format nil format-control). In this form local-var is able to be refer.
+```
+
 ### Checking of mail adress
 `RETIFY:TEST-EMAIL`がそれを果たしてくれる。
 
 VALIDATE-USRを以下のように修正。
 
 ```lisp
-(defun validate-user(user)
-  (with-check-validate(user)
+(defun validate-user(user &rest target-slots)
+  (with-check-validate(user target-slots)
     ((number (:require t)
              (:key #'parse-integer)
              (:assert (< 0 number 100))
@@ -230,8 +306,8 @@ VALIDATE-USRを以下のように修正。
 初期値のあるスロットのチェックも加えて、最終版。
 
 ```lisp
-(defun validate-user(user)
-  (with-check-validate(user)
+(defun validate-user(user &rest target-slots)
+  (with-check-validate(user target-slots)
     ((number (:require t)
              (:key #'parse-integer)
              (:assert (< 0 number 100))
@@ -245,6 +321,9 @@ VALIDATE-USRを以下のように修正。
                     (:type string)
                     (:assert (<= 1 (length n) 20) "length must be (<= 1 x 20)"))
      (email (:key #'ratify:test-email))
+     (password (:require t)
+               (:type string)
+               (:assert (< 0 (length password)) "Empty string is invalid"))
      (birthday (:key #'local-time:parse-timestring))
      (sex (:require t)
           (:key #'parse-integer)
