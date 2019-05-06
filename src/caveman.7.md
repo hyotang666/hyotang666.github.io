@@ -129,7 +129,7 @@ ASDファイルに追加しておこう。
     (alexandria:with-unique-names(slot name)
       `(DOLIST(,slot (C2MOP:CLASS-SLOTS (CLASS-OF ,var)))
          (LET((,name(C2MOP:SLOT-DEFINITION-NAME ,slot)))
-           (WHEN(IF (AND ,targets
+           (WHEN(OR (AND ,targets
                          (FIND ,name ,targets)
                          (SLOT-BOUNDP ,var ,name)
                          (EQUAL "" (SLOT-VALUE ,var ,name)))

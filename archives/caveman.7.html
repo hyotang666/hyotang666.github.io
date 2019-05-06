@@ -142,7 +142,7 @@
     <span class="paren3">(<span class="code"><i><span class="symbol">alexandria:with-unique-names</span></i><span class="paren4">(<span class="code">slot name</span>)</span>
       `<span class="paren4">(<span class="code">DOLIST<span class="paren5">(<span class="code">,slot <span class="paren6">(<span class="code">C2MOP:CLASS-SLOTS <span class="paren1">(<span class="code">CLASS-OF ,var</span>)</span></span>)</span></span>)</span>
          <span class="paren5">(<span class="code"><i><span class="symbol">LET</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">,name<span class="paren2">(<span class="code">C2MOP:SLOT-DEFINITION-NAME ,slot</span>)</span></span>)</span></span>)</span>
-           <span class="paren6">(<span class="code">WHEN<span class="paren1">(<span class="code"><i><span class="symbol">IF</span></i> <span class="paren2">(<span class="code">AND ,targets
+           <span class="paren6">(<span class="code">WHEN<span class="paren1">(<span class="code">OR <span class="paren2">(<span class="code">AND ,targets
                          <span class="paren3">(<span class="code">FIND ,name ,targets</span>)</span>
                          <span class="paren3">(<span class="code">SLOT-BOUNDP ,var ,name</span>)</span>
                          <span class="paren3">(<span class="code">EQUAL <span class="string">""</span> <span class="paren4">(<span class="code">SLOT-VALUE ,var ,name</span>)</span></span>)</span></span>)</span>
