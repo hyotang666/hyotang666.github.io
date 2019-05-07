@@ -583,6 +583,9 @@ Viewは以下の通り。
       (format nil "~@[~A - ~]~:(~A~)"(setf title sub) #.(asdf:coerce-name(asdf:find-system :your-app)))
       title)))
 ```
+なお、YOUR-APP.DJULAパッケージ下に関数を定義する場合、オブジェクトのスロット名と衝突しないよう注意すること。
+これが衝突すると厄介なバグとなる。
+バグの詳細についてはappendixで記す。
 
 準備ができたらtemplates/layouts/下にレイアウトテンプレートファイルを作って以下のようにする。
 ファイル名はdemo.htmlとした。
@@ -792,4 +795,27 @@ nav.menubar a:visited { color: #ccc; }
 * テンプレートの中ではリキッドタグを使用する形でdjulaDSLを使用できます。
 * サイト中のページで共通して使う全体の枠を作るにはレイアウトテンプレートを利用します。ページ内のパーツは部分テンプレートで作成できます。
 * サイトの色やフォントはスタイルシートで設計します。
+
+## Appendix
+YOUR-APP.DJULAパッケージにある関数名とオブジェクトのスロット名が衝突すると厄介なバグが仕込まれる。
+これはDJULAが依存している[ACCESS](https://github.com/AccelerationNet/access)の振る舞いに起因している。
+
+ACCESSは引数が関数名だった場合、スロット名と解釈せず関数としてオブジェクトに適用するという振る舞いをする。
+
+```Lisp
+(access:access '((list 1 2 3)) :list) ; ===> (1 2 3)
+(access:access '((list 1 2 3)) 'list) ; ===> (((list 1 2 3)))
+```
+
+オブジェクトのスロット名が関数名と衝突した場合、そのスロットをACCESS経由で参照することは不可能となる。
+
+```lisp
+(defclass object ()((list :initform '(1 2 3))))
+
+(access:access (make-instance 'object) :list) ; ===> (#<OBJECT ...>)
+(access:access (make-instance 'object) 'list) ; ===> (#<OBJECT ...>)
+(access:access (make-instance 'object) "list") ; ===> (#<OBJECT ...>)
+(access:access (make-instance 'object) "LIST") ; ===> (#<OBJECT ...>)
+```
+
 <!-- {% endraw %} -->
