@@ -572,13 +572,16 @@ Viewは以下の通り。
                 :productionp)
   (:import-from :caveman2
                 :url-for)
-  (:export #:title) ; <--- Add.
+  (:export #:title!) ; <--- Add.
   )
 
 (in-package :your-app.djula)
 
-(defun title(&optional sub)
-  (format nil "~@[~A - ~]~:(~A~)"sub #.(asdf:coerce-name(asdf:find-system :your-app))))
+(let(title)
+  (defun title!(&optional sub)
+    (if sub
+      (format nil "~@[~A - ~]~:(~A~)"(setf title sub) #.(asdf:coerce-name(asdf:find-system :your-app)))
+      title)))
 ```
 
 準備ができたらtemplates/layouts/下にレイアウトテンプレートファイルを作って以下のようにする。
@@ -589,7 +592,7 @@ Viewは以下の通り。
 <html>
 <head>
   <meta charset="utf-8">
-  <title>{% block title %}{% lisp (title) %}{% endblock %}</title>
+  <title>{% block title %}Your app{% endblock %}</title>
   <link rel="stylesheet" type="text/css" media="screen" href="/css/main.css">
 </head>
 <body>
@@ -603,7 +606,7 @@ Viewは以下の通り。
 
 ```html
 {% extends "layouts/demo.html" %}
-{% block title %}{% lisp (title) %}{% endblock %}
+{% block title %}{% lisp (title! "subtitle") %}{% endblock %}
 {% block content %}
 <h2>{{message}}</h2>
 <p>Here we go.</p>
@@ -629,7 +632,7 @@ templates/layouts/下にapp.htmlテンプレートを作ろう。
 <html>
 <head>
         <meta charset="utf-8">
-        <title>{% block title %}{% lisp (title) %}{% endblock %}</title>
+        <title>{% block title %}Your app{% endblock %}</title>
         <link rel="stylesheet" type="text/css" media="screen" href="/css/main.css">
 </head>
 <body>

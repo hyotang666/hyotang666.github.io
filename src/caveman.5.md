@@ -44,9 +44,9 @@ djulaでオブジェクトのスロットへのアクセスには変数名に続
 
 ```html
 {% extends "layouts/app.html" %}
-{% block title %}{% lisp (title "list of users") %}{% endblock %}
+{% block title %}{% lisp (title! "list of users") %}{% endblock %}
 {% block content %}
-<h1>List of users</h1>
+<h1>{% lisp (title!) %}</h1>
 {% if users %}
 <table class="list">
         <thead>
@@ -203,9 +203,9 @@ src/web.lispにルーティングを追加する。
 
 ```html
 {% extends "layouts/app.html" %}
-{% block title %}{% lisp (title "User detail") %}{% endblock %}
+{% block title %}{% lisp (title! "User detail") %}{% endblock %}
 {% block content %}
-<h1>User detail</h1>
+<h1>{% lisp (title!) %}</h1>
 
 <div class="toolbar"><a href="/user/{{id}}/edit">Edit</a></div>
 

@@ -317,9 +317,9 @@ showアクションの実装は以下の通り。
 
 ```html
 {% extends "layouts/app.html" %}
-{% block title %}{% lisp (title "User detail") %}{% endblock %}
+{% block title %}{% lisp (title! "User detail") %}{% endblock %}
 {% block content %}
-<h1>User detail</h1>
+<h1>{% lisp (title! )%}</h1>
 
 <div class="toolbar"><a href="/user/{{user.id}}/edit">Edit</a></div>
 
@@ -334,11 +334,11 @@ showアクションの実装は以下の通り。
 ```html
 {% extends "layouts/app.html" %}
 {% block title %}
-{% lisp (title "My account") %}
+{% lisp (title! "My account") %}
 {% endblock %}
 
 {% block content %}
-<h1>My account</h1>
+<h1>{% lisp (title!) %}</h1>
 
 <ul class="toolbar">
         <a href="/account/edit">Edit account info</a>
@@ -389,11 +389,11 @@ showアクションの実装は以下の通り。
 ```html
 {% extends "layouts/app.html" %}
 {% block title %}
-{% lisp (title "Edit account info") %}
+{% lisp (title! "Edit account info") %}
 {% endblock %}
 
 {% block content %}
-<h1>Edit account info</h1>
+<h1>{% lisp (title!) %}</h1>
 
 <div class="toolbar">
         <a href="/account">Go back my account</a>
@@ -510,11 +510,11 @@ Show用のルーティングは以下の通り。
 ```html
 {% extends "layouts/app.html" %}
 {% block title %}
-{% lisp (title "Change password") %}
+{% lisp (title! "Change password") %}
 {% endblock %}
 
 {% block content %}
-<h1>Change password</h1>
+<h1>{% lisp (title!) %}</h1>
 
 <div class="toolbar">
         <a href="/accout">Go back my accout</a>

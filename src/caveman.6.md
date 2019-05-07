@@ -142,11 +142,11 @@ New用のテンプレートは以下の通り。
 ```html
 {% extends "layouts/app.html" %}
 {% block title %}
-{% lisp (title "New member") %}
+{% lisp (title! "New member") %}
 {% endblock %}
 
 {% block content %}
-<h1>New member</h1>
+<h1>{% lisp (title!) %}</h1>
 
 <form class="new-user" id="new-user" action="/user" method="post">
         <input name="authenticity-token" type="hidden" value="{{token}}" />
@@ -164,11 +164,11 @@ Edit用のテンプレートは以下の通り。
 ```html
 {% extends "layouts/app.html" %}
 {% block title %}
-{% lisp (title "Edit user") %}
+{% lisp (title! "Edit user") %}
 {% endblock %}
 
 {% block content %}
-<h1>Edit user</h1>
+<h1>{% lisp (title!) %}</h1>
 
 <div class="toolbar">
         <a href="/user/{{user.id}}">Back to user detail</a>

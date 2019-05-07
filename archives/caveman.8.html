@@ -330,9 +330,9 @@ lackの機能は相当するように思えるが、おそらくはアプリケ�
 <p>上記テーブルタグを部分テンプレートとしてincludeするように編集。</p>
 
 <pre><code>{% extends "layouts/app.html" %}
-{% block title %}{% lisp (title "User detail") %}{% endblock %}
+{% block title %}{% lisp (title! "User detail") %}{% endblock %}
 {% block content %}
-&lt;h1&gt;User detail&lt;/h1&gt;
+&lt;h1&gt;{% lisp (title! )%}&lt;/h1&gt;
 
 &lt;div class="toolbar"&gt;&lt;a href="/user/{{user.id}}/edit"&gt;Edit&lt;/a&gt;&lt;/div&gt;
 
@@ -346,11 +346,11 @@ lackの機能は相当するように思えるが、おそらくはアプリケ�
 
 <pre><code>{% extends "layouts/app.html" %}
 {% block title %}
-{% lisp (title "My account") %}
+{% lisp (title! "My account") %}
 {% endblock %}
 
 {% block content %}
-&lt;h1&gt;My account&lt;/h1&gt;
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
 
 &lt;ul class="toolbar"&gt;
         &lt;a href="/account/edit"&gt;Edit account info&lt;/a&gt;
@@ -399,11 +399,11 @@ lackの機能は相当するように思えるが、おそらくはアプリケ�
 
 <pre><code>{% extends "layouts/app.html" %}
 {% block title %}
-{% lisp (title "Edit account info") %}
+{% lisp (title! "Edit account info") %}
 {% endblock %}
 
 {% block content %}
-&lt;h1&gt;Edit account info&lt;/h1&gt;
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
 
 &lt;div class="toolbar"&gt;
         &lt;a href="/account"&gt;Go back my account&lt;/a&gt;
@@ -517,11 +517,11 @@ lackの機能は相当するように思えるが、おそらくはアプリケ�
 
 <pre><code>{% extends "layouts/app.html" %}
 {% block title %}
-{% lisp (title "Change password") %}
+{% lisp (title! "Change password") %}
 {% endblock %}
 
 {% block content %}
-&lt;h1&gt;Change password&lt;/h1&gt;
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
 
 &lt;div class="toolbar"&gt;
         &lt;a href="/accout"&gt;Go back my accout&lt;/a&gt;

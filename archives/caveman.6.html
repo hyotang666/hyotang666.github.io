@@ -157,11 +157,11 @@
 
 <pre><code>{% extends "layouts/app.html" %}
 {% block title %}
-{% lisp (title "New member") %}
+{% lisp (title! "New member") %}
 {% endblock %}
 
 {% block content %}
-&lt;h1&gt;New member&lt;/h1&gt;
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
 
 &lt;form class="new-user" id="new-user" action="/user" method="post"&gt;
         &lt;input name="authenticity-token" type="hidden" value="{{token}}" /&gt;
@@ -178,11 +178,11 @@
 
 <pre><code>{% extends "layouts/app.html" %}
 {% block title %}
-{% lisp (title "Edit user") %}
+{% lisp (title! "Edit user") %}
 {% endblock %}
 
 {% block content %}
-&lt;h1&gt;Edit user&lt;/h1&gt;
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
 
 &lt;div class="toolbar"&gt;
         &lt;a href="/user/{{user.id}}"&gt;Back to user detail&lt;/a&gt;

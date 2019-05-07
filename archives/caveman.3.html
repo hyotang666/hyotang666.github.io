@@ -556,13 +556,16 @@ Railsのスタイルを受け入れてしまえば、一つ一つはコンパク
                 <span class="keyword">:productionp</span></span>)</span>
   <span class="paren2">(<span class="code"><span class="keyword">:import-from</span> <span class="keyword">:caveman2</span>
                 <span class="keyword">:url-for</span></span>)</span>
-  <span class="paren2">(<span class="code"><span class="keyword">:export</span> <span class="keyword">#:title</span></span>)</span> <span class="comment">; &lt;--- Add.
+  <span class="paren2">(<span class="code"><span class="keyword">:export</span> <span class="keyword">#:title!</span></span>)</span> <span class="comment">; &lt;--- Add.
 </span>  </span>)</span>
 
 <span class="paren1">(<span class="code">in-package <span class="keyword">:your-app.djula</span></span>)</span>
 
-<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> title<span class="paren2">(<span class="code">&amp;optional sub</span>)</span>
-  <span class="paren2">(<span class="code">format nil <span class="string">"~@[~A - ~]~:(~A~)"</span>sub #.<span class="paren3">(<span class="code">asdf:coerce-name<span class="paren4">(<span class="code">asdf:find-system <span class="keyword">:your-app</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+<span class="paren1">(<span class="code"><i><span class="symbol">let</span></i><span class="paren2">(<span class="code">title</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> title!<span class="paren3">(<span class="code">&amp;optional sub</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> sub
+      <span class="paren4">(<span class="code">format nil <span class="string">"~@[~A - ~]~:(~A~)"</span><span class="paren5">(<span class="code">setf title sub</span>)</span> #.<span class="paren5">(<span class="code">asdf:coerce-name<span class="paren6">(<span class="code">asdf:find-system <span class="keyword">:your-app</span></span>)</span></span>)</span></span>)</span>
+      title</span>)</span></span>)</span></span>)</span></span></code></pre>
 
 <p>準備ができたらtemplates/layouts/下にレイアウトテンプレートファイルを作って以下のようにする。
 ファイル名はdemo.htmlとした。</p>
@@ -571,7 +574,7 @@ Railsのスタイルを受け入れてしまえば、一つ一つはコンパク
 &lt;html&gt;
 &lt;head&gt;
   &lt;meta charset="utf-8"&gt;
-  &lt;title&gt;{% block title %}{% lisp (title) %}{% endblock %}&lt;/title&gt;
+  &lt;title&gt;{% block title %}Your app{% endblock %}&lt;/title&gt;
   &lt;link rel="stylesheet" type="text/css" media="screen" href="/css/main.css"&gt;
 &lt;/head&gt;
 &lt;body&gt;
@@ -583,7 +586,7 @@ Railsのスタイルを受け入れてしまえば、一つ一つはコンパク
 トップページのレイアウトを変更するには対応するテンプレートファイル（ここではtemplates/index.html）を以下のように編集する。</p>
 
 <pre><code>{% extends "layouts/demo.html" %}
-{% block title %}{% lisp (title) %}{% endblock %}
+{% block title %}{% lisp (title! "subtitle") %}{% endblock %}
 {% block content %}
 &lt;h2&gt;{{message}}&lt;/h2&gt;
 &lt;p&gt;Here we go.&lt;/p&gt;
@@ -609,7 +612,7 @@ djulaはそのための機能を提供していないように見える。
 &lt;html&gt;
 &lt;head&gt;
         &lt;meta charset="utf-8"&gt;
-        &lt;title&gt;{% block title %}{% lisp (title) %}{% endblock %}&lt;/title&gt;
+        &lt;title&gt;{% block title %}Your app{% endblock %}&lt;/title&gt;
         &lt;link rel="stylesheet" type="text/css" media="screen" href="/css/main.css"&gt;
 &lt;/head&gt;
 &lt;body&gt;
