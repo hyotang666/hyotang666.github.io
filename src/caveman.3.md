@@ -296,7 +296,7 @@ Cavemanではフラッシュに相当する機能は提供されていないよ�
 ```
 
 ## Template
-Cavemanではテンプレートエンジンとして[djula](TODO)を採用している。
+Cavemanではテンプレートエンジンとして[djula](https://github.com/mmontone/djula)を採用している。
 
 ### STEP7 Basic
 Contoroller側で以下のようにする。
