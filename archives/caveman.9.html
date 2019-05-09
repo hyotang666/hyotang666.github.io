@@ -1,0 +1,789 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>caveman.9
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><!-- {% raw %} -->
+
+<h1>Caveman kills ruby on rails - Chapter 9</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>CavemanでScope制御を行いたいCLer</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p>本稿は<a href="https://book.impress.co.jp/books/1117101135" >原著</a>の各章をCommon Lispに翻訳するシリーズの第9章である。
+本章ではCavemanでのScope制御を修めていく。</p>
+
+<p>なお、原著ではPagenationについても触れられているが、Caveman2にそのような機能はなく、また相当するライブラリも存在しない。
+どうしても欲しいなら自作するしかない。
+実装コストが割と高い印象なので、ここではTODOとして無視していく。</p>
+
+<h2>9.1 SHOW and EDIT article.</h2>
+
+<h3>Define article model.</h3>
+
+<p>まずは下準備として新たにarticleモデルを定義する。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> article<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">title <span class="keyword">:initarg</span> <span class="keyword">:title</span> <span class="keyword">:col-type</span> <span class="paren4">(<span class="code"><span class="keyword">:varchar</span> 80</span>)</span> <span class="keyword">:accessor</span> title-of</span>)</span>
+   <span class="paren3">(<span class="code">body <span class="keyword">:initarg</span> <span class="keyword">:body</span> <span class="keyword">:col-type</span> <span class="keyword">:text</span> <span class="keyword">:accessor</span> <span class="keyword">:body-of</span></span>)</span>
+   <span class="paren3">(<span class="code">date-released <span class="keyword">:initarg</span> <span class="keyword">:date-released</span> <span class="keyword">:col-type</span> <span class="keyword">:date</span> <span class="keyword">:accessor</span> date-released-of</span>)</span>
+   <span class="paren3">(<span class="code">date-expired <span class="keyword">:initarg</span> <span class="keyword">:date-expired</span> <span class="keyword">:col-type</span> <span class="paren4">(<span class="code">or <span class="keyword">:null</span> <span class="keyword">:date</span></span>)</span> <span class="keyword">:accessor</span> date-expired-of</span>)</span>
+   <span class="paren3">(<span class="code">member-only-p <span class="keyword">:initarg</span> <span class="keyword">:member-only-p</span> <span class="keyword">:col-type</span> <span class="keyword">:boolean</span> <span class="keyword">:initform</span> <span class="string">"1"</span> <span class="comment">; as nil
+</span>                  <span class="keyword">:accessor</span> member-only-p</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> mito:dao-table-class</span>)</span></span>)</span></span></code></pre>
+
+<h4>Create table.</h4>
+
+<p>定義したモデルのテーブルを作るように編集。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">with-connection</span></i><span class="paren2">(<span class="code">db</span>)</span>
+  <span class="paren2">(<span class="code">mito:ensure-table-exists 'user</span>)</span>
+  <span class="paren2">(<span class="code">mito:ensure-table-exists 'article</span>)</span>
+  </span>)</span></span></code></pre>
+
+<h4>Add seeds.</h4>
+
+<p>シードデータを追加するように関数<code>SEEDS</code>の中身を編集。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> seeds<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">names #<span class="paren5">(<span class="code"><span class="string">"Taro"</span> <span class="string">"Jiro"</span> <span class="string">"Hana"</span> <span class="string">"John"</span> <span class="string">"Mike"</span> <span class="string">"Sophy"</span> <span class="string">"Bill"</span> <span class="string">"Alex"</span> <span class="string">"Mary"</span> <span class="string">"Tom"</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">fnames #<span class="paren5">(<span class="code"><span class="string">"佐藤"</span> <span class="string">"鈴木"</span> <span class="string">"高橋"</span> <span class="string">"田中"</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code">gnames #<span class="paren5">(<span class="code"><span class="string">"太郎"</span> <span class="string">"次郎"</span> <span class="string">"花子"</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-connection</span></i><span class="paren4">(<span class="code">db</span>)</span>
+      ... 
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">body #.<span class="paren1">(<span class="code"><i><span class="symbol">with-output-to-string</span></i><span class="paren2">(<span class="code"><span class="special">*standard-output*</span></span>)</span>
+                     <span class="paren2">(<span class="code">format t <span class="string">"Morning glory wins.~2%"</span></span>)</span>
+                     <span class="paren2">(<span class="code">write-line <span class="string">"hgoe hoge boge hoge"</span></span>)</span>
+                     <span class="paren2">(<span class="code">write-line <span class="string">"fuga fuga guffaug uga"</span></span>)</span>
+                     <span class="paren2">(<span class="code">write-string <span class="string">"tasdf asdf asdf sadf... "</span></span>)</span></span>)</span></span>)</span>
+           <span class="paren6">(<span class="code">now<span class="paren1">(<span class="code">local-time:now</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">dotimes<span class="paren6">(<span class="code">x 10</span>)</span>
+          <span class="paren6">(<span class="code">mito:create-dao 'article
+                           <span class="keyword">:title</span> <span class="paren1">(<span class="code">format nil <span class="string">"Result:~D"</span>x</span>)</span>
+                           <span class="keyword">:body</span> body
+                           <span class="keyword">:date-released</span> <span class="paren1">(<span class="code">local-time:timestamp- now <span class="paren2">(<span class="code">- 8 x</span>)</span> <span class="keyword">:day</span></span>)</span>
+                           <span class="keyword">:date-expired</span> <span class="paren1">(<span class="code">local-time:timestamp- now <span class="paren2">(<span class="code">- 2 x</span>)</span> <span class="keyword">:day</span></span>)</span>
+                           <span class="keyword">:member-only-p</span> <span class="paren1">(<span class="code">zerop <span class="paren2">(<span class="code">rem x 3</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      </span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>Rebuild</h4>
+
+<p>ARTICLEのリビルドも行えるように編集。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> rebuild<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-connection</span></i><span class="paren3">(<span class="code">db</span>)</span>
+    <span class="paren3">(<span class="code">mito:recreate-table 'user</span>)</span>
+    <span class="paren3">(<span class="code">mito:recreate-table 'article</span>)</span>
+    </span>)</span>
+  <span class="paren2">(<span class="code">seeds</span>)</span></span>)</span></span></code></pre>
+
+<p>REPLでREBUILDを叩いておくこと。</p>
+
+<h3>Adding validation.</h3>
+
+<p>新規定義されたモデル用のバリデーションを追加。
+正直これはマクロにまとめて、モデル定義時にバリデーションも指定できるようにするほうがいいのでは？　とも思う。
+ここではそのまま手で書いていく。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-article<span class="paren2">(<span class="code">article &amp;rest target-slots</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">article target-slots</span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">title <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+            <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
+            <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= <span class="paren1">(<span class="code">length title</span>)</span> 80</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">body <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
+           <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= <span class="paren1">(<span class="code">length body</span>)</span> 2000</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">date-released <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+                    <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'local-time:parse-timestring</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">date-expired <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'local-time:parse-timestring</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">member-only-p <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+                    <span class="paren5">(<span class="code"><span class="keyword">:key</span> <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren1">(<span class="code">x</span>)</span><span class="paren1">(<span class="code">zerop<span class="paren2">(<span class="code">parse-integer x</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Routing</h3>
+
+<p>下準備は整ったのでアクションを定義していこう。</p>
+
+<h4>INDEX</h4>
+
+<p>indexは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/articles"</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"articles/index.html"</span>
+          `<span class="paren3">(<span class="code"><span class="keyword">:user</span> ,<span class="paren4">(<span class="code">current-user</span>)</span>
+                  <span class="keyword">:news</span> <span class="paren4">(<span class="code">1 2 3 4 5</span>)</span>
+                  <span class="keyword">:blogs</span> <span class="paren4">(<span class="code">1 2 3 4 5</span>)</span>
+                  <span class="keyword">:token</span> ,<span class="paren4">(<span class="code">token</span>)</span>
+                  <span class="keyword">:articles</span> ,<span class="paren4">(<span class="code">mito:retrieve-dao 'your-app.model::article</span>)</span>
+                  ,@<span class="paren4">(<span class="code">roles</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/articles/index.html</h4>
+
+<p>index用のテンプレートは以下の通り。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+{% block title %}{% lisp (title! "List of articles") %}{% endblock %}
+
+{% block content %}
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
+
+&lt;div class="toolbar"&gt;&lt;a href="/articles/new"&gt;Write new article&lt;/a&gt;&lt;/div&gt;
+
+{% if articles %}
+&lt;table class="list"&gt;
+        &lt;thead&gt;
+                &lt;tr&gt;
+                        &lt;th&gt;title&lt;/th&gt;
+                        &lt;th&gt;date&lt;/th&gt;
+                        &lt;th&gt;oeration&lt;/th&gt;
+                &lt;/tr&gt;
+        &lt;/thead&gt;
+        &lt;tbody&gt;
+                {% for article in articles %}
+                &lt;tr&gt;
+                        &lt;td&gt;&lt;a href="/articles/{{article.id}}"&gt;{{article.title}}&lt;/a&gt;&lt;/td&gt;
+                        &lt;td&gt;{{ article.date-released
+                             | date: ((:year 4)"/"(:month 2)"/"(:day 2)" "(:hour 2)":"(:min 2))
+                             }}&lt;/td&gt;
+                        &lt;td&gt;
+                                &lt;a href="/articles/{{article.id}}/edit"&gt;Edit&lt;/a&gt;|
+                                &lt;form action="/articles/{{article.id}}/delete" method="post"&gt;
+                                        &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}"&gt;
+                                        &lt;input type="hidden" name="METHOD" value="delete"&gt;
+                                        &lt;input type="submit" value="Delete"&gt;
+                                &lt;/form&gt;
+                        &lt;/td&gt;
+                &lt;/tr&gt;
+                {% endfor %}
+        &lt;/tbody&gt;
+&lt;/table&gt;
+{% else %}
+&lt;p&gt;No articles&lt;/p&gt;
+{% endif %}
+{% endblock %}</code></pre>
+
+<p><img src="../img/caveman/articles-index.png" alt="Screen shot of example" /></p>
+
+<h4>SHOW</h4>
+
+<p>Showは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/articles/:id"</span><span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">null<span class="paren4">(<span class="code">ignore-errors<span class="paren5">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">myway.mapper:next-route</span>)</span>
+    <span class="paren3">(<span class="code">render <span class="string">"articles/show.html"</span> `<span class="paren4">(<span class="code"><span class="keyword">:article</span> ,<span class="paren5">(<span class="code">mito:find-dao 'your-app.model::article <span class="keyword">:id</span> id</span>)</span>
+                                              ,@<span class="paren5">(<span class="code">roles</span>)</span>
+                                            <span class="keyword">:user</span> ,<span class="paren5">(<span class="code">current-user</span>)</span>
+                                            <span class="keyword">:news</span> <span class="paren5">(<span class="code">1 2 3 4 5</span>)</span>
+                                            <span class="keyword">:blogs</span> <span class="paren5">(<span class="code">1 2 3 4 5</span>)</span>
+                                            </span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>mywayのマッピングに於いて、上記の:idはただの変数でしかなく、不正な文字列も渡ってくる点要注意。</p>
+
+<h4>3bmd</h4>
+
+<p>Cavemanにsimple_format相当の機能はない。
+ここではmarkdownパーザである<code>3bmd</code>を使ってお手軽に実装していく。
+その結果、副作用としてARTICLE本文はプレーンテクストではなくマークダウンとして解釈されることとなる。</p>
+
+<p>まずはASDファイルに依存を追加。</p>
+
+<pre><code><span class="code">  :depends-on <span class="paren1">(<span class="code"><span class="string">"clack"</span>
+               ...
+               <span class="comment">;; HTML Template
+</span>               <span class="string">"djula"</span>
+               <span class="string">"3bmd"</span> <span class="comment">; markdown.
+</span>               ...</span>)</span></span></code></pre>
+
+<h4>templates/articles/show.html</h4>
+
+<p>テンプレートは以下の通り。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+{% block title %} {{ article.title | lisp: (lambda(title)(title title)) }} {% endblock %} 
+
+{% block content %}
+&lt;h1&gt;{{article.title}}&lt;/h1&gt;
+
+{% if logged-in-p %}
+&lt;div class="toolbar"&gt;&lt;a href="/articles/{{article.id}}/edit"&gt;Edit&lt;/a&gt;&lt;/div&gt;
+{% endif %}
+
+&lt;table class="attr"&gt;
+        &lt;tr&gt;
+                &lt;th width="100"&gt;Title&lt;/th&gt;
+                &lt;td&gt;{{article.title}}&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Article&lt;/th&gt;
+                &lt;td&gt;
+                        {{ article.body
+                         | lisp: (lambda(string)
+                                   (with-output-to-string(s)
+                                     (3bmd:parse-string-and-print-to-stream 
+                                       (ppcre:regex-replace-all #\newline string "&lt;br&gt;")
+                                       s)))
+                         | safe
+                         }}
+                &lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Released at&lt;/th&gt;
+                &lt;td&gt;{{ article.date-released | date: ((:year 4)"/"(:month 2)"/"(:day 2)" "(:hour 2)":"(:min 2)) }}&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Expired at&lt;/th&gt;
+                &lt;td&gt;
+                        {% if article.date-expired %}
+                        {{ article.date-expired | date: ((:year 4)"/"(:month 2)"/"(:day 2)" "(:hour 2)":"(:min 2)) }}
+                        {% endif %}
+                &lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Member only&lt;/th&gt;
+                &lt;td&gt;{% if article.member-only-p %}◯{% else %}-{% endif %}&lt;/td&gt;
+        &lt;/tr&gt;
+&lt;/table&gt;
+{% endblock %}</code></pre>
+
+<h4>templates/shared/header.html</h4>
+
+<p>ヘッダから飛べるようにリンクを追加。</p>
+
+<pre><code>                &lt;li&gt;&lt;a href="/"&gt;Home&lt;/a&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;a href="/articles"&gt;News&lt;/a&gt;&lt;/li&gt;
+                &lt;li&gt;&lt;a href="#"&gt;Blog&lt;/a&gt;&lt;/li&gt;</code></pre>
+
+<p><img src="../img/caveman/articles-show.png" alt="Screen shot of example" /></p>
+
+<h3>NEW and EDIT</h3>
+
+<h4>new</h4>
+
+<p>newは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/articles/new"</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"articles/new.html"</span> `<span class="paren3">(<span class="code"><span class="keyword">:article</span>, <span class="paren4">(<span class="code">make-instance 'your-app.model::article</span>)</span>
+                                          <span class="keyword">:user</span> ,<span class="paren4">(<span class="code">current-user</span>)</span>
+                                          <span class="keyword">:news</span> <span class="paren4">(<span class="code">1 2 3 4 5</span>)</span>
+                                          <span class="keyword">:blogs</span> <span class="paren4">(<span class="code">1 2 3 4 5</span>)</span>
+                                          ,@<span class="paren4">(<span class="code">roles</span>)</span>
+                                          <span class="keyword">:token</span> ,<span class="paren4">(<span class="code">token</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>edit</h4>
+
+<p>同様にeditは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/articles/:id/edit"</span><span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"articles/edit.html"</span> `<span class="paren3">(<span class="code"><span class="keyword">:article</span> ,<span class="paren4">(<span class="code">mito:find-dao 'your-app.model::article <span class="keyword">:id</span> id</span>)</span>
+                                          <span class="keyword">:user</span> ,<span class="paren4">(<span class="code">current-user</span>)</span>
+                                          ,@<span class="paren4">(<span class="code">roles</span>)</span>
+                                          <span class="keyword">:token</span> ,<span class="paren4">(<span class="code">token</span>)</span>
+                                          <span class="keyword">:news</span> <span class="paren4">(<span class="code">1 2 3 4 5</span>)</span>
+                                          <span class="keyword">:blogs</span> <span class="paren4">(<span class="code">1 2 3 4 5</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/articles/new.html</h4>
+
+<p>new用のテンプレートは以下の通り。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+{% block title %} {% lisp (title! "Making new article") %} {% endblock %}
+
+{% block content %}
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
+
+&lt;form class="new-article" id="new-article" action="/articles" method="post"&gt;
+        &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}" /&gt;
+        &lt;input type="hidden" name="METHOD" value="put"&gt;
+        {% include "articles/form.html" %}
+
+        &lt;div&gt;&lt;input type="submit" name="comit" value="Comit"&gt;&lt;/div&gt;
+&lt;/form&gt;
+{% endblock %}</code></pre>
+
+<h4>templates/articles/edit.html</h4>
+
+<p>同様にedit用のテンプレートは以下の通り。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+{% block title %}{% lisp (title! "Edit article") %}{% endblock %}
+
+{% block content %}
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
+
+&lt;p&gt;&lt;a href="/articles/{{article.id}}"&gt;Go back article&lt;/a&gt;&lt;/p&gt;
+
+&lt;form class="edit-article" id="edit-article" action="/articles/{{article.id}}" method="post"&gt;
+        &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}" /&gt;
+        &lt;input type="hidden" name="METHOD" value="post"&gt;
+        {% include "articles/form.html" %}
+
+ &lt;div&gt;&lt;input type="submit" name="comit" value="Comit"&gt;&lt;/div&gt;
+&lt;/form&gt;
+
+{% endblock %}</code></pre>
+
+<h4>cl-who</h4>
+
+<p>日時用のオプションをテンプレート側で書いていくのがだるいので関数として実装してしまおう。
+Lisp側からhtmlを扱う場合、文字列として処理していくよりマークアップライブラリを使うほうが便利だ。
+ここでは<a href="https://github.com/edicl/cl-who" >cl-who</a>を使っていく。</p>
+
+<p>早速ASDに追加。</p>
+
+<pre><code><span class="code">               <span class="comment">;; HTML Template
+</span>               "djula"
+               "3bmd" <span class="comment">; markdown.
+</span>               "cl-who" <span class="comment">; markup</span></span></code></pre>
+
+<h4>date-options</h4>
+
+<p>ヘルパー関数<code>DATE-OPTIONS</code>は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> date-options<span class="paren2">(<span class="code">&amp;key <span class="paren3">(<span class="code">start 0</span>)</span> <span class="paren3">(<span class="code">end 0</span>)</span> <span class="paren3">(<span class="code">target start</span>)</span> <i><span class="symbol">labels</span></i></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> start <span class="keyword">:to</span> end
+        <span class="keyword">:collect</span> <span class="paren3">(<span class="code"><i><span class="symbol">cl-who:with-html-output-to-string</span></i><span class="paren4">(<span class="code"><span class="special">*standard-output*</span></span>)</span>
+                   <span class="paren4">(<span class="code"><span class="paren5">(<span class="code"><span class="keyword">:option</span> <span class="keyword">:value</span> i <span class="keyword">:selected</span> <span class="paren6">(<span class="code">when<span class="paren1">(<span class="code">eql i target</span>)</span>
+                                                  <span class="string">"selected"</span></span>)</span></span>)</span>
+                    <span class="paren5">(<span class="code">princ <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> <i><span class="symbol">labels</span></i>
+                             <span class="paren1">(<span class="code">aref <i><span class="symbol">labels</span></i> i</span>)</span>
+                             i</span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="keyword">:into</span> options
+        <span class="keyword">:finally</span> <span class="paren3">(<span class="code">return <span class="paren4">(<span class="code">format nil <span class="string">"~{~A~%~}"</span> options</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/articles/form.html</h4>
+
+<p>テンプレートは以下の通り。</p>
+
+<pre><code>{% include "shared/errors.html" %}
+
+&lt;table class="attr"&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="title"&gt;Title&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input name="TITLE" id="title" type="text" value="{{article.title}}"/&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="body"&gt;Body&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;textarea rows="10" cols="45" name="BODY" id="body"&gt;{{article.body}}&lt;/textarea&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="released-year"&gt;Date released&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;
+                        &lt;select id="released-year" name="RELEASED-YEAR"&gt;
+                                {{ article.date-released
+                                 | lisp: (lambda(timestamp)
+                                           (let((year(local-time:timestamp-year(local-time:now))))
+                                             (date-options :start 2000 :end (1+ year)
+                                                           :target (local-time:timestamp-year timestamp))))
+                                 | safe
+                                 }}
+                        &lt;/select&gt;
+                        &lt;select id="released-month" name="RELEASED-MONTH"&gt;
+                                {{ article.date-released
+                                 | lisp: (lambda(timestamp)
+                                           (date-options :start 1 :end 12
+                                                         :target (local-time:timestamp-month timestamp)))
+                                 | safe }}
+                        &lt;/select&gt;
+                        &lt;select id="released-day" name="RELEASED-DAY"&gt;
+                                {{ article.date-released
+                                 | lisp: (lambda(timestamp)
+                                           (date-options :start 1 :end 31
+                                                         :target (local-time:timestamp-day timestamp)))
+                                 | safe }}
+                        &lt;/select&gt;
+                        -
+                        &lt;select id="released-hour" name="RELEASED-HOUR"&gt;
+                                {{ article.date-released
+                                 | lisp: (lambda(timestamp)
+                                           (date-options :end 59 :target (local-time:timestamp-hour timestamp)))
+                                 | safe }}
+                        &lt;/select&gt;
+                        &lt;select id="released-min" name="RELEASED-MIN"&gt;
+                                {{ article.date-released
+                                 | lisp: (lambda(timestamp)
+                                           (date-options :end 59 :target (local-time:timestamp-minute timestamp)))
+                                 | safe }}
+                        &lt;/select&gt;
+                &lt;/td&gt;
+        &lt;/tr&gt;
+
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="expired-year"&gt;Date expired&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;
+                        &lt;select id="expired-year" name="EXPIRED-YEAR"&gt;
+                                {{ article.date-expired
+                                 | lisp: (lambda(arg)
+                                           (let((year(local-time:timestamp-year(local-time:now)))
+                                                (timestamp(or arg (local-time:now))))
+                                             (date-options :start 2000 :end (1+ year)
+                                                           :target (local-time:timestamp-year timestamp))))
+                                 | safe }}
+                        &lt;/select&gt;
+                        &lt;select id="expired-month" name="EXPIRED-MONTH"&gt;
+                                {{ article.date-expired
+                                 | lisp: (lambda(arg)
+                                           (date-options :start 1 :end 12
+                                                         :target (local-time:timestamp-month (or arg
+                                                                                                 (local-time:now)))))
+                                 | safe }}
+                        &lt;/select&gt;
+                        &lt;select id="expired-day" name="EXPIRED-DAY"&gt;
+                                {{ article.date-expired
+                                 | lisp: (lambda(arg)
+                                           (let((timestamp(or arg (local-time:now))))
+                                             (date-options :start 1 :end 31
+                                                           :target (local-time:timestamp-day timestamp))))
+                                 | safe }}
+                        &lt;/select&gt;
+                        -
+                        &lt;select id="expired-hour" name="EXPIRED-HOUR"&gt;
+                                {{ article.date-expired
+                                 | lisp: (lambda(arg)
+                                           (let((timestamp(or arg (local-time:now))))
+                                             (date-options :end 59
+                                                           :target (local-time:timestamp-hour timestamp))))
+                                 | safe }}
+                        &lt;/select&gt;
+                        &lt;select id="expired-min" name="EXPIRED-MIN"&gt;
+                                {{ article.date-expired
+                                 | lisp: (lambda(arg)
+                                           (let((timestamp(or arg (local-time:now))))
+                                             (date-options :end 59
+                                                           :target (local-time:timestamp-minute timestamp))))
+                                 | safe }}
+                        &lt;/select&gt;
+                &lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Member only&lt;/th&gt;
+                &lt;td&gt;
+                        &lt;label for="only-member"&gt;Member only&lt;/label&gt;
+                        &lt;input name="ONLY-MEMBER" type="hidden" value="0"&gt;
+                        &lt;input type="checkbox" id="only-member" name="ONLY-MEMBER" value="1" {% if article.only-member %}checked{% endif %} /&gt;
+                &lt;/td&gt;
+        &lt;/tr&gt;
+&lt;/table&gt;</code></pre>
+
+<p>上記テンプレートについてであるが、上記コードでは例えば<code>article.date-released</code>のような変数参照を起点としている。
+理由は不明だが、この起点変数を<code>article</code>のようにしてオブジェクト自体を受け取るコードにすると、何故か最後の<code>SAFE</code>フィルターが機能しない。
+おそらくはDJULA側のバグではないかと睨んでいるのだが、自信はない。</p>
+
+<p><img src="../img/caveman/articles-edit.png" alt="Screen shot of edit article" /></p>
+
+<h4>dispatch</h4>
+
+<p>ディスパッチャは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/articles"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key method</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">string= <span class="string">"put"</span> method</span>)</span><span class="paren4">(<span class="code">new-article<span class="paren5">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">t `<span class="paren4">(<span class="code">401<span class="paren5">(<span class="code"></span>)</span><span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">format nil <span class="string">"Unknown method ~S"</span>method</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>create</h4>
+
+<p>New用のpostメソッドは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> new-article<span class="paren2">(<span class="code"><span class="string">"/articles"</span> <span class="keyword">:method</span> <span class="keyword">:put</span></span>)</span><span class="paren2">(<span class="code">&amp;key authenticity-token released-year released-month released-day
+                                                     released-hour released-min expired-year expired-month expired-day
+                                                     expired-hour expired-min</span>)</span>
+          <span class="paren2">(<span class="code">dev:peep <span class="special">ningle:*request*</span></span>)</span><span class="paren2">(<span class="code">force-output</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= authenticity-token <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">401<span class="paren4">(<span class="code"></span>)</span><span class="paren4">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">render-args `<span class="paren6">(<span class="code"><span class="keyword">:user</span> ,<span class="paren1">(<span class="code">current-user</span>)</span> ,@<span class="paren1">(<span class="code">roles</span>)</span> <span class="keyword">:token</span> ,<span class="paren1">(<span class="code">token</span>)</span> <span class="keyword">:news</span> <span class="paren1">(<span class="code">1 2 3 4 5</span>)</span> <span class="keyword">:blogs</span> <span class="paren1">(<span class="code">1 2 3 4 5</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">multiple-value-bind<span class="paren5">(<span class="code">article errors</span>)</span><span class="paren5">(<span class="code">your-app.model::validate-article
+                                            <span class="paren6">(<span class="code">apply #'make-instance 'your-app.model::article <span class="keyword">:allow-other-keys</span> t 
+                                                   <span class="keyword">:date-released</span> <span class="paren1">(<span class="code">format nil <span class="string">"~A-~A-~AT~A:~A:00"</span> released-year
+                                                                          released-month released-day released-hour
+                                                                          released-min</span>)</span>
+                                                   <span class="keyword">:date-expired</span> <span class="paren1">(<span class="code">format nil <span class="string">"~A-~A-~AT~A:~A:00"</span> expired-year
+                                                                         expired-month expired-day expired-hour
+                                                                         expired-min</span>)</span>
+                                                   <span class="paren1">(<span class="code">request-params<span class="paren2">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> errors
+          <span class="paren6">(<span class="code">render <span class="string">"articles/new.html"</span> <span class="paren1">(<span class="code">list* <span class="keyword">:article</span> article <span class="keyword">:errors</span> errors render-args</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">mito:insert-dao article</span>)</span>
+                 <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Stored"</span></span>)</span>
+                 `<span class="paren1">(<span class="code">303 <span class="paren2">(<span class="code"><span class="keyword">:location</span> ,<span class="paren3">(<span class="code">format nil <span class="string">"/articles/~D"</span><span class="paren4">(<span class="code">mito:object-id article</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>dispatch</h4>
+
+<p>ディスパッチャは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/articles/:id"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key method id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">and <span class="paren5">(<span class="code">string= <span class="string">"post"</span> method</span>)</span>
+          <span class="paren5">(<span class="code">ignore-errors<span class="paren6">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">edit-article <span class="paren5">(<span class="code">acons <span class="string">"ID"</span> id<span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">and <span class="paren5">(<span class="code">string= <span class="string">"delete"</span> method</span>)</span>
+          <span class="paren5">(<span class="code">ignore-errors<span class="paren6">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">destroy-article <span class="paren5">(<span class="code">acons <span class="string">"ID"</span> id <span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">t `<span class="paren4">(<span class="code">401<span class="paren5">(<span class="code"></span>)</span><span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">format nil <span class="string">"Unknown method ~S"</span>method</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>edit</h4>
+
+<p>Edit用のpostメソッドは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> edit-article<span class="paren2">(<span class="code">request</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind<span class="paren3">(<span class="code">&amp;key authenticity-token id title body released-min released-hour released-day released-month
+                           released-year expired-min expired-hour expired-day expired-month expired-year only-member
+                           &amp;allow-other-keys</span>)</span>
+                     <span class="paren3">(<span class="code">request-params request</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">not<span class="paren5">(<span class="code">string= authenticity-token <span class="paren6">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+      '<span class="paren4">(<span class="code">401<span class="paren5">(<span class="code"></span>)</span><span class="paren5">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i><span class="paren5">(<span class="code">not<span class="paren6">(<span class="code">hermetic:logged-in-p</span>)</span></span>)</span>
+        '<span class="paren5">(<span class="code">403<span class="paren6">(<span class="code"></span>)</span><span class="paren6">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">article<span class="paren2">(<span class="code">mito:find-dao 'your-app.model::article <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">your-app.model::title-of article</span>)</span>title
+                <span class="paren1">(<span class="code">your-app.model::body-of article</span>)</span>body
+                <span class="paren1">(<span class="code">your-app.model::date-released-of article</span>)</span><span class="paren1">(<span class="code">format nil<span class="string">"~A-~A-~AT~A:~A:00"</span> released-year released-month
+                                                                  released-day released-hour released-min</span>)</span>
+                <span class="paren1">(<span class="code">your-app.model::date-expired-of article</span>)</span><span class="paren1">(<span class="code">format nil<span class="string">"~A-~A-~AT~A:~A:00"</span> expired-year expired-month
+                                                                 expired-day expired-hour expired-min</span>)</span>
+                <span class="paren1">(<span class="code">your-app.model::only-member-p article</span>)</span>only-member</span>)</span>
+          <span class="paren6">(<span class="code">multiple-value-bind<span class="paren1">(<span class="code">article errors</span>)</span><span class="paren1">(<span class="code">your-app.model::validate-article article</span>)</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> errors
+              <span class="paren2">(<span class="code">render <span class="string">"articles/edit.html"</span> `<span class="paren3">(<span class="code"><span class="keyword">:article</span> ,article <span class="keyword">:errors</span> ,errors <span class="keyword">:user</span> ,<span class="paren4">(<span class="code">current-user</span>)</span>
+                                                      ,@<span class="paren4">(<span class="code">roles</span>)</span> <span class="keyword">:token</span> ,<span class="paren4">(<span class="code">token</span>)</span>
+                                                      <span class="keyword">:news</span> <span class="paren4">(<span class="code">1 2 3 4 5</span>)</span> <span class="keyword">:blogs</span> <span class="paren4">(<span class="code">1 2 3 4 5</span>)</span></span>)</span></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren3">(<span class="code">mito:save-dao article</span>)</span>
+                     <span class="paren3">(<span class="code">setf <span class="paren4">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Updated"</span></span>)</span>
+                     `<span class="paren3">(<span class="code">303 <span class="paren4">(<span class="code"><span class="keyword">:location</span> ,<span class="paren5">(<span class="code">format nil <span class="string">"/articles/~D"</span><span class="paren6">(<span class="code">mito:object-id article</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>destroy</h4>
+
+<p>Destroyは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> destroy-article<span class="paren2">(<span class="code"><span class="string">"/article/:id"</span> <span class="keyword">:method</span> <span class="keyword">:delete</span></span>)</span><span class="paren2">(<span class="code">&amp;key authenticity-token id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= authenticity-token<span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">401<span class="paren4">(<span class="code"></span>)</span><span class="paren4">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">not<span class="paren5">(<span class="code">hermetic:logged-in-p</span>)</span></span>)</span>
+      '<span class="paren4">(<span class="code">403<span class="paren5">(<span class="code"></span>)</span><span class="paren5">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i><span class="paren5">(<span class="code">null<span class="paren6">(<span class="code">ignore-errors<span class="paren1">(<span class="code">setf id <span class="paren2">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">myway.mapper:next-route</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren6">(<span class="code">mito:delete-by-values 'your-app.model::article <span class="keyword">:id</span> id</span>)</span>
+               `<span class="paren6">(<span class="code">303 <span class="paren1">(<span class="code"><span class="keyword">:location</span> <span class="string">"/articles"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>9.2 active record callback</h2>
+
+<p>Rubyでコールバックと呼ばれている概念（の一部？）はCommon Lispにおける補助メソッドのことであるようだ。
+Common Lisp界隈では補助メソッドのことをコールバックとはけして呼ばないのでCLer的には違和感がある。</p>
+
+<h3>NO-EXPIRATION-P</h3>
+
+<p>Common Lispに於いて:BEFOREメソッドは通常副作用のために用いられる。
+引数の制御は:AROUNDメソッドの仕事だ。
+もしこれが引数の制御ではなく、引数に不正な値が来たらエラーを投げるというような仕事であったなら:BEFOREメソッドのほうが適任であっただろうが、ここでやりたいのはそれではない。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> initialize-instance <span class="keyword">:around</span><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o article</span>)</span>&amp;rest args
+                                                        &amp;key date-released released-year released-month released-day
+                                                        released-hour released-min date-expiration expired-year
+                                                        expired-month expired-day expired-hour expired-min
+                                                        no-expiration-p &amp;allow-other-keys</span>)</span>
+  <span class="paren2">(<span class="code">apply #'call-next-method o `<span class="paren3">(<span class="code">,@<span class="paren4">(<span class="code">when <span class="paren5">(<span class="code">and <span class="paren6">(<span class="code">null date-released</span>)</span>
+                                             released-year</span>)</span>
+                                    `<span class="paren5">(<span class="code"><span class="keyword">:date-released</span> ,<span class="paren6">(<span class="code">format nil <span class="string">"~A-~A-~AT~A:~A:00"</span> released-year released-month
+                                                              released-day released-hour released-min</span>)</span></span>)</span></span>)</span>
+                                 ,@<span class="paren4">(<span class="code">when <span class="paren5">(<span class="code">and <span class="paren6">(<span class="code">not no-expiration-p</span>)</span>
+                                              <span class="paren6">(<span class="code">null date-expiration</span>)</span>
+                                              expired-year</span>)</span>
+                                     `<span class="paren5">(<span class="code"><span class="keyword">:date-expired</span> ,<span class="paren6">(<span class="code">format nil <span class="string">"~A-~A-~AT~A:~A:00"</span> expired-year expired-month
+                                                              expired-day expired-hour expired-min</span>)</span></span>)</span></span>)</span>
+                                 ,@args</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>createアクションを以下のように修正。
+処理の一部を<code>CL:INITIALIZE-INSTANCE</code>に投げたのでコードがスッキリした。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> new-article<span class="paren2">(<span class="code"><span class="string">"/articles"</span> <span class="keyword">:method</span> <span class="keyword">:put</span></span>)</span><span class="paren2">(<span class="code">&amp;key authenticity-token no-expiration-p</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= authenticity-token <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">401<span class="paren4">(<span class="code"></span>)</span><span class="paren4">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">render-args `<span class="paren6">(<span class="code"><span class="keyword">:user</span> ,<span class="paren1">(<span class="code">current-user</span>)</span> ,@<span class="paren1">(<span class="code">roles</span>)</span> <span class="keyword">:token</span> ,<span class="paren1">(<span class="code">token</span>)</span> <span class="keyword">:news</span> ,<span class="paren1">(<span class="code">articles 5</span>)</span> <span class="keyword">:blogs</span> <span class="paren1">(<span class="code">1 2 3 4 5</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">multiple-value-bind<span class="paren5">(<span class="code">article errors</span>)</span><span class="paren5">(<span class="code">your-app.model::validate-article
+                                            <span class="paren6">(<span class="code">apply #'make-instance 'your-app.model::article
+                                                   <span class="paren1">(<span class="code">request-params<span class="paren2">(<span class="code">lack.request:request-body-parameters
+                                                                     <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> errors
+          <span class="paren6">(<span class="code">render <span class="string">"articles/new.html"</span> <span class="paren1">(<span class="code">list* <span class="keyword">:article</span> article <span class="keyword">:errors</span> errors
+                                             <span class="keyword">:no-expiration-p</span> no-expiration-p render-args</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">mito:insert-dao article</span>)</span>
+                 <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Stored"</span></span>)</span>
+                 `<span class="paren1">(<span class="code">303 <span class="paren2">(<span class="code"><span class="keyword">:location</span> ,<span class="paren3">(<span class="code">format nil <span class="string">"/articles/~D"</span><span class="paren4">(<span class="code">mito:object-id article</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/articles/form.html</h4>
+
+<p>クライアントが引数を送信できるように修正。</p>
+
+<pre><code>                &lt;td&gt;
+                        &lt;div&gt;
+                                &lt;label for="no-expiration"&gt;No expiration&lt;/label&gt;
+                                &lt;input type="checkbox" {% if no-expiration-p %}checked{% endif %}
+                                name="NO-EXPIRATION-P" id="no-expiration"/&gt;
+                        &lt;/div&gt;
+                        &lt;div&gt;
+                        &lt;select id="expired-year" name="EXPIRED-YEAR"&gt;</code></pre>
+
+<h3>Scope definition</h3>
+
+<p>ここで言うスコープとは記事の公開範囲を指す。</p>
+
+<h4>PUBLICP</h4>
+
+<p>まずはヘルパーとしてPUBLICPを定義しよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> publicp<span class="paren2">(<span class="code">article</span>)</span>
+  <span class="paren2">(<span class="code">local-time:timestamp&lt;
+    <span class="paren3">(<span class="code">date-released-of article</span>)</span>
+    <span class="paren3">(<span class="code">local-time:now</span>)</span>
+    <span class="paren3">(<span class="code">date-expired-of article</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/shared/sidebar.html</h4>
+
+<p>サイドバーのテンプレートを以下のように修正。</p>
+
+<pre><code>        {% for a in news %}
+        &lt;li&gt;&lt;a href="/articles/{{a.id}}"&gt;{{a.title}}&lt;/a&gt;&lt;/li&gt;
+        {% endfor %}</code></pre>
+
+<p><img src="../img/caveman/sidebar-news.png" alt="Screen shot of side bar." /></p>
+
+<h3>INDEX of articles</h3>
+
+<h4>helper ARTICLES</h4>
+
+<p>スコープに合わせた記事リストを得るためのヘルパーを定義する。</p>
+
+<p>そのための下請けとして、まずはデータベースにおける時刻の表示フォーマットを得る関数を定義。
+このようなヘルパーは本来sxqlが担うべきではなかろうか。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> format-to-date<span class="paren2">(<span class="code">&amp;optional<span class="paren3">(<span class="code">time<span class="paren4">(<span class="code">local-time:now</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">local-time:format-timestring nil time <span class="keyword">:format</span> '<span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="keyword">:year</span> 4</span>)</span><span class="string">"-"</span><span class="paren4">(<span class="code"><span class="keyword">:month</span> 2</span>)</span><span class="string">"-"</span><span class="paren4">(<span class="code"><span class="keyword">:day</span> 2</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>直接必要なヘルパーは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> articles<span class="paren2">(<span class="code">n &amp;key <span class="paren3">(<span class="code">logged-in-p<span class="paren4">(<span class="code">hermetic:logged-in-p</span>)</span></span>)</span>
+                  <span class="paren3">(<span class="code">user<span class="paren4">(<span class="code">and logged-in-p <span class="paren5">(<span class="code">current-user</span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> logged-in-p
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">your-app.model::administrator-of user</span>)</span>
+      <span class="paren4">(<span class="code">mito:select-dao 'your-app.model::article
+                       <span class="paren5">(<span class="code">sxql:order-by<span class="paren6">(<span class="code"><span class="keyword">:desc</span> <span class="keyword">:date-released</span></span>)</span></span>)</span><span class="paren5">(<span class="code">sxql:limit n</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">now<span class="paren1">(<span class="code">your-app.web::format-to-date</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">mito:select-dao 'your-app.model::article
+                         <span class="paren6">(<span class="code">sxql:where <span class="paren1">(<span class="code"><span class="keyword">:and</span> <span class="paren2">(<span class="code"><span class="keyword">:&lt;</span> <span class="keyword">:date-released</span> now</span>)</span>
+                                           <span class="paren2">(<span class="code"><span class="keyword">:&lt;</span> now <span class="keyword">:date-expired</span></span>)</span></span>)</span></span>)</span>
+                         <span class="paren6">(<span class="code">sxql:order-by<span class="paren1">(<span class="code"><span class="keyword">:desc</span> <span class="keyword">:date-released</span></span>)</span></span>)</span>
+                         <span class="paren6">(<span class="code">sxql:limit n</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">now<span class="paren6">(<span class="code">your-app.web::format-to-date</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">mito:select-dao 'your-app.model::article
+                       <span class="paren5">(<span class="code">sxql:where <span class="paren6">(<span class="code"><span class="keyword">:and</span> <span class="paren1">(<span class="code"><span class="keyword">:&lt;</span> <span class="keyword">:date-released</span> now</span>)</span>
+                                         <span class="paren1">(<span class="code"><span class="keyword">:&lt;</span> now <span class="keyword">:date-expired</span></span>)</span>
+                                         <span class="paren1">(<span class="code"><span class="keyword">:=</span> <span class="keyword">:only-member</span> your-app.model::+false+</span>)</span></span>)</span></span>)</span>
+                       <span class="paren5">(<span class="code">sxql:order-by<span class="paren6">(<span class="code"><span class="keyword">:desc</span> <span class="keyword">:date-released</span></span>)</span></span>)</span>
+                       <span class="paren5">(<span class="code">sxql:limit n</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>index of articles</h4>
+
+<p>indexアクションを以下のように修正。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/articles"</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"articles/index.html"</span>
+          `<span class="paren3">(<span class="code"><span class="keyword">:user</span> ,<span class="paren4">(<span class="code">current-user</span>)</span>
+                  <span class="keyword">:news</span> ,<span class="paren4">(<span class="code">articles 5</span>)</span>
+                  <span class="keyword">:blogs</span> <span class="paren4">(<span class="code">1 2 3 4 5</span>)</span>
+                  <span class="keyword">:token</span> ,<span class="paren4">(<span class="code">token</span>)</span>
+                  <span class="keyword">:articles</span> ,<span class="paren4">(<span class="code">hermetic:auth<span class="paren5">(<span class="code"><span class="keyword">:administrator</span></span>)</span>
+                               <span class="paren5">(<span class="code">mito:retrieve-dao 'your-app.model::article</span>)</span>
+                               <span class="paren5">(<span class="code">articles 5</span>)</span></span>)</span>
+                  ,@<span class="paren4">(<span class="code">roles</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>SHOW of articles.</h4>
+
+<p>showアクションを以下のように修正。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/articles/:id"</span><span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">null<span class="paren4">(<span class="code">ignore-errors<span class="paren5">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">myway.mapper:next-route</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">article<span class="paren6">(<span class="code">mito:find-dao 'your-app.model::article <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i><span class="paren5">(<span class="code">find <span class="keyword">:administrator</span> <span class="paren6">(<span class="code">hermetic:roles</span>)</span></span>)</span>
+        #0=<span class="paren5">(<span class="code">render <span class="string">"articles/show.html"</span> `<span class="paren6">(<span class="code"><span class="keyword">:article</span> ,article
+                                                   ,@<span class="paren1">(<span class="code">roles</span>)</span>
+                                                   <span class="keyword">:token</span> ,<span class="paren1">(<span class="code">token</span>)</span>
+                                                   <span class="keyword">:user</span> ,<span class="paren1">(<span class="code">current-user</span>)</span>
+                                                   <span class="keyword">:news</span> ,<span class="paren1">(<span class="code">articles 5</span>)</span>
+                                                   <span class="keyword">:blogs</span> <span class="paren1">(<span class="code">1 2 3 4 5</span>)</span>
+                                                   </span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">your-app.model::publicp article</span>)</span>
+          #0#
+          '<span class="paren6">(<span class="code">401<span class="paren1">(<span class="code"></span>)</span><span class="paren1">(<span class="code"><span class="string">"No articles"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>Top controller</h4>
+
+<p>トップページも以下のように修正。</p>
+
+<pre><code>(defroute "/" ()
+  "Top page"
+  (let((articles(articles 5)))
+    (render #P"index.html" `(:notice ,(flash-gethash :notice ningle:*session*)
+                                     :user,(when(hermetic:logged-in-p)
+                                             (current-user))
+                                     ,@(roles)
+                                     :token ,(token)
+                                     :alert ,(flash-gethash :alert ningle:*session*)
+                                     :news ,articles
+                                     :blogs (1 2 3 4 5)
+                                     :articles ,articles
+                                     ))))</code></pre>
+
+<h4>templates/index.html</h4>
+
+<pre><code>{% block content %}
+
+{% for article in articles %}
+&lt;h2&gt;{{article.title}}&lt;/h2&gt;
+&lt;p&gt;
+{{ article.body | truncatechars:80 }}
+&lt;a href="/article/{{article.id}}"&gt;More&lt;/a&gt;
+&lt;/p&gt;
+{% endfor %}
+
+{% endblock %}</code></pre>
+
+<h4>Validation</h4>
+
+<p>バリデーションを以下のように追加。</p>
+
+<pre><code><span class="code">     <span class="paren1">(<span class="code">date-expired <span class="paren2">(<span class="code"><span class="keyword">:key</span> #'local-time:parse-timestring</span>)</span>
+                   <span class="paren2">(<span class="code"><span class="keyword">:assert</span> <span class="paren3">(<span class="code">local-time:timestamp&lt; <span class="paren4">(<span class="code">date-released-of article</span>)</span> date-expired</span>)</span> <span class="string">"Date expired too old"</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>9.4 pagenation</h2>
+
+<p>TODO</p>
+
+<h2>Summary</h2>
+
+<ul>
+<li>コマンドが総称関数なら補助メソッド拡張が行える場合があります。</li>
+<li>モデルのスコープとは、レコードの検索の仕方を名付けた概念です。必要に応じて関数定義します。</li>
+<li>WITH-CHECK-VALIDATEマクロは我ながら柔軟な作りになってると思います。</li>
+<li>ページネーション機能はありません。</li>
+</ul>
+
+<!-- {% endraw %} -->
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
