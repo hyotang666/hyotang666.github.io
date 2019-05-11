@@ -1,0 +1,606 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>caveman.10
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><!-- {% raw %} -->
+
+<h1>Caveman kills ruby on rails - Chapter 10</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Cavemanでネストしたルーティングを設計したいCLer</li>
+<li>MitoでRelationshipを表したいCLer</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p>本稿は<a href="https://book.impress.co.jp/books/1117101135" >原著</a>の各章をCommon Lispに翻訳するシリーズの第10章である。
+本章では１対多となるモデル間の関連付けを通して、ネストしたルーティングを設計していく。</p>
+
+<h2>10.1 relationship</h2>
+
+<p>Cavemanに、特別、そのような機能はない。
+地道にシコシコと実装するしかない。</p>
+
+<h2>10.2 Prepare model.</h2>
+
+<h3>Relationship</h3>
+
+<h4>Model ENTRY</h4>
+
+<p>まずはentryモデルを定義しよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> entry<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">user <span class="keyword">:col-type</span> user <span class="keyword">:initarg</span> <span class="keyword">:user</span> <span class="keyword">:accessor</span> author-of</span>)</span>
+   <span class="paren3">(<span class="code">title <span class="keyword">:col-type</span> <span class="paren4">(<span class="code"><span class="keyword">:varchar</span> 200</span>)</span> <span class="keyword">:initarg</span> <span class="keyword">:title</span> <span class="keyword">:accessor</span> title-of</span>)</span>
+   <span class="paren3">(<span class="code">body <span class="keyword">:col-type</span> <span class="paren4">(<span class="code">or <span class="keyword">:null</span> <span class="keyword">:text</span></span>)</span> <span class="keyword">:initarg</span> <span class="keyword">:body</span> <span class="keyword">:accessor</span> body-of</span>)</span>
+   <span class="paren3">(<span class="code">date-posted <span class="keyword">:col-type</span> <span class="keyword">:date</span> <span class="keyword">:initarg</span> <span class="keyword">:date-posted</span> <span class="keyword">:accessor</span> date-posted-of</span>)</span>
+   <span class="paren3">(<span class="code">status <span class="keyword">:col-type</span> <span class="paren4">(<span class="code"><span class="keyword">:varchar</span> 16</span>)</span> <span class="keyword">:initarg</span> <span class="keyword">:satatus</span> <span class="keyword">:initform</span> <span class="string">"draft"</span></span>)</span>
+   </span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> mito:dao-table-class</span>)</span></span>)</span></span></code></pre>
+
+<p>ここで注意しなければならない厄介な点を一つ。
+MITOでRelationshipをどう指定するか、である。</p>
+
+<p>本家ドキュメントREADMEには以下のような例が載っている。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">mito:deftable</span></i> tweet <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">status <span class="keyword">:col-type</span> <span class="keyword">:text</span></span>)</span>
+   <span class="comment">;; This slot refers to USER class
+</span>   <span class="paren3">(<span class="code">user-id <span class="keyword">:references</span> <span class="paren4">(<span class="code">user id</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>このコードは動かない。
+その理由が、例ではmysqlをデータベースに使っているが筆者はsqlite3を使っているため、なのか、ドキュメントが間違っているため、なのか、実装が間違っているため、なのか、どれかは調査不足でわからない。</p>
+
+<p>このエラーを避けるためには:referencesの指定をするときは同時に:col-typeも指定してあげれば良いのだが、idをどのような型で表すのかはデータベース依存なので可搬性を考えればできれば避けたい。</p>
+
+<p>もう一つの方法は<code>ENTRY</code>での例のように:COL-TYPEに型名を指定する方法である。
+このやり方を採用した場合、MITOが暗黙理にuser-idというスロットを追加してくれる。
+また、指定したアクセサ（ここでは<code>AUTHOR-OF</code>）で<code>USER</code>スロットにアクセスすると、いい具合に<code>USER</code>オブジェクトを取ってきてくれる。
+<a href="https://lispcookbook.github.io/cl-cookbook/databases.html#one-to-many-many-to-one" >cookbool</a>ではこちらのやり方しか紹介されていない。</p>
+
+<p>問題はDJULAと連携するときだ。
+<code>{{entry.user}}</code>のような形で表したいのだが、それは叶わない。
+なぜなら<code>AUTHOR-OF</code>アクセサでアクセスしない限り<code>USER</code>スロットは未束縛のままだからだ。
+そのような必要にかられたなら、アクセサ名をスロット名と同名にし、YOUR-APP.DJULAパッケージにスロット名をIMPORTしておけばよい。
+<code>ACCESS:ACEESS</code>はスロット名としてより関数名としての名前を優先するのを利用するわけだ。
+だいぶハッキーなアプローチだが、railsのような一枚岩のフレームワークではなく、独立したライブラリの組み合わせで事がなされている以上、連携に歪みはつきもので、そういうものとして受け入れるよりほかない。</p>
+
+<p>また、<code>USER</code>というスロットは作られるが、これはデータベースには登録されない。
+データベースに登録されるのは暗黙理に作られる<code>USER-ID</code>の方だ。
+この点が問題になるのはクエリを発行するときだ。
+<code>(:= user :user)</code>みたいな形でクエリが書ければよいのだが、そのようなことはない。
+<code>(:= user-id :user-id)</code>としなくてはいけない。
+データベースに<code>USER-ID</code>が登録される点が隠蔽されているのに、である。
+しかも、このスロットは暗黙理に作られる隠蔽されたスロットなのでアクセサなどもない。
+直接覗きたい場合は<code>CL:SLOT-VALUE</code>で覗くしかない。
+幸いスロット名（ここではuser-id）はカレントパッケージにインターンされるようなので、わかっていれば苦労することは少なかろう。
+問題は隠蔽されているものを隠蔽されていると知らないとうまく使えないことにある。</p>
+
+<h4>Dependent: :destroy</h4>
+
+<p>railsにおける<code>Dependent: :destroy</code>のような関係性の指定はできない。
+自分で実装するしかない。
+ここでは<code>USER</code>がDELETEされるときに、彼のENTRYもすべてDELETEされるように実装する。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> mito:delete-dao <span class="keyword">:before</span><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">user user</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">mito:delete-by-values 'entry <span class="keyword">:user-id</span> <span class="paren3">(<span class="code">mito:object-id user</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>Validation.</h4>
+
+<p>バリデーションの定義は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> validate-entry<span class="paren2">(<span class="code">entry &amp;rest target-slots</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-check-validate</span></i><span class="paren3">(<span class="code">entry target-slots</span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">title <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+            <span class="paren5">(<span class="code"><span class="keyword">:type</span> string</span>)</span>
+            <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">&lt;= 1 <span class="paren1">(<span class="code">length title</span>)</span> 200</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">body <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">date-posted <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+                  <span class="paren5">(<span class="code"><span class="keyword">:key</span> #'local-time:parse-timestring</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">status <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span>
+             <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">find status '<span class="paren1">(<span class="code"><span class="string">"draft"</span> <span class="string">"member-only"</span> <span class="string">"public"</span></span>)</span><span class="keyword">:test</span> #'equal</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>Scope.</h4>
+
+<p>スコープを簡単に指定できる方法などない。
+ここではARTICLEの場合と同様ヘルパー関数を定義する。</p>
+
+<p>複雑な条件分岐は<a href="https://github.com/guicho271828/trivia" >trivia</a>があると便利だ。
+事前にASDに追加しておくこと。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> entries<span class="paren2">(<span class="code">&amp;key <span class="paren3">(<span class="code">logged-in-p <span class="paren4">(<span class="code">hermetic:logged-in-p</span>)</span></span>)</span>
+                    <span class="paren3">(<span class="code">user <span class="paren4">(<span class="code">and logged-in-p <span class="paren5">(<span class="code">current-user</span>)</span></span>)</span></span>)</span>
+                    author limit</span>)</span>
+  <span class="paren2">(<span class="code">mito:select-dao 'your-app.model::entry
+                   <span class="paren3">(<span class="code">sxql:where <span class="paren4">(<span class="code">trivia:match*<span class="paren5">(<span class="code">logged-in-p author</span>)</span>
+                                 <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">nil nil</span>)</span>`<span class="paren6">(<span class="code"><span class="keyword">:=</span> <span class="string">"public"</span> <span class="keyword">:status</span></span>)</span></span>)</span>
+                                 <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">nil _</span>)</span> `<span class="paren6">(<span class="code"><span class="keyword">:and</span> <span class="paren1">(<span class="code"><span class="keyword">:=</span> ,<span class="paren2">(<span class="code">mito:object-id author</span>)</span> <span class="keyword">:user-id</span></span>)</span>
+                                                 <span class="paren1">(<span class="code"><span class="keyword">:=</span> <span class="string">"public"</span> <span class="keyword">:status</span></span>)</span></span>)</span></span>)</span>
+                                 <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">_ nil</span>)</span>`<span class="paren6">(<span class="code"><span class="keyword">:or</span> <span class="paren1">(<span class="code"><span class="keyword">:=</span> <span class="string">"public"</span> <span class="keyword">:status</span></span>)</span>
+                                               <span class="paren1">(<span class="code"><span class="keyword">:=</span> <span class="string">"member-only"</span> <span class="keyword">:status</span></span>)</span>
+                                               <span class="paren1">(<span class="code"><span class="keyword">:and</span> <span class="paren2">(<span class="code"><span class="keyword">:=</span> <span class="string">"draft"</span> <span class="keyword">:stats</span></span>)</span>
+                                                     <span class="paren2">(<span class="code"><span class="keyword">:=</span> ,<span class="paren3">(<span class="code">mito:object-id user</span>)</span> <span class="keyword">:user-id</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                                 <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">_ _</span>)</span>
+                                  <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">mito:object= user author</span>)</span>
+                                    `<span class="paren1">(<span class="code"><span class="keyword">:=</span> ,<span class="paren2">(<span class="code">mito:object-id user</span>)</span> <span class="keyword">:user-id</span></span>)</span>
+                                    `<span class="paren1">(<span class="code"><span class="keyword">:and</span> <span class="paren2">(<span class="code"><span class="keyword">:=</span> ,<span class="paren3">(<span class="code">mito:object-id author</span>)</span> <span class="keyword">:user-id</span></span>)</span>
+                                           <span class="paren2">(<span class="code"><span class="keyword">:or</span> <span class="paren3">(<span class="code"><span class="keyword">:=</span> <span class="string">"public"</span> <span class="keyword">:status</span></span>)</span>
+                                                <span class="paren3">(<span class="code"><span class="keyword">:=</span> <span class="string">"member-only"</span> <span class="keyword">:status</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                   <span class="paren3">(<span class="code">sxql:order-by <span class="paren4">(<span class="code"><span class="keyword">:desc</span> <span class="keyword">:date-posted</span></span>)</span></span>)</span>
+                   <span class="paren3">(<span class="code">when limit
+                     <span class="paren4">(<span class="code">sxql:limit limit</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>Seeds.</h4>
+
+<p>シードデータは以下の通り。
+ARTICLEを定義する際のLETのスコープ内に潜り込ませて、BODYとNOWを再利用しよう。</p>
+
+<pre><code><span class="code">        <span class="paren1">(<span class="code">dolist<span class="paren2">(<span class="code">name '<span class="paren3">(<span class="code"><span class="string">"Jiro"</span> <span class="string">"Taro"</span> <span class="string">"Hana"</span></span>)</span></span>)</span>
+          <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">user<span class="paren5">(<span class="code">mito:find-dao 'user <span class="keyword">:name</span> name</span>)</span></span>)</span></span>)</span>
+            <span class="paren3">(<span class="code">when user
+              <span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10</span>)</span>
+                <span class="paren5">(<span class="code">mito:create-dao 'entry
+                                 <span class="keyword">:user</span> user
+                                 <span class="keyword">:title</span> <span class="paren6">(<span class="code">format nil <span class="string">"Title~D"</span> x</span>)</span>
+                                 <span class="keyword">:body</span> body
+                                 <span class="keyword">:date-posted</span> <span class="paren6">(<span class="code">local-time:timestamp- now <span class="paren1">(<span class="code">- 10 x</span>)</span> <span class="keyword">:day</span></span>)</span>
+                                 <span class="keyword">:status</span> <span class="paren6">(<span class="code">nth <span class="paren1">(<span class="code">rem x 3</span>)</span>'<span class="paren1">(<span class="code"><span class="string">"draft"</span> <span class="string">"member-only"</span> <span class="string">"public"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>)</span></code></pre>
+
+<h4>Migrate.</h4>
+
+<p><code>MITO:ENSURE-TABLE-EXISTS</code>を以下のように修正。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">with-connection</span></i><span class="paren2">(<span class="code">db</span>)</span>
+  <span class="paren2">(<span class="code">mapc #'mito:ensure-table-exists '<span class="paren3">(<span class="code">user article entry</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>Rebuild.</h4>
+
+<p>同様にREBUILDも以下のように修正。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> rebuild<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-connection</span></i><span class="paren3">(<span class="code">db</span>)</span>
+    <span class="paren3">(<span class="code">mapc #'mito:recreate-table '<span class="paren4">(<span class="code">user article entry</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">seeds</span>)</span></span>)</span></span></code></pre>
+
+<p>REPLでREBUILDを叩いておくこと。</p>
+
+<h2>Implement blog.</h2>
+
+<h3>Nested resource</h3>
+
+<p>指定一つでいい具合になってくれたりはしない。
+自前で定義していく。</p>
+
+<h4>routing</h4>
+
+<p>ネステッドルーティングの場合は名前付きルーティング（ここでは<code>ENTRIES-INDEX</code>）へのディスパッチャとして実装する。
+引数<code>ID</code>を拡張しながら呼ぶ点要注目。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/user/:id/entries"</span><span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code">entries-index <span class="paren3">(<span class="code">acons <span class="string">"ID"</span> id <span class="paren4">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>index</h4>
+
+<p>名前付きindexは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> entries-index <span class="string">"/entries"</span> <span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">author<span class="paren5">(<span class="code">when id
+                <span class="paren6">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">render <span class="string">"entries/index.html"</span> `<span class="paren4">(<span class="code"><span class="keyword">:member</span> ,author
+                                           <span class="keyword">:user</span> ,<span class="paren5">(<span class="code">current-user</span>)</span>
+                                           <span class="keyword">:news</span> ,<span class="paren5">(<span class="code">articles 5</span>)</span>
+                                           <span class="keyword">:blogs</span> <span class="paren5">(<span class="code">1 2 3 4 5</span>)</span>
+                                           <span class="keyword">:entries</span> ,<span class="paren5">(<span class="code">entries <span class="keyword">:author</span> author</span>)</span>
+                                           ,@<span class="paren5">(<span class="code">roles</span>)</span>
+                                           <span class="keyword">:token</span> ,<span class="paren5">(<span class="code">token</span>)</span>
+                                           </span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>templates/entries/index.html</h3>
+
+<p>テンプレートは以下の通り。</p>
+
+<pre><code><span class="code">{% extends "layouts/app.html" %}
+
+{% block title %}
+{% if member %}
+{{ member.name | lisp: (lambda(name)(title! (format nil "~A San's blog" name))) }}
+{% else %}
+{% lisp (title! "Member blog") %}
+{% endif %}
+{% endblock %}
+
+{% block content %}
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
+{% if user %}
+&lt;div class="toolbar"&gt;
+        &lt;a href="/entries/new"&gt;Write blog&lt;/a&gt;
+&lt;/div&gt;
+{% endif %}
+
+{% if entries %}
+{% for entry in entries %}
+&lt;h2&gt;{{entry.title}}&lt;/h2&gt;
+&lt;p&gt;{{ entry.body
+    | truncatechars: 80
+    }}
+&lt;/p&gt;
+&lt;a href="/entries/{{entry.id}}"&gt;More&lt;/a&gt;
+{% include "entries/footer.html" %}
+{% endfor %}
+{% else %}
+&lt;p&gt;No entries&lt;/p&gt;
+{% endif %}
+
+{% endblock %}</span></code></pre>
+
+<h3>templates/entries/footer.html</h3>
+
+<p>部分テンプレート実装にあたり、前述のDJULAとの連携における不都合が顔を出してきた。
+ここではアクセサ名を変えるのではなくリーダの追加で対処しよう。</p>
+
+<p>モデルの該当部分を以下のように変更する。</p>
+
+<pre><code><span class="code">  <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">user <span class="keyword">:col-type</span> user <span class="keyword">:initarg</span> <span class="keyword">:user</span> <span class="keyword">:accessor</span> author-of <span class="keyword">:reader</span> author</span>)</span></span></span></span></code></pre>
+
+<p>これで部分テンプレートは以下のようにできる。</p>
+
+<pre><code><span class="code">&lt;ul class="entry-footer"&gt;
+        {% if user %}
+        &lt;li&gt;{{entry.status}}&lt;/li&gt;
+        {% ifequal user.id member.id %}
+        &lt;a href="/entries/{{entry.id}}/edit"&gt;Edit&lt;/a&gt;
+        &lt;form action="/entries/{{entry.id}}" method="post"&gt;
+                &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}"&gt;
+                &lt;input type="hidden" name="METHOD" value="delete"&gt;
+                &lt;input type="submit" value="Delete"&gt;
+        &lt;/form&gt;
+        {% endifequal %}
+        {% endif %}
+        &lt;li&gt;
+                by &lt;a href="/user/{{entry.user-id}}/entries"&gt;
+                        {{entry.author.name}}
+                &lt;/a&gt;
+        &lt;/li&gt;
+        &lt;li&gt;{{ entry.date-posted
+             | date: ((:year 4)"/"(:month 2)"/"(:day 2)" "(:hour 2)":"(:min 2))
+             }}
+        &lt;/li&gt;
+&lt;/ul&gt;</span></code></pre>
+
+<h4>templates/shared/header.html</h4>
+
+<p>リンクを貼るように修正。</p>
+
+<pre><code>                &lt;li&gt;&lt;a href="/entries"&gt;Blog&lt;/a&gt;&lt;/li&gt;</code></pre>
+
+<p><img src="../img/caveman/entries-index.png" alt="Screen shot of entries index" /></p>
+
+<p>Hanaさんの記事一覧。</p>
+
+<p><img src="../img/caveman/user-entries-index.png" alt="Screen shot of entries index" /></p>
+
+<p>ログイン後。</p>
+
+<p><img src="../img/caveman/user-entries-index-logged-in.png" alt="Screen shot of entries index" /></p>
+
+<h4>SHOW</h4>
+
+<p>ルーティングは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> show-entry <span class="string">"/entries/:id"</span><span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">null<span class="paren4">(<span class="code">ignore-errors<span class="paren5">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">myway:next-route</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">entry<span class="paren6">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> id</span>)</span></span>)</span>
+         <span class="paren5">(<span class="code">entries<span class="paren6">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">render <span class="string">"entries/show.html"</span> `<span class="paren5">(<span class="code">,@<span class="paren6">(<span class="code">roles</span>)</span>
+                                     <span class="keyword">:entry</span> ,entry
+                                     <span class="keyword">:token</span> ,<span class="paren6">(<span class="code">token</span>)</span>
+                                     <span class="keyword">:user</span> ,<span class="paren6">(<span class="code">current-user</span>)</span>
+                                     <span class="keyword">:entries</span> ,entries
+                                     <span class="keyword">:blog</span> <span class="paren6">(<span class="code">1 2 3 4 5</span>)</span>
+                                     <span class="keyword">:news</span> ,<span class="paren6">(<span class="code">articles 5</span>)</span>
+                                     <span class="keyword">:member</span> ,<span class="paren6">(<span class="code">your-app.model::author-of entry</span>)</span>
+                                     </span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/entries/show.html</h4>
+
+<p>テンプレートは以下の通り。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+
+{% block title %}
+{{ entry
+ | lisp: (lambda(entry)
+           (title! (format nil "~A - ~A San's blog"
+                           (your-app.model::title-of entry)
+                           (your-app.model::name-of (your-app.model::author-of entry)))))
+ }}
+{% endblock %}
+
+{% block content %}
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
+&lt;h2&gt;{{entry.title}}&lt;/h2&gt;
+{{ entry.body | simple-format | safe }}
+{% include "entries/footer.html" %}
+{% endblock %}</code></pre>
+
+<h3>Sidebar</h3>
+
+<h4>templates/shared/sidebar.html</h4>
+
+<p>テンプレートを以下のように修正。</p>
+
+<pre><code>&lt;ul&gt;
+        {% for entry in blogs %}
+        &lt;li&gt;
+                &lt;a href="/entries/{{entry.id}}"&gt;{{entry.title}}&lt;/a&gt;
+                by &lt;a href="/user/{{entry.user-id}}/entries"&gt;{{entry.author.name}}&lt;/a&gt;
+        &lt;/li&gt;
+        {% endfor %}
+&lt;/ul&gt;</code></pre>
+
+<p><img src="../img/caveman/entries-sidebar.png" alt="Screen shot of sidebar" /></p>
+
+<h3>Create, update and delete</h3>
+
+<h4>new</h4>
+
+<p>ルーティングは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/entries/new"</span><span class="paren2">(<span class="code">&amp;key</span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"entries/new.html"</span> `<span class="paren3">(<span class="code">,@<span class="paren4">(<span class="code">roles</span>)</span>
+                                <span class="keyword">:token</span> ,<span class="paren4">(<span class="code">token</span>)</span>
+                                <span class="keyword">:entry</span> ,<span class="paren4">(<span class="code">make-instance 'your-app.model::entry</span>)</span>
+                                <span class="keyword">:user</span> ,<span class="paren4">(<span class="code">current-user</span>)</span>
+                                <span class="keyword">:blogs</span> ,<span class="paren4">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span>
+                                <span class="keyword">:news</span> ,<span class="paren4">(<span class="code">articles 5</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/entries/new.html</h4>
+
+<p>テンプレートは以下の通り。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+
+{% block title %}
+{% lisp (title! "Write new blog") %}
+{% endblock %}
+
+{% block content %}
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
+
+&lt;form class="new-entry" id="new-entry" action="/entries" method="post"&gt;
+        &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}"&gt;
+        &lt;input type="hidden" name="METHOD" value="put"&gt;
+        {% include "entries/form.html" %}
+        &lt;div&gt;&lt;input type="submit" value="Submit"&gt;&lt;/div&gt;
+&lt;/form&gt;
+{% endblock %}</code></pre>
+
+<h4>edit</h4>
+
+<p>ルーティングは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/entries/:id/edit"</span><span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">null<span class="paren4">(<span class="code">ignore-errors<span class="paren5">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">myway:next-route</span>)</span>
+    <span class="paren3">(<span class="code">render <span class="string">"entries/edit.html"</span> `<span class="paren4">(<span class="code">,@<span class="paren5">(<span class="code">roles</span>)</span>
+                                   <span class="keyword">:entry</span> ,<span class="paren5">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> id</span>)</span>
+                                   <span class="keyword">:user</span> ,<span class="paren5">(<span class="code">current-user</span>)</span>
+                                   <span class="keyword">:blogs</span> ,<span class="paren5">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span>
+                                   <span class="keyword">:news</span> ,<span class="paren5">(<span class="code">articles 5</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/entries/edit.html</h4>
+
+<p>テンプレートは以下の通り。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+
+{% block title %}
+{% lisp (title! "Edit blog") %}
+{% endblock %}
+
+{% block content %}
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
+
+&lt;form class="edit-entry" id="edit-entry" action="/entries/{{entry.id}}" method="post"&gt;
+        &lt;input type="hidden" name="ANTHENTICITY-TOKEN" value="{{token}}"&gt;
+        &lt;input type="hidden" name="METHOD" value="put"&gt;
+        {% include "entries/form.html" %}
+        &lt;div&gt;&lt;input type="submit" value="Submit"&gt;&lt;/div&gt;
+&lt;/form&gt;
+{% endblock %}</code></pre>
+
+<h4>templates/entries/form.html</h4>
+
+<p>部分テンプレートは以下の通り。</p>
+
+<pre><code>{% include "shared/errors.html" %}
+
+&lt;table class="attr"&gt;
+        &lt;tr&gt;
+                &lt;th width="80"&gt;&lt;label for="title"&gt;Title&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input type="text" name="TITLE" id="title" size="50" value="{{entry.title}}"/&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="body"&gt;Body&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;textarea name="BODY" id="body" rows="10" cols="45"&gt;{{entry.body}}&lt;/textarea&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="posted-at"&gt;Date&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;
+                        &lt;select id="posted-year" name="POSTED-YEAR"&gt;
+                                {{ entry.date-posted
+                                 | lisp: (lambda(timestamp)
+                                           (let((year(local-time:timestamp-year(local-time:now))))
+                                             (date-options :start 2000 :end (1+ year)
+                                                           :target (local-time:timestamp-year timestamp))))
+                                 | safe
+                                 }}
+                        &lt;/select&gt;
+                        &lt;select id="posted-month" name="POSTED-MONTH"&gt;
+                                {{ entry.date-posted
+                                 | lisp: (lambda(timestamp)
+                                           (date-options :start 1 :end 12
+                                                         :target (local-time:timestamp-month timestamp)))
+                                 | safe }}
+                        &lt;/select&gt;
+                        &lt;select id="posted-day" name="POSTED-DAY"&gt;
+                                {{ entry.date-posted
+                                 | lisp: (lambda(timestamp)
+                                           (date-options :start 1 :end 31
+                                                         :target (local-time:timestamp-day timestamp)))
+                                 | safe }}
+                        &lt;/select&gt;
+                        -
+                        &lt;select id="posted-hour" name="POSTED-HOUR"&gt;
+                                {{ entry.date-posted
+                                 | lisp: (lambda(timestamp)
+                                           (date-options :end 59 :target (local-time:timestamp-hour timestamp)))
+                                 | safe }}
+                        &lt;/select&gt;
+                        &lt;select id="posted-min" name="POSTED-MIN"&gt;
+                                {{ entry.date-posted
+                                 | lisp: (lambda(timestamp)
+                                           (date-options :end 59 :target (local-time:timestamp-minute timestamp)))
+                                 | safe }}
+                        &lt;/select&gt;
+                &lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="status"&gt;Status&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;select id="status" name="STATUS"&gt;
+                                &lt;option value="draft" selected&gt;Draft&lt;/option&gt;
+                                &lt;option value="member-only"&gt;Member only&lt;/option&gt;
+                                &lt;option value="public"&gt;Public&lt;/option&gt;
+                        &lt;/select&gt;
+                &lt;/td&gt;
+        &lt;/tr&gt;
+&lt;/table&gt;</code></pre>
+
+<h4>Create</h4>
+
+<p>ディスパッチャは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/entries"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key method</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">string= <span class="string">"put"</span> method</span>)</span>
+     <span class="paren4">(<span class="code">create-entry<span class="paren5">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">t `<span class="paren4">(<span class="code">401 <span class="paren5">(<span class="code"></span>)</span><span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">format nil <span class="string">"Unknown method ~S"</span> method</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>名前付きルーティングを実装するにあたり、引数の正規化を行えるように<code>CL:INITIALIZE-INSTANCE</code>に:AROUNDメソッドを追加しておこう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> initialize-instance <span class="keyword">:around</span><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o entry</span>)</span>&amp;rest args &amp;key posted-year posted-month posted-day posted-hour
+                                                      posted-min date-posted &amp;allow-other-keys</span>)</span>
+  <span class="paren2">(<span class="code">apply #'call-next-method o
+         `<span class="paren3">(<span class="code">,@<span class="paren4">(<span class="code">when <span class="paren5">(<span class="code">and <span class="paren6">(<span class="code">null date-posted</span>)</span>
+                        posted-year</span>)</span>
+               `<span class="paren5">(<span class="code"><span class="keyword">:date-posted</span> ,<span class="paren6">(<span class="code">format nil <span class="string">"~A-~A-~AT~A:~A:00"</span> posted-year posted-month posted-day posted-hour
+                                       posted-min</span>)</span></span>)</span></span>)</span>
+            ,@args</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで名前付きルーティングを以下のようにできる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> create-entry<span class="paren2">(<span class="code"><span class="string">"/entries"</span> <span class="keyword">:method</span> <span class="keyword">:put</span></span>)</span><span class="paren2">(<span class="code">&amp;key authenticity-token</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= authenticity-token <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">401 <span class="paren4">(<span class="code"></span>)</span><span class="paren4">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">multiple-value-bind<span class="paren4">(<span class="code">entry errors</span>)</span><span class="paren4">(<span class="code">your-app.model::validate-entry
+                                        <span class="paren5">(<span class="code">apply #'make-instance 'your-app.model::entry
+                                               <span class="keyword">:user</span> <span class="paren6">(<span class="code">current-user</span>)</span>
+                                               <span class="paren6">(<span class="code">request-params <span class="paren1">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i> errors
+        <span class="paren5">(<span class="code">render <span class="string">"entries/new.html"</span> `<span class="paren6">(<span class="code">,@<span class="paren1">(<span class="code">roles</span>)</span>
+                                      <span class="keyword">:entry</span> ,entry
+                                      <span class="keyword">:token</span> ,<span class="paren1">(<span class="code">token</span>)</span>
+                                      <span class="keyword">:errors</span> ,errors
+                                      <span class="keyword">:user</span> ,<span class="paren1">(<span class="code">current-user</span>)</span>
+                                      <span class="keyword">:blogs</span> ,<span class="paren1">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span>
+                                      <span class="keyword">:news</span> ,<span class="paren1">(<span class="code">articles 5</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren6">(<span class="code">mito:save-dao entry</span>)</span>
+               <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span> <span class="string">"Stored"</span></span>)</span>
+               `<span class="paren6">(<span class="code">303 <span class="paren1">(<span class="code"><span class="keyword">:location</span> ,<span class="paren2">(<span class="code">format nil <span class="string">"/entries/~D"</span><span class="paren3">(<span class="code">mito:object-id entry</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>update</h4>
+
+<p>ディスパッチャは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/entries/:id"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key method id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">string= <span class="string">"post"</span> method</span>)</span>
+     <span class="paren4">(<span class="code">update-entry <span class="paren5">(<span class="code">acons <span class="string">"ID"</span> id <span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">string= <span class="string">"delete"</span> method</span>)</span>
+     <span class="paren4">(<span class="code">destroy-entry <span class="paren5">(<span class="code">acons <span class="string">"ID"</span> id <span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">t `<span class="paren4">(<span class="code">401 <span class="paren5">(<span class="code"></span>)</span> <span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">format nil <span class="string">"Unknown method ~S"</span> method</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>本来のpostメソッドは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> update-entry<span class="paren2">(<span class="code">request</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind<span class="paren3">(<span class="code">&amp;key authenticity-token id title body posted-year posted-month posted-day posted-hour
+                           posted-min &amp;allow-other-keys</span>)</span><span class="paren3">(<span class="code">request-params request</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">not<span class="paren5">(<span class="code">string= authenticity-token<span class="paren6">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+      '<span class="paren4">(<span class="code">401 <span class="paren5">(<span class="code"></span>)</span><span class="paren5">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i><span class="paren5">(<span class="code">null<span class="paren6">(<span class="code">ignore-errors<span class="paren1">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">myway:next-route</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">entry<span class="paren2">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">your-app.model::title-of entry</span>)</span> title
+                <span class="paren1">(<span class="code">your-app.model::body-of entry</span>)</span>body
+                <span class="paren1">(<span class="code">your-app.model::date-posted-of entry</span>)</span><span class="paren1">(<span class="code">format nil <span class="string">"~A-~A-~AT~A:~A:00"</span> posted-year posted-month
+                                                              posted-day posted-hour posted-min</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">multiple-value-bind<span class="paren1">(<span class="code">entry errors</span>)</span><span class="paren1">(<span class="code">your-app.model::validate-entry entry</span>)</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> errors
+              <span class="paren2">(<span class="code">render <span class="string">"entries/edit.html"</span> `<span class="paren3">(<span class="code">,@<span class="paren4">(<span class="code">roles</span>)</span>
+                                             <span class="keyword">:member</span> ,<span class="paren4">(<span class="code">your-app.model::author-of entry</span>)</span>
+                                             <span class="keyword">:user</span> ,<span class="paren4">(<span class="code">current-user</span>)</span>
+                                             <span class="keyword">:token</span> ,<span class="paren4">(<span class="code">token</span>)</span>
+                                             <span class="keyword">:entry</span> ,entry
+                                             <span class="keyword">:news</span> ,<span class="paren4">(<span class="code">articles 5</span>)</span>
+                                             <span class="keyword">:blogs</span> ,<span class="paren4">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span>
+                                             <span class="keyword">:errors</span> ,errors
+                                             </span>)</span></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren3">(<span class="code">mito:save-dao entry</span>)</span>
+                     <span class="paren3">(<span class="code">setf <span class="paren4">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span> <span class="string">"Updated"</span></span>)</span>
+                     `<span class="paren3">(<span class="code">303 <span class="paren4">(<span class="code"><span class="keyword">:location</span> ,<span class="paren5">(<span class="code">format nil <span class="string">"/entries/~D"</span><span class="paren6">(<span class="code">mito:object-id entry</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/caveman/edit-entries.png" alt="Screen shot of edit entry" /></p>
+
+<h4>destroy</h4>
+
+<p>ルーティングは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> destroy-entry<span class="paren2">(<span class="code"><span class="string">"/entries/:id"</span> <span class="keyword">:method</span> <span class="keyword">:delete</span></span>)</span><span class="paren2">(<span class="code">&amp;key authenticity-token id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i><span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">string= authenticity-token <span class="paren5">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+    '<span class="paren3">(<span class="code">401 <span class="paren4">(<span class="code"></span>)</span> <span class="paren4">(<span class="code"><span class="string">"Denied"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">null<span class="paren5">(<span class="code">ignore-errors<span class="paren6">(<span class="code">parse-integer id</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">myway:next-route</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">entry<span class="paren1">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren6">(<span class="code">null entry</span>)</span>
+          `<span class="paren6">(<span class="code">401 <span class="paren1">(<span class="code"></span>)</span><span class="paren1">(<span class="code">,<span class="paren2">(<span class="code">format nil <span class="string">"Entry id ~A is not exist"</span> id</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">mito:delete-dao entry</span>)</span>
+                 <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span> <span class="string">"Deleted"</span></span>)</span>
+                 `<span class="paren1">(<span class="code">303 <span class="paren2">(<span class="code"><span class="keyword">:location</span> ,<span class="paren3">(<span class="code">format nil <span class="string">"/user/~D/entries"</span><span class="paren4">(<span class="code">mito:object-id <span class="paren5">(<span class="code">current-user</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>Summary</h2>
+
+<ul>
+<li>複数のモデルを関連付けるには、外部キーを利用してテーブルのレコードが別のテーブルのレコードを参照するようにします。</li>
+<li>１対多の関連付けるには、参照元のモデルクラスのスロット定義に参照先クラス名を:COL-TYPE指定します。</li>
+<li>ネストしたURIを設計すると、１対多で関連付けられているモデル達をうまくAPIとして表現できます。
+<!-- {% endraw %} --></li>
+</ul>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
