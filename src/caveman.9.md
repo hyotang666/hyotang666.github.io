@@ -193,6 +193,15 @@ Cavemanにsimple_format相当の機能はない。
                "3bmd" ; markdown.
                ...)
 ```
+SIMPLE-FORMATをDJULAのフィルターとして定義。
+
+```lisp
+(djula::def-filter :simple-format(it)
+  (with-output-to-string(s)
+    (3bmd:parse-string-and-print-to-stream
+     (ppcre:regex-replace-all #\newline it "<br>")
+     s)))
+```
 
 #### templates/articles/show.html
 テンプレートは以下の通り。
@@ -215,16 +224,7 @@ Cavemanにsimple_format相当の機能はない。
         </tr>
         <tr>
                 <th>Article</th>
-                <td>
-                        {{ article.body
-                         | lisp: (lambda(string)
-                                   (with-output-to-string(s)
-                                     (3bmd:parse-string-and-print-to-stream 
-                                       (ppcre:regex-replace-all #\newline string "<br>")
-                                       s)))
-                         | safe
-                         }}
-                </td>
+                <td>{{ article.body | simple-format | safe }}</td>
         </tr>
         <tr>
                 <th>Released at</th>

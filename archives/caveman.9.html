@@ -207,6 +207,14 @@
                <span class="string">"3bmd"</span> <span class="comment">; markdown.
 </span>               ...</span>)</span></span></code></pre>
 
+<p>SIMPLE-FORMATをDJULAのフィルターとして定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">djula::def-filter</span></i> <span class="keyword">:simple-format</span><span class="paren2">(<span class="code">it</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-output-to-string</span></i><span class="paren3">(<span class="code">s</span>)</span>
+    <span class="paren3">(<span class="code">3bmd:parse-string-and-print-to-stream
+     <span class="paren4">(<span class="code">ppcre:regex-replace-all <span class="character">#\newline</span> it <span class="string">"&lt;br&gt;"</span></span>)</span>
+     s</span>)</span></span>)</span></span>)</span></span></code></pre>
+
 <h4>templates/articles/show.html</h4>
 
 <p>テンプレートは以下の通り。</p>
@@ -228,16 +236,7 @@
         &lt;/tr&gt;
         &lt;tr&gt;
                 &lt;th&gt;Article&lt;/th&gt;
-                &lt;td&gt;
-                        {{ article.body
-                         | lisp: (lambda(string)
-                                   (with-output-to-string(s)
-                                     (3bmd:parse-string-and-print-to-stream 
-                                       (ppcre:regex-replace-all #\newline string "&lt;br&gt;")
-                                       s)))
-                         | safe
-                         }}
-                &lt;/td&gt;
+                &lt;td&gt;{{ article.body | simple-format | safe }}&lt;/td&gt;
         &lt;/tr&gt;
         &lt;tr&gt;
                 &lt;th&gt;Released at&lt;/th&gt;
