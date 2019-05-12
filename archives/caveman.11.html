@@ -1,0 +1,221 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>caveman.11
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><!-- {% raw %} -->
+
+<h1>Caveman kills ruby on rails - Chapter 11</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Cavemanにおける例外処理を修めたいCLer</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p>本稿は<a href="https://book.impress.co.jp/books/1117101135" >原著</a>の各章をCommon Lispに翻訳するシリーズの第11章である。
+本章ではCavemanにおける例外処理を修めていく。</p>
+
+<h2>Strong parameter</h2>
+
+<p>CavemanではデフォルトでRailsでいうstrong-parameter相当の機能がサポートされている。
+Cavemanはマイクロウェブフレームワークである<a href="https://github.com/fukamachi/ningle" >ningle</a>を拡張する形で作られているライブラリなのだが、このNINGLEのほうはstrong-parameterがサポートされていない。
+Cavemanユーザがこの下層たるNINGLEの仕様に出くわすのは、これまで見てきた通り名前付きpostメソッドを自作する場合に限られるだろう。</p>
+
+<h2>Customizing error page</h2>
+
+<p>CavemanではHTTP status codeをある種の例外として投げられる。
+基本的な使い方は単に<code>CAVEMAN2.EXCEPTION:THROW-CODE</code>にHTTP status codeを整数で渡してあげればいいだけだ。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">throw-code 500</span>)</span></span></code></pre>
+
+<p>クライアントには通常プレーンテクストが:CONTENT-TYPE &ldquo;text/html&rdquo;のボディとして送られるようだ。</p>
+
+<p><img src="../img/caveman/throw-code-500.png" alt="Screen shot of throw-code 500" /></p>
+
+<p>この投げられた例外に特別な処理を施したい場合、通常総称関数<code>CAVEMAN2.APP:ON-EXCEPTION</code>にメソッドを追加することで行うことができる。</p>
+
+<p><code>CAVEMAN2:MAKE-PROJECT</code>でプロジェクトのスケルトンを作っているなら、404へスペシャライズドされたメソッドがもう定義されているはずだ。</p>
+
+<p>デフォルトの404は以下のようなものとなる。</p>
+
+<p><img src="../img/caveman/default-error-page.png" alt="Screen shot of default 404" /></p>
+
+<p><code>THROW-CODE</code>は特別なこだわりがない場合には大変便利なものなのだが、そこから外れると厄介になる。</p>
+
+<p>たとえばstatus-code 405 Method not allowedをサポートしようとした場合などがそうだ。
+405はHTTPの仕様ではヘッダにallowヘッダを追加し、受け入れられるメソッドのリストを追加しなければならない（must）</p>
+
+<p>さて、Cavemanでこれを実現するにはどうするのが正攻法なのか。</p>
+
+<p>まず、これらの例外はCommon Lispのコンディションシステムとして実装されている。
+よって<code>CAVEMAN2:HTTP-EXCEPTION</code>を継承するかたちで独自のコンディションを定義することから始める。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-condition</span></i> method-not-allowed<span class="paren2">(<span class="code">caveman2.exception:http-exception</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">allow <span class="keyword">:initarg</span> <span class="keyword">:allow</span> <span class="keyword">:reader</span> allow</span>)</span>
+   <span class="paren3">(<span class="code">method <span class="keyword">:initarg</span> <span class="keyword">:method</span> <span class="keyword">:reader</span> not-allowed</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>次に定義されたコンディションに特化した<code>CAVEMAN2.APP:ON-EXCEPTION</code>を定義する。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> on-exception<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">app &lt;web&gt;</span>)</span> <span class="paren3">(<span class="code">code method-not-allowed</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">setf <span class="paren3">(<span class="code">getf <span class="paren4">(<span class="code">lack.response:response-headers <span class="special">ningle:*response*</span></span>)</span><span class="keyword">:allow</span></span>)</span><span class="paren3">(<span class="code">allow code</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">format nil <span class="string">"Unknown method ~S"</span><span class="paren3">(<span class="code">not-allowed code</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>ヘッダの追加を<code>SETF</code>で行ってある点要注目。</p>
+
+<p>使う場合は以下のようにする。</p>
+
+<pre><code><span class="code">  <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="special">caveman2.exception:*exception-class*</span> 'method-not-allowed</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">throw-code 405 <span class="keyword">:allow</span> <span class="string">"put get"</span> <span class="keyword">:method</span> <span class="string">"post"</span></span>)</span></span>)</span></span></code></pre>
+
+<p>以上が正攻法の場合、だ。
+正直、僕はこのアプローチが好きではない。
+なぜか。</p>
+
+<p>まずひとつめに、独自の引数を渡したいといった込み入った案件についてはアンドキュメンテッドである。
+その上でソースコードに潜り込むとして、正攻法アプローチは学習負荷が高い実装となっている。
+METHOD-NOT-ALLOWEDの実装にあたりユーザは、<code>THROW-CODE</code>、<code>HTTP-EXCEPTION</code>、<code>*EXCEPTION-CLASS*</code>といったシンボルについて知らねばならない。</p>
+
+<p>ところで<code>THROW-CODE</code>の中身は実は単なる<code>CL:ERROR</code>だ。
+なら、<code>THROW-CODE</code>というブラックボックスを提供するよりは、単に<code>HTTP-EXCEPION</code>コンディションクラスを公開するほうが良くはないだろうか。
+<code>HTTP-EXCEPTION</code>コンディションクラスを公開するなら、ユーザはそのスロットやアクセサについても知る必要が出てくるだろう。
+結果覚えることは増えるかもしれない。
+だが、それは慣れ親しんだCommon Lisp標準のコンディションシステムだ。
+それも一箇所、<code>HTTP-EXCEPTION</code>の定義を見れば事足りる。
+どこに何が書いてあるかまだ知らないソースコードのあっちこっちを飛びながら学習する必要がない。</p>
+
+<p>この場合使い方は以下のようになる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">error 'method-not-allowed <span class="keyword">:method</span> <span class="string">"post"</span> <span class="keyword">:allow</span> <span class="string">"put get"</span> <span class="keyword">:code</span> 405</span>)</span></span></code></pre>
+
+<p>正攻法の<code>CL:LET</code>で束縛する呼び方よりむしろ短く書けている。
+<code>THROW-CODE</code>というシンボルについても知らなくて済む。</p>
+
+<p>ふたつめに、正攻法のアプローチなら<code>ON-EXCEPTION</code>の仕様についても知らなければならない。
+ここで言う<code>ON-EXCEPTION</code>の仕様とは、単に返り値に何を返せば良いかだけでなく、<code>ON-EXCEPTION</code>がCavemanによりどのように呼び出されているかについても含む。
+<code>ON-EXCEPTION</code>は第二引数にコンディションオブジェクトを渡す形で呼び出されるのだが、それはCavemanのソースコードに潜って初めて分かることだ。
+またヘッダを追加したいなら<code>LACK.RESPONSE:RESPONSE-HEADERS</code>と<code>NINGLE:*RESPONSE*</code>についても知らなければならなくなる。</p>
+
+<p>もしかしたら<code>ON-EXCEPTION</code>はLACK互換の返り値を返せばいいように設計されているので<code>LACK.RESPONSE:RESPONSE-HEADERS</code>や<code>NINGLE:*RESPONSE*</code>については知らなくとも良いという反論があるかもしれない。
+例えば上述のメソッドは以下のようにしても良い。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> on-exception<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">app &lt;web&gt;</span>)</span> <span class="paren3">(<span class="code">code method-not-allowed</span>)</span></span>)</span>
+  `<span class="paren2">(<span class="code">,<span class="paren3">(<span class="code">caveman2.exception:exception-code code</span>)</span>
+     <span class="paren3">(<span class="code"><span class="keyword">:allow</span> ,<span class="paren4">(<span class="code">allow code</span>)</span></span>)</span>
+     <span class="paren3">(<span class="code">,<span class="paren4">(<span class="code">format nil <span class="string">"Unknown method ~S"</span><span class="paren5">(<span class="code">not-allowed code</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>そうなのだ。
+結局これは上述の<code>ERROR</code>呼び出しを以下のように書くのと等価なのだ。</p>
+
+<pre><code><span class="code">`<span class="paren1">(<span class="code">405 <span class="paren2">(<span class="code"><span class="keyword">:allow</span> <span class="string">"put get"</span></span>)</span><span class="paren2">(<span class="code">,<span class="paren3">(<span class="code">format nil <span class="string">"Unknown method ~S"</span><span class="string">"post"</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>コードは更に短くなり、我々はいまや<code>ON-EXCEPTION</code>についても知らなくて良くなった。</p>
+
+<p>学習コストをかけて、長いコードを書いて、その結果得られるものはなんだろうか。
+今の所ぼくには、<code>WHEN</code>や<code>UNLESS</code>で囲んでアーリーリターンの形で例外を投げられるので、コードのネストが深くならないというような点しか思いつかない。
+それこそが大事なのかもしれないが。</p>
+
+<p>とはいえこれは「込み入ったことをする場合」の話だ。
+エラー画面をカスタマイズする気がないなら大変便利に使えると思う。</p>
+
+<p>ところで本章のテーマはエラーページのカスタマイズだが、込み入ったことは行わないので正攻法のアプローチを取っていくこととする。</p>
+
+<h3>Error templates</h3>
+
+<h4>templates/layouts/error.html</h4>
+
+<p>エラー用のレイアウトは以下の通り。</p>
+
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+        &lt;head&gt;
+                &lt;meta charset="utf-8"&gt;
+                &lt;title&gt;
+                {% block title %}Title{% endblock %}
+                &lt;/title&gt;
+                &lt;link rel="stylesheet" media="all" href="/css/app.css"&gt;
+        &lt;/head&gt;
+        &lt;body&gt;
+                &lt;div id="container"&gt;
+                        &lt;header&gt;
+                                &lt;img src="/images/lisplogo.svg" alt="Image alt text" width="800" height="400"&gt;
+                                &lt;nav class="menubar"&gt;
+                                        &lt;a href="/"&gt;TOP&lt;/a&gt;
+                                &lt;/nav&gt;
+                        &lt;/header&gt;
+                        &lt;main&gt;
+                        {% block main %}Main content here{% endblock %}
+                        &lt;/main&gt;
+                        &lt;footer&gt;
+                                {% include "shared/footer.html" %}
+                        &lt;/footer&gt;
+                &lt;/div&gt;
+        &lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+<h3>404 not found.</h3>
+
+<h4>on-exception</h4>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> on-exception <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">app &lt;web&gt;</span>)</span> <span class="paren3">(<span class="code">code <span class="paren4">(<span class="code">eql 404</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignore app</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"errors/not-found.html"</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/errors/not-found.html</h4>
+
+<pre><code>{% extends "layouts/error.html" %}
+
+{% block title %} {% lisp (title! "Not Found") %} {% endblock %}
+
+{% block main %}
+&lt;h1&gt;404 Not Found&lt;/h1&gt;
+{% endblock %}</code></pre>
+
+<h3>400 Bad request</h3>
+
+<h4>on-exception</h4>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> on-exception <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">app &lt;web&gt;</span>)</span> <span class="paren3">(<span class="code">code <span class="paren4">(<span class="code">eql status-code:+bad-request+</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignore app</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">render <span class="string">"errors/bad-request.html"</span> `<span class="paren3">(<span class="code"><span class="keyword">:alert</span> ,<span class="paren4">(<span class="code">flash-gethash <span class="keyword">:alert</span> <span class="special">ningle:*session*</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/errors/bad-request.html</h4>
+
+<pre><code>{% extends "layouts/error.html" %}
+{% block title %}{% lisp (title! "Bad Request") %}{% endblock %}
+
+{% block main %}
+&lt;h1&gt;400 {% lisp (title!) %}&lt;/h1&gt;
+{% if alert %}
+&lt;p class="notice"&gt;{{alert}}&lt;/p&gt;
+{% endif %}
+{% endblock %}</code></pre>
+
+<p>後はだいたい同じなので省略。</p>
+
+<p><img src="../img/caveman/bad-request.png" alt="Screen shot of bad request" /></p>
+
+<h2>Summary</h2>
+
+<ul>
+<li>Mass Assignment脆弱性への対策であるストロングパラメタはデフォルトで有効です。</li>
+<li>独自のエラーページを作るには総称関数<code>ON-EXCEPTION</code>にメソッドを追加します。
+<!-- {% endraw %} --></li>
+</ul>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
