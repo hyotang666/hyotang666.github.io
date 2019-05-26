@@ -1,0 +1,206 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>caveman.12.5
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>Caveman kills ruby on rails - Chapter 12.5</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>本連載の読者。</li>
+<li>メソッドコンビネーションの具体例に触れたいCLer</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p>本稿は<a href="https://book.impress.co.jp/books/1117101135" >原著</a>の各章をCommon Lispに翻訳するシリーズの第12.5章である。</p>
+
+<p>やることが高度化してきており、結果としてルーティングコードが肥大化してきている。
+そこでいくつかのヘルパーを導入したい。
+だが、それはCavemanの学習という観点からは本質ではないところである。
+よって下準備として、本章に詰め込んでしまいたい。</p>
+
+<p>章立てが12.5となっているのは13章の手前ぐらいの意味しかない点、予め断っておく。</p>
+
+<h2>Status-code</h2>
+
+<p>ソースコードの中にHTTPステータスコードを埋め込むことはよくある。
+だが、そのままだとマジックナンバーとなってしまう。
+名前をつけて定数とするほうが健全であろう。</p>
+
+<p>HTTPステータスコードはrfcで定義されていてWebに公開されているので、それをさくっとスクレイピングしてコンパイルしてしまおう。</p>
+
+<p>HTTPクライアントには<a href="https://github.com/fukamachi/dexador" >DEXADOR</a>を、HTMLのパースには<a href="https://github.com/Shinmera/plump" >PLUMP</a>を使う。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*doc*</span><span class="paren2">(<span class="code">plump:parse <span class="paren3">(<span class="code">dexador:get <span class="string">"https://www.w3.org/protocols/rfc2616/rfc2616-sec10.html"</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>plumpが作るDOMを操作するには、同作者による<a href="https://github.com/Shinmera/CLSS" >clss</a>が便利に使える。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> constant-forms<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">mapcon <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code">list</span>)</span>
+            <span class="paren4">(<span class="code">when<span class="paren5">(<span class="code">equal <span class="string">"h3"</span><span class="paren6">(<span class="code">plump:tag-name <span class="paren1">(<span class="code">car list</span>)</span></span>)</span></span>)</span>
+              <span class="paren5">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">position<span class="paren2">(<span class="code">position <span class="string">"h3"</span> <span class="paren3">(<span class="code">cdr list</span>)</span> <span class="keyword">:test</span> #'equal <span class="keyword">:key</span> #'plump:tag-name</span>)</span></span>)</span>
+                    <span class="paren1">(<span class="code">ps<span class="paren2">(<span class="code">subseq <span class="paren3">(<span class="code">cdr list</span>)</span> 0 position</span>)</span></span>)</span>
+                    <span class="paren1">(<span class="code">h3<span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> element <span class="keyword">:across</span> <span class="paren3">(<span class="code">plump:children <span class="paren4">(<span class="code">car list</span>)</span></span>)</span>
+                             <span class="keyword">:when</span> <span class="paren3">(<span class="code">plump:text-node-p element</span>)</span>
+                             <span class="keyword">:collect</span> <span class="paren3">(<span class="code">plump:text element</span>)</span> <span class="keyword">:into</span> result
+                             <span class="keyword">:finally</span> <span class="paren3">(<span class="code">return <span class="paren4">(<span class="code">string-trim <span class="string">" "</span><span class="paren5">(<span class="code">apply #'concatenate 'string result</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                    <span class="paren1">(<span class="code">code</span>)</span></span>)</span>
+                <span class="paren6">(<span class="code">multiple-value-bind<span class="paren1">(<span class="code">match-p start</span>)</span><span class="paren1">(<span class="code">ppcre:scan <span class="string">"^[0-9][0-9][0-9]"</span> h3</span>)</span>
+                  <span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren2">(<span class="code">and match-p
+                           <span class="paren3">(<span class="code">not<span class="paren4">(<span class="code">eql 306 <span class="paren5">(<span class="code">setf code <span class="paren6">(<span class="code">parse-integer h3 <span class="keyword">:junk-allowed</span> t</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                    `<span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><i><span class="symbol">defconstant</span></i> ,<span class="paren4">(<span class="code">read-from-string
+                                      <span class="paren5">(<span class="code">format nil <span class="string">"+~A+"</span>
+                                              <span class="paren6">(<span class="code">substitute <span class="character">#\-</span> <span class="character">#\space</span><span class="paren1">(<span class="code">string-trim <span class="string">" "</span><span class="paren2">(<span class="code">ppcre::nsubseq h3 start</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                                   ,code
+                                   ,<span class="paren4">(<span class="code">string-trim '<span class="paren5">(<span class="code"><span class="character">#\newline</span> <span class="character">#\space</span></span>)</span>
+                                                 <span class="paren5">(<span class="code">remove <span class="character">#\return</span>
+                                                         <span class="paren6">(<span class="code">apply #'concatenate 'string <span class="paren1">(<span class="code">mapcar #'plump:text ps</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">vector<span class="paren6">(<span class="code">plump:child-elements<span class="paren1">(<span class="code">aref<span class="paren2">(<span class="code">clss:select <span class="string">"body"</span> <span class="special">*doc*</span></span>)</span>0</span>)</span></span>)</span></span>)</span>
+                <span class="paren5">(<span class="code">position <span class="paren6">(<span class="code">position <span class="string">"h3"</span> vector <span class="keyword">:test</span> #'equal <span class="keyword">:key</span> #'plump:tag-name</span>)</span></span>)</span></span>)</span>
+            <span class="paren4">(<span class="code">coerce <span class="paren5">(<span class="code">subseq vector position</span>)</span>'list</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>REPLで叩くとこんな感じ。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">constant-forms</span>)</span>
+<span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><i><span class="symbol">DEFCONSTANT</span></i> +CONTINUE+
+   100
+   <span class="string">"The client SHOULD continue with its request. This interim response is
+    used to inform the client that the initial part of the request has
+    been received and has not yet been rejected by the server. The client
+    SHOULD continue by sending the remainder of the request or, if the
+    request has already been completed, ignore this response. The server
+    MUST send a final response after the request has been completed. See
+    section 8.2.3 for detailed discussion of the use and handling of this
+    status code."</span></span>)</span>
+ ...</span>)</span></span></code></pre>
+
+<p>最後に適当にthunkを作る。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> thunk<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">list<span class="paren5">(<span class="code">constant-forms</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">format t <span class="string">"~&amp;~(~S~)"</span> `<span class="paren4">(<span class="code">in-package <span class="keyword">:cl-user</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">format t <span class="string">"~&amp;~(~S~)"</span> `<span class="paren4">(<span class="code"><i><span class="symbol">defpackage</span></i> <span class="keyword">#:rfc2616-sec10</span> <span class="paren5">(<span class="code"><span class="keyword">:use</span> <span class="keyword">:cl</span></span>)</span>
+                          <span class="paren5">(<span class="code"><span class="keyword">:nicknames</span> <span class="keyword">#:status-code</span></span>)</span>
+                          <span class="paren5">(<span class="code"><span class="keyword">:export</span> ,@<span class="paren6">(<span class="code">mapcar #'cadr list</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">format t <span class="string">"~&amp;~(~S~)"</span> `<span class="paren4">(<span class="code">in-package <span class="keyword">#:rfc2616-sec10</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">format t <span class="string">"~{~&amp;~%~S~}"</span> list</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>with-authenticity-check</h2>
+
+<p>ルーティングの冒頭で典型的に行う条件分岐をマクロに落とし込もう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-authenticity-check</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;rest check*</span>)</span>&amp;body body</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">list</span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp list</span>)</span>
+              `<span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> ,@body</span>)</span>
+              <span class="paren6">(<span class="code">body<span class="paren1">(<span class="code">caar list</span>)</span><span class="paren1">(<span class="code">cadar list</span>)</span><span class="paren1">(<span class="code">cdr list</span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren4">(<span class="code">body<span class="paren5">(<span class="code">key value rest</span>)</span>
+            <span class="paren5">(<span class="code">ecase key
+              <span class="paren6">(<span class="code"><span class="keyword">:token</span> `<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i><span class="paren2">(<span class="code">not<span class="paren3">(<span class="code">string= ,value <span class="paren4">(<span class="code">token</span>)</span></span>)</span></span>)</span>
+                          <span class="paren2">(<span class="code">throw-code status-code:+forbidden+</span>)</span>
+                          ,<span class="paren2">(<span class="code">rec rest</span>)</span></span>)</span></span>)</span>
+              <span class="paren6">(<span class="code"><span class="keyword">:logged-in</span> `<span class="paren1">(<span class="code"><i><span class="symbol">if</span></i><span class="paren2">(<span class="code">not<span class="paren3">(<span class="code">hermetic:logged-in-p</span>)</span></span>)</span>
+                              <span class="paren2">(<span class="code">throw-code status-code:+unauthorized+</span>)</span>
+                              ,<span class="paren2">(<span class="code">rec rest</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">mapcar #'alexandria:ensure-list check*</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>ensure-let</h2>
+
+<p>データベースにアクセスして、オブジェクトが見つからなければ<code>MYWAY:NEXT-ROUTE</code>するのはよくあるのでマクロでまとめてしまう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> ensure-let<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;rest bind*</span>)</span>&amp;body body</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec<span class="paren5">(<span class="code">binds</span>)</span>
+            <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i><span class="paren6">(<span class="code">endp binds</span>)</span>
+              `<span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> ,@body</span>)</span>
+              <span class="paren6">(<span class="code">body<span class="paren1">(<span class="code">car binds</span>)</span><span class="paren1">(<span class="code">cdr binds</span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren4">(<span class="code">body<span class="paren5">(<span class="code">bind rest</span>)</span>
+            `<span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code">,bind</span>)</span>
+               <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i><span class="paren1">(<span class="code">null ,<span class="paren2">(<span class="code">car bind</span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">myway:next-route</span>)</span>
+                 ,<span class="paren1">(<span class="code">rec rest</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">rec bind*</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>update-instance</h2>
+
+<p>オブジェクトに<code>SETF</code>していくのは醜いしコードも肥大してしまう。
+僕達が本当に欲しいのは<code>CL:MAKE-INSTANCE</code>と同様のシンタックスで、第一引数に受け取ったオブジェクトを破壊的にアップデートするコマンドだ。
+MOPを利用することで以下のように作れる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defgeneric</span></i> update-instance<span class="paren2">(<span class="code">object &amp;rest args</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> update-instance<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">object standard-object</span>)</span>&amp;rest args</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:with</span> initargs = <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> key <span class="keyword">:in</span> args <span class="keyword">:by</span> #'cddr <span class="keyword">:collect</span> key</span>)</span>
+        <span class="keyword">:for</span> slot <span class="keyword">:in</span> <span class="paren3">(<span class="code">c2mop:class-slots <span class="paren4">(<span class="code">class-of object</span>)</span></span>)</span>
+        <span class="keyword">:for</span> keys = <span class="paren3">(<span class="code">intersection <span class="paren4">(<span class="code">c2mop:slot-definition-initargs slot</span>)</span> initargs</span>)</span>
+        <span class="keyword">:when</span> <span class="paren3">(<span class="code">and keys
+                   <span class="paren4">(<span class="code">or <span class="paren5">(<span class="code">null <span class="paren6">(<span class="code">cdr keys</span>)</span></span>)</span>
+                       <span class="paren5">(<span class="code">error <span class="string">"Dupcated initargs ~S"</span>keys</span>)</span></span>)</span></span>)</span>
+        <span class="keyword">:do</span> <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">value<span class="paren6">(<span class="code">getf args<span class="paren1">(<span class="code">car keys</span>)</span></span>)</span></span>)</span></span>)</span>
+              <span class="paren4">(<span class="code">unless <span class="paren5">(<span class="code">equal <span class="string">""</span> value</span>)</span>
+                <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">slot-value object <span class="paren1">(<span class="code">c2mop:slot-definition-name slot</span>)</span></span>)</span>
+                      value</span>)</span></span>)</span></span>)</span></span>)</span>
+  object</span>)</span></span></code></pre>
+
+<p>なお、引数が空文字列だった場合、引数は無視される点要注意。
+というのもCavemanアプリでは空っぽの入力フォームは空文字列として渡ってくるからである。</p>
+
+<p>また、キーワード引数が重複している場合、手前のものが採用され、後ろのものはシャドウイングされる点も要注意。
+この振る舞いは<code>CL:MAKE-INSTANCE</code>の振る舞いに則っている。</p>
+
+<h2>validation</h2>
+
+<p>MitoのオブジェクトはCLOSに則っており、継承も当然行える。
+あるオブジェクトがバリデーションされる時、継承しているスーパークラスもバリデーションされて欲しい。</p>
+
+<p>これまで個別に関数を作って対応していたが、総称関数にする方が良さそうだ。</p>
+
+<p>さて、総称関数のAPIに関してだが、これまでと同様、第一返り値に破壊変更されたかもしれないオブジェクトを、第二返り値にエラーメッセージを表すドット対のリストを返したい。
+問題はスーパークラスで行われる各バリデーション結果と結合して全体の返り値を作らねばならないところである。
+このような場合に便利に使えるものとしてCLOSにはメソッドコンビネーションがある。</p>
+
+<p>この度メソッドコンビネーションを自作するに当たっては<a href="http://clhs.lisp.se/Body/m_defi_4.htm#define-method-combination" >仕様</a>を参照した。
+例が豊富で大変わかりやすかった。</p>
+
+<p>なお、本メソッドコンビネーションは簡単のために主メソッド以外はサポートしていない。</p>
+
+<pre><code>(define-method-combination validate()
+                           ((primary (validate) :required t))
+  (labels((rec(methods)
+            (if(endp (cdr methods))
+              `(call-method ,(car methods) nil)
+              `(multiple-value-bind(o e),(rec (cdr methods))
+                 (values o (append e (nth-value 1 (call-method ,(car methods) nil))))))))
+    (rec primary)))
+
+(defgeneric validate(object &key target-slots test)
+  (:method-combination validate))</code></pre>
+
+<h2>Method-case</h2>
+
+<p>ディスパッチャも典型的なコードとなるのでマクロにまとめよう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> method-case<span class="paren2">(<span class="code">method &amp;rest clauses</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">var<span class="paren5">(<span class="code">gensym<span class="string">"VAR"</span></span>)</span></span>)</span></span>)</span>
+    `<span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,var ,method</span>)</span></span>)</span>
+       <span class="paren4">(<span class="code"><i><span class="symbol">cond</span></i>
+         ,@<span class="paren5">(<span class="code">mapcar <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren1">(<span class="code">clause</span>)</span>
+                     `<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">string= ,<span class="paren3">(<span class="code">car clause</span>)</span>,var</span>)</span>,@<span class="paren2">(<span class="code">cdr clause</span>)</span></span>)</span></span>)</span>
+                   clauses</span>)</span>
+         <span class="paren5">(<span class="code">t <span class="paren6">(<span class="code">throw-code status-code:+method-not-allowed+</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
