@@ -1,0 +1,733 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>caveman.13
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><!-- {% raw %} -->
+
+<h1>Caveman kills ruby on rails - Chapter 13</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Cavemanに於いてファイルのアップロードを実装したいCLer</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p>本稿は<a href="https://book.impress.co.jp/books/1117101135" >原著</a>の各章をCommon Lispに翻訳するシリーズの第13章である。
+本章ではCavemanにおけるストレージサポートを修めていく。</p>
+
+<p>クラウドストレージのサポートは埒外としおく。</p>
+
+<p>また、13.5の画像表示ヶ所の変更サポートも、いい具合のものがなく、実装は骨なのでTODOとして無視していく。</p>
+
+<h2>13.1 Active Storage</h2>
+
+<p>CavemanにはActive Storageのサポートなどない。</p>
+
+<p>Active Storageが何なのか筆者は詳しくないのだが、2019/5/23現在の筆者の理解としては、これはSICPで言うところの抽象の壁で、ストレージを抽象化しておくというものだろう。
+リダイレクト経由でコンテンツにアクセスするのでクライアントからは同じものに見える。
+サーバは実装を切り替えることでストレージを切り替えられる、と。</p>
+
+<p>これをごっそり実装するのは骨なので、ここではディスクサービスに相当するものをいい加減にでっちあげてお茶を濁すこととする。</p>
+
+<p>まずはそれ用のパッケージを定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">in-package <span class="keyword">:cl-user</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defpackage</span></i> <span class="keyword">#:storage</span><span class="paren2">(<span class="code"><span class="keyword">:use</span> <span class="keyword">:cl</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:shadow</span> <span class="keyword">#:write</span> <span class="keyword">#:read</span> <span class="keyword">#:remove</span> <span class="keyword">#:probe-file</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">in-package <span class="keyword">#:storage</span></span>)</span></span></code></pre>
+
+<p>ファイルオブジェクトを定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defstruct</span></i><span class="paren2">(<span class="code">file <span class="paren3">(<span class="code"><span class="keyword">:type</span> vector</span>)</span></span>)</span>
+  name size content-type</span>)</span></span></code></pre>
+
+<p>オブジェクトとパス名とを行き来できるようにヘルパーを定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> prin1-to-base64-string<span class="paren2">(<span class="code">object</span>)</span>
+  <span class="paren2">(<span class="code">cl-base64:string-to-base64-string<span class="paren3">(<span class="code">prin1-to-string object</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> read-from-base64-string<span class="paren2">(<span class="code">string</span>)</span>
+  <span class="paren2">(<span class="code">values<span class="paren3">(<span class="code">read-from-string<span class="paren4">(<span class="code">cl-base64:base64-string-to-string string</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>ユーザーごとにディレクトリを持ち、各ディレクトリにはサブディレクトリがあり、そこにファイルを格納していく。
+それ用のパスを作るヘルパー。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> make-storage-pathname<span class="paren2">(<span class="code">id subdirectory &amp;optional file</span>)</span>
+  <span class="paren2">(<span class="code">merge-pathnames <span class="paren3">(<span class="code">format nil <span class="string">"storage/~A/~A/~@[~A~]"</span> id subdirectory <span class="paren4">(<span class="code">when file <span class="paren5">(<span class="code">prin1-to-base64-string file</span>)</span></span>)</span></span>)</span>
+                   <span class="special">your-app.config::*application-root*</span></span>)</span></span>)</span></span></code></pre>
+
+<p>書き出し。
+なお、受け取るストリームはFLEXI-STREAMSのIN-MEMORY-STREAMを想定している。
+これはCamemanの振る舞いに則っている。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> write<span class="paren2">(<span class="code">stream id subdirectory file</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">path<span class="paren5">(<span class="code">ensure-directories-exist<span class="paren6">(<span class="code">make-storage-pathname id subdirectory file</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-open-file</span></i><span class="paren4">(<span class="code">s path
+                      <span class="keyword">:direction</span> <span class="keyword">:output</span> <span class="keyword">:if-does-not-exist</span> <span class="keyword">:create</span> <span class="keyword">:element-type</span> '<span class="paren5">(<span class="code">unsigned-byte 8</span>)</span>
+                      <span class="keyword">:if-exists</span> nil</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i> s
+        <span class="paren5">(<span class="code">write-sequence <span class="paren6">(<span class="code">slot-value stream 'vector</span>)</span> s</span>)</span>
+        <span class="paren5">(<span class="code">warn <span class="string">"File already exists ~S~&amp;Ignored."</span> path</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>読み込み。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> read<span class="paren2">(<span class="code">id subdirectory file</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-open-file</span></i><span class="paren3">(<span class="code">s <span class="paren4">(<span class="code">make-storage-pathname id subdirectory file</span>)</span>
+                    <span class="keyword">:element-type</span> '<span class="paren4">(<span class="code">unsigned-byte 8</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">length<span class="paren6">(<span class="code">file-length s</span>)</span></span>)</span>
+          <span class="paren5">(<span class="code">buffer<span class="paren6">(<span class="code">make-array length <span class="keyword">:element-type</span> '<span class="paren1">(<span class="code">unsigned-byte 8</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">read-sequence buffer s</span>)</span>
+      <span class="paren4">(<span class="code">values buffer length</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>消去。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> remove<span class="paren2">(<span class="code">id subdirectory file</span>)</span>
+  <span class="paren2">(<span class="code">delete-file<span class="paren3">(<span class="code">make-storage-pathname id subdirectory file</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>既に存在するか否かの述語。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> probe-file<span class="paren2">(<span class="code">id subdirectory file</span>)</span>
+  <span class="paren2">(<span class="code">cl:probe-file<span class="paren3">(<span class="code">make-storage-pathname id subdirectory file</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>画像ファイルのサイズ変更。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> convert<span class="paren2">(<span class="code">id subdirectory original-file converted-file</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">command<span class="paren5">(<span class="code">format nil <span class="string">"convert -geometry ~A ~A ~A"</span>
+                       <span class="paren6">(<span class="code">file-size converted-file</span>)</span>
+                       <span class="paren6">(<span class="code">make-storage-pathname id subdirectory original-file</span>)</span>
+                       <span class="paren6">(<span class="code">make-storage-pathname id subdirectory converted-file</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">message<span class="paren6">(<span class="code">nth-value 1 <span class="paren1">(<span class="code">uiop:run-program command <span class="keyword">:ignore-error-status</span> t <span class="keyword">:error-output</span> <span class="keyword">:string</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">when message
+        <span class="paren5">(<span class="code">error message</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>なお、上記コマンドはImageMagickに依存しているので、インストールしておくこと。</p>
+
+<p>Active Storage用のルーティングは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/storage/:id/:subdirectory/:filename"</span><span class="paren2">(<span class="code">&amp;key id subdirectory filename size content-type</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">original-file<span class="paren5">(<span class="code">storage::make-file <span class="keyword">:name</span> filename <span class="keyword">:content-type</span> content-type</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">to-load original-file</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">when size
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">converted-file<span class="paren1">(<span class="code">storage::make-file <span class="keyword">:name</span> filename <span class="keyword">:size</span> size <span class="keyword">:content-type</span> content-type</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">unless<span class="paren6">(<span class="code">storage::probe-file id subdirectory converted-file</span>)</span>
+          <span class="paren6">(<span class="code">storage::convert id subdirectory original-file converted-file</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">setf to-load converted-file</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">multiple-value-bind<span class="paren4">(<span class="code">content length</span>)</span><span class="paren4">(<span class="code">storage::read id subdirectory to-load</span>)</span>
+      `<span class="paren4">(<span class="code">,status-code:+ok+ <span class="paren5">(<span class="code"><span class="keyword">:content-type</span> ,content-type <span class="keyword">:content-length</span> ,length</span>)</span>
+                          ,content</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>13.2 Uploading profile image.</h2>
+
+<h3>Extends user model.</h3>
+
+<p>Mitoに於いてテーブルは継承できる。
+また、テーブルを作る必要がなく、同様のフィールドをまとめたいだけの場合はmito:dao-table-mixinが利用できる。</p>
+
+<p>まずはファイルモデルmixinを作成。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> file<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">filename <span class="keyword">:col-type</span> <span class="paren4">(<span class="code">or <span class="keyword">:null</span> <span class="paren5">(<span class="code"><span class="keyword">:varchar</span> 128</span>)</span></span>)</span> <span class="keyword">:initarg</span> <span class="keyword">:filename</span> <span class="keyword">:accessor</span> filename-of</span>)</span>
+   <span class="paren3">(<span class="code">content-type <span class="keyword">:col-type</span> <span class="paren4">(<span class="code">or <span class="keyword">:null</span> <span class="paren5">(<span class="code"><span class="keyword">:varchar</span> 32</span>)</span></span>)</span> <span class="keyword">:initarg</span> <span class="keyword">:content-type</span> <span class="keyword">:accessor</span> content-type-of</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> mito:dao-table-mixin</span>)</span></span>)</span></span></code></pre>
+
+<p>ファイルモデルを継承してイメージモデルmixinを作成。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> image <span class="paren2">(<span class="code">file</span>)</span><span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> mito:dao-table-mixin</span>)</span></span>)</span></span></code></pre>
+
+<p>ユーザモデルにイメージモデルをmixin。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> user<span class="paren2">(<span class="code">image</span>)</span>
+  ...</span>)</span></span></code></pre>
+
+<h3>Profile image field for template.</h3>
+
+<p>入力フォームのenctypeをmultipart/form-dataに変更する必要がある。</p>
+
+<h4>templates/user/new.html</h4>
+
+<pre><code>&lt;form class="new-user" id="new-user" action="/user" method="post" enctype="multipart/form-data"&gt;</code></pre>
+
+<h4>templates/user/edit.html</h4>
+
+<pre><code>&lt;form class="edit-user" id="edit-user" action="/user/{{user.id}}" method="post" enctype="multipart/form-data"&gt;</code></pre>
+
+<h4>templates/account/edit.html</h4>
+
+<pre><code>&lt;form class="edit_account" id="edit_account" action="/account" method="post" enctype="multipart/form-data"&gt;</code></pre>
+
+<p>また、共有している部分テンプレートも以下のように修正。</p>
+
+<h4>templates/shared/user-form.html</h4>
+
+<pre><code>&lt;table class="attr"&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="profile-image"&gt;Profile image&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;
+                        &lt;div&gt;&lt;input type="file" name="IMAGE" id="profile-image"/&gt;&lt;/div&gt;
+                        {% if user.filename %}
+                        &lt;div&gt;
+                                &lt;img src="/storage/{{user.id}}/account/{{user.filename}}?CONTENT-TYPE={{user.content-type}}&SIZE=128x128"&gt;
+                        &lt;/div&gt;
+                        {% endif %}
+                &lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;</code></pre>
+
+<h3>Fix routing.</h3>
+
+<p>さて、ルーティングの修正だが、まずはディスパッチャから行う。</p>
+
+<p>これはCaveman、NINGLE、clack、LACK、全てに於いてアンドキュメントな振る舞いなのだが（よってどこの責任でこうなっているのか分からないのだが）formのenctypeが少なくともmultipart/form-dataの場合、&amp;KEYで受け取るクエリ変数はすべからくリストとなる。
+各リストは３要素で</p>
+
+<ol>
+<li>クエリ変数の値。</li>
+<li>何かを表すハッシュテーブル。</li>
+<li>何かを表すハッシュテーブル。</li>
+</ol>
+
+<p>となっている。</p>
+
+<p>各ハッシュテーブルが何を表しているのかはアンドキュメントなので分からない。
+ある種のprintfデバッグをして中身を見ながら開発するよりほかない。</p>
+
+<p>ディスパッチャにはenctype指定のないリクエストも来得る。
+よって<code>ALEXANDRIA:ENSURE-CAR</code>を用いた以下のような修正となる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/user/:id"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key id method</span>)</span>
+  <span class="paren2">(<span class="code">method-case<span class="paren3">(<span class="code">alexandria:ensure-car method</span>)</span>
+    <span class="paren3">(<span class="code"><span class="string">"delete"</span> <span class="paren4">(<span class="code">delete-user <span class="paren5">(<span class="code">acons <span class="string">"ID"</span> id <span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="string">"post"</span> <span class="paren4">(<span class="code">update-user <span class="paren5">(<span class="code">acons <span class="string">"ID"</span> id <span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>update-user</h4>
+
+<p>postメソッド本体は以下のように修正。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> update-user<span class="paren2">(<span class="code">request</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind<span class="paren3">(<span class="code">&amp;rest args &amp;key authenticity-token id number name full-name sex email administrator image
+                            birthday-year birthday-month birthday-day
+                            &amp;allow-other-keys</span>)</span> <span class="paren3">(<span class="code">request-params request</span>)</span>
+    <span class="paren3">(<span class="code">declare<span class="paren4">(<span class="code">ignore number name full-name sex email administrator birthday-year birthday-month birthday-day</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code"><span class="keyword">:token</span> <span class="paren6">(<span class="code">car authenticity-token</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">ensure-let<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">old<span class="paren1">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">file<span class="paren2">(<span class="code">your-app.model::filename-of old</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">multiple-value-bind<span class="paren1">(<span class="code">user errors</span>)</span><span class="paren1">(<span class="code">validation:validate
+                                             <span class="paren2">(<span class="code">apply #'your-app.model::update-instance old 
+                                                    <span class="keyword">:image</span> image
+                                                    `<span class="paren3">(<span class="code">,@<span class="paren4">(<span class="code">mapcar #'alexandria:ensure-car args</span>)</span>
+                                                       <span class="keyword">:administrator</span> <span class="string">"1"</span></span>)</span></span>)</span></span>)</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> errors
+              <span class="paren2">(<span class="code">render <span class="string">"user/edit.html"</span> `<span class="paren3">(<span class="code">,@<span class="paren4">(<span class="code">roles</span>)</span> <span class="keyword">:news</span> ,<span class="paren4">(<span class="code">articles 5</span>)</span> <span class="keyword">:blogs</span> ,<span class="paren4">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span> <span class="keyword">:user</span> ,user
+                                                   <span class="keyword">:token</span> ,<span class="paren4">(<span class="code">token</span>)</span><span class="keyword">:errors</span> ,errors</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren3">(<span class="code">mito:save-dao user</span>)</span>
+                     <span class="paren3">(<span class="code">unless<span class="paren4">(<span class="code">equal file <span class="paren5">(<span class="code">ignore-errors<span class="paren6">(<span class="code">your-app.model::filename-of user</span>)</span></span>)</span></span>)</span>
+                       <span class="paren4">(<span class="code">your-app.model::purge user <span class="string">"account"</span> file</span>)</span></span>)</span>
+                     <span class="paren3">(<span class="code">setf<span class="paren4">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Updated"</span></span>)</span>
+                     `<span class="paren3">(<span class="code">,status-code:+see-other+ <span class="paren4">(<span class="code"><span class="keyword">:location</span> ,<span class="paren5">(<span class="code">format nil <span class="string">"/user/~D"</span> id</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>update-account</h4>
+
+<p>アカウントのpostメソッドは以下のように修正。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/account"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;rest args &amp;key number name full-name sex email <span class="paren3">(<span class="code">administrator '<span class="paren4">(<span class="code"><span class="string">"1"</span></span>)</span></span>)</span>
+                                          birthday-year birthday-month birthday-day authenticity-token image</span>)</span>
+  <span class="paren2">(<span class="code">declare<span class="paren3">(<span class="code">ignore number name full-name sex email administrator</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="keyword">:token</span> <span class="paren5">(<span class="code">car authenticity-token</span>)</span></span>)</span><span class="keyword">:logged-in</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">user<span class="paren6">(<span class="code">current-user</span>)</span></span>)</span>
+          <span class="paren5">(<span class="code">image-file<span class="paren6">(<span class="code">your-app.model::filename-of user</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">multiple-value-bind<span class="paren5">(<span class="code">user errors</span>)</span><span class="paren5">(<span class="code">validation:validate
+                                         <span class="paren6">(<span class="code">apply #'your-app.model::update-instance user 
+                                                <span class="keyword">:password</span> <span class="paren1">(<span class="code">gethash <span class="keyword">:password</span> <span class="special">ningle:*session*</span></span>)</span>
+                                                <span class="keyword">:image</span> image
+                                                <span class="paren1">(<span class="code">mapcar #'alexandria:ensure-car args</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> errors
+          `<span class="paren6">(<span class="code">,status-code:+bad-request+
+             <span class="paren1">(<span class="code"></span>)</span><span class="paren1">(<span class="code">,<span class="paren2">(<span class="code">render <span class="string">"accounts/edit.html"</span> `<span class="paren3">(<span class="code"><span class="keyword">:user</span> ,user <span class="keyword">:errors</span> ,errors <span class="keyword">:news</span> ,<span class="paren4">(<span class="code">articles 5</span>)</span>
+                                                      <span class="keyword">:blogs</span> ,<span class="paren4">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span> ,@<span class="paren4">(<span class="code">roles</span>)</span> <span class="keyword">:token</span>,<span class="paren4">(<span class="code">token</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">unless<span class="paren2">(<span class="code">equal image-file <span class="paren3">(<span class="code">ignore-errors<span class="paren4">(<span class="code">your-app.model::filename-of user</span>)</span></span>)</span></span>)</span>
+                   <span class="paren2">(<span class="code">your-app.model::purge user <span class="string">"account"</span> image-file</span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">mito:save-dao user</span>)</span>
+                 <span class="paren1">(<span class="code">setf<span class="paren2">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Updated"</span></span>)</span>
+                 `<span class="paren1">(<span class="code">,status-code:+see-other+ <span class="paren2">(<span class="code"><span class="keyword">:location</span> <span class="string">"/account"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>なお上記コード内の<code>PURGE</code>は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> purge<span class="paren2">(<span class="code">user subdirectory filename</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code">deletedp
+       <span class="paren4">(<span class="code">id<span class="paren5">(<span class="code">mito:object-id user</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">dolist<span class="paren4">(<span class="code">pathname <span class="paren5">(<span class="code">uiop:directory-files<span class="paren6">(<span class="code">storage::make-storage-pathname id subdirectory</span>)</span></span>)</span>
+                     deletedp</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">file<span class="paren1">(<span class="code">storage::read-from-base64-string<span class="paren2">(<span class="code">pathname-name pathname</span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">when<span class="paren6">(<span class="code">equal filename <span class="paren1">(<span class="code">storage::file-name file</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">setf deletedp t</span>)</span>
+          <span class="paren6">(<span class="code">storage::remove id subdirectory file</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/caveman/account-edit-with-profile-image.png" alt="Screen shot of account edit page with profile image slot" /></p>
+
+<h3>show</h3>
+
+<p>アカウント画面に画像が表示されるように修正。</p>
+
+<h4>templates/user/body.html</h4>
+
+<pre><code>&lt;table class="attr"&gt;
+        &lt;tr&gt;
+                &lt;th&gt;Profile image&lt;/th&gt;
+                &lt;td&gt;
+                        {% if user.filename %}
+                        &lt;img src="/storage/{{user.id}}/account/{{user.filename}}?CONTENT-TYPE={{user.content-type}}&SIZE=128x128"&gt;
+                        {% endif %}
+                &lt;/td&gt;
+        &lt;tr&gt;</code></pre>
+
+<p><img src="../img/caveman/account-with-profile-image.png" alt="Screen shot of account page with profile image" /></p>
+
+<h3>Seed data</h3>
+
+<p>シードデータに画像を追加。
+いい具合にやってくれるようなものはないので愚直に書く。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> seeds<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-open-file</span></i><span class="paren3">(<span class="code">s <span class="paren4">(<span class="code">merge-pathnames <span class="string">"profile.png"</span> <span class="special">your-app.config::*application-root*</span></span>)</span>
+                    <span class="keyword">:element-type</span> '<span class="paren4">(<span class="code">unsigned-byte 8</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">vector<span class="paren6">(<span class="code">make-array <span class="paren1">(<span class="code">file-length s</span>)</span> <span class="keyword">:element-type</span> '<span class="paren1">(<span class="code">unsigned-byte 8</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">read-sequence vector s</span>)</span>
+      <span class="paren4">(<span class="code">storage::write <span class="paren5">(<span class="code">make-instance 'flex::vector-input-stream
+                                     <span class="keyword">:vector</span> vector</span>)</span>
+                      1 <span class="string">"account"</span> <span class="paren5">(<span class="code">storage::make-file <span class="keyword">:name</span> <span class="string">"profile.png"</span> <span class="keyword">:content-type</span> <span class="string">"image/png"</span></span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">names #<span class="paren5">(<span class="code"><span class="string">"Taro"</span> <span class="string">"Jiro"</span> <span class="string">"Hana"</span> <span class="string">"John"</span> <span class="string">"Mike"</span> <span class="string">"Sophy"</span> <span class="string">"Bill"</span> <span class="string">"Alex"</span> <span class="string">"Mary"</span> <span class="string">"Tom"</span></span>)</span></span>)</span>
+       ...</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-connection</span></i><span class="paren4">(<span class="code">db</span>)</span>
+      <span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10</span>)</span>
+        <span class="paren5">(<span class="code">mito:create-dao 'user
+                         <span class="keyword">:number</span> <span class="paren6">(<span class="code">+ x 10</span>)</span>
+                         ...
+                         <span class="keyword">:password</span> <span class="string">"asagao!"</span>
+                         <span class="keyword">:filename</span> <span class="paren6">(<span class="code">when<span class="paren1">(<span class="code">zerop x</span>)</span>
+                                     <span class="string">"profile.png"</span></span>)</span>
+                         <span class="keyword">:content-type</span> <span class="paren6">(<span class="code">when<span class="paren1">(<span class="code">zerop x</span>)</span>
+                                         <span class="string">"image/png"</span></span>)</span>
+                         </span>)</span></span>)</span>
+  ...</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>validation</h3>
+
+<p>IMAGE用のバリデーションは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> validation:validate validation:validate<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">image image</span>)</span> &amp;key target-slots test</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">validation:with-check-validate</span></i><span class="paren3">(<span class="code">image <span class="keyword">:target-slots</span> target-slots <span class="keyword">:test</span> test</span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">content-type <span class="paren5">(<span class="code"><span class="keyword">:assert</span> <span class="paren6">(<span class="code">find content-type #0='<span class="paren1">(<span class="code"><span class="string">"image/jpeg"</span> <span class="string">"image/png"</span> <span class="string">"image/gif"</span> <span class="string">"image/bmp"</span></span>)</span>
+                                  <span class="keyword">:test</span> #'equal</span>)</span>
+                            <span class="string">"must be one of ~S but ~S"</span> #0# content-type</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>13.3 Deleting profile image.</h2>
+
+<h3>Checkbox for delete.</h3>
+
+<h4>templates/shared/user-form.html</h4>
+
+<p>部分テンプレートを修正。</p>
+
+<pre><code>                        &lt;div&gt;
+                                &lt;img src="/storage/{{user.id}}/account/{{user.filename}}?CONTENT-TYPE={{user.content-type}}&SIZE=128x128"&gt;
+                                &lt;label for="remove-profile-image-p"&gt;Remove profile image&lt;/label&gt;
+                                &lt;input type="checkbox" name="REMOVE-PROFILE-IMAGE-P" id="remove-profile-image-p"&gt;
+                        &lt;/div&gt;</code></pre>
+
+<h4>routing</h4>
+
+<p>クエリ変数<code>REMOVE-PROFILE-IMAGE-P</code>を受け取るようにルーティングを変更。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/account"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;rest args &amp;key number name full-name sex email <span class="paren3">(<span class="code">administrator '<span class="paren4">(<span class="code"><span class="string">"1"</span></span>)</span></span>)</span>
+                                          birthday-year birthday-month birthday-day authenticity-token image
+                                          remove-profile-image-p</span>)</span>
+  <span class="paren2">(<span class="code">declare<span class="paren3">(<span class="code">ignore number name full-name sex email administrator birthday-year birthday-month birthday-day</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="keyword">:token</span> <span class="paren5">(<span class="code">car authenticity-token</span>)</span></span>)</span><span class="keyword">:logged-in</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">user<span class="paren6">(<span class="code">current-user</span>)</span></span>)</span>
+          <span class="paren5">(<span class="code">image-file<span class="paren6">(<span class="code">your-app.model::filename-of user</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">multiple-value-bind<span class="paren5">(<span class="code">user errors</span>)</span><span class="paren5">(<span class="code">validation:validate
+                                         <span class="paren6">(<span class="code">apply #'your-app.model::update-instance user 
+                                                <span class="keyword">:password</span> <span class="paren1">(<span class="code">gethash <span class="keyword">:password</span> <span class="special">ningle:*session*</span></span>)</span>
+                                                <span class="keyword">:image</span> image
+                                                <span class="paren1">(<span class="code">mapcar #'alexandria:ensure-car args</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> errors
+          `<span class="paren6">(<span class="code">,status-code:+bad-request+
+             <span class="paren1">(<span class="code"></span>)</span><span class="paren1">(<span class="code">,<span class="paren2">(<span class="code">render <span class="string">"accounts/edit.html"</span> `<span class="paren3">(<span class="code"><span class="keyword">:user</span> ,user <span class="keyword">:errors</span> ,errors <span class="keyword">:news</span> ,<span class="paren4">(<span class="code">articles 5</span>)</span>
+                                                      <span class="keyword">:blogs</span> ,<span class="paren4">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span> ,@<span class="paren4">(<span class="code">roles</span>)</span> <span class="keyword">:token</span>,<span class="paren4">(<span class="code">token</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">trivia:match*<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">car remove-profile-image-p</span>)</span>
+                                <span class="paren3">(<span class="code">equal image-file <span class="paren4">(<span class="code">ignore-errors<span class="paren5">(<span class="code">your-app.model::filename-of user</span>)</span></span>)</span></span>)</span></span>)</span>
+                   <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">_ nil</span>)</span> <span class="comment">; when specify new one, always remove old one.
+</span>                    <span class="paren3">(<span class="code">your-app.model::purge user <span class="string">"account"</span> image-file</span>)</span>
+                    <span class="paren3">(<span class="code">storage::write <span class="paren4">(<span class="code">car image</span>)</span> <span class="paren4">(<span class="code">mito:object-id user</span>)</span> <span class="string">"account"</span> <span class="paren4">(<span class="code">make-image-file image</span>)</span></span>)</span></span>)</span>
+                   <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">nil _</span>)</span></span>)</span> <span class="comment">; do not remove, no new one, so do nothing.
+</span>                   <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">_ _</span>)</span> <span class="comment">; remove old, no new one.
+</span>                    <span class="paren3">(<span class="code">setf <span class="paren4">(<span class="code">your-app.model::filename-of user</span>)</span>nil
+                          <span class="paren4">(<span class="code">your-app.model::content-type-of user</span>)</span>nil</span>)</span>
+                    <span class="paren3">(<span class="code">your-app.model::purge user <span class="string">"account"</span> image-file</span>)</span></span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">mito:save-dao user</span>)</span>
+                 <span class="paren1">(<span class="code">setf<span class="paren2">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Updated"</span></span>)</span>
+                 `<span class="paren1">(<span class="code">,status-code:+see-other+ <span class="paren2">(<span class="code"><span class="keyword">:location</span> <span class="string">"/account"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>validation:validateは&quot;&quot;ないしNILのスロットを<code>CL:SLOT-MAKUNBOUND</code>する点要注意。</p>
+
+<p>また、mitoは未束縛なスロットに関してはデータベースの更新を行わない点要注意。
+これはアンドキュメンテッドな振る舞いなので将来変更されるかもしれない。
+ここではNILをSETFしている点要注目。</p>
+
+<p><img src="../img/caveman/account-edit-with-checkbox.png" alt="Screen shot of account edit page with checkbox for remove image" /></p>
+
+<h2>13.4 Uploading and showing blog image.</h2>
+
+<h3>entry-image model</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> entry-image<span class="paren2">(<span class="code">image</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">entry <span class="keyword">:col-type</span> entry <span class="keyword">:initarg</span> <span class="keyword">:entry</span> <span class="keyword">:accerror</span> entry-of</span>)</span>
+   <span class="paren3">(<span class="code">alt-text <span class="keyword">:col-type</span> <span class="paren4">(<span class="code"><span class="keyword">:varchar</span> 128</span>)</span> <span class="keyword">:initform</span> <span class="string">"alt-text"</span> <span class="keyword">:initarg</span> <span class="keyword">:alt-text</span> <span class="keyword">:accerror</span> alt-text-of</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> mito:dao-table-class</span>)</span></span>)</span></span></code></pre>
+
+<h4>validation</h4>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> validation:validate validation:validate<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">object entry-image</span>)</span> &amp;key target-slots test</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">validation:with-check-validate</span></i><span class="paren3">(<span class="code">object <span class="keyword">:target-slots</span> target-slots <span class="keyword">:test</span> test</span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">entry <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">filename <span class="paren5">(<span class="code"><span class="keyword">:require</span> t</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>バリデーションはメソッドコンビネーションによりスーパークラスも行われる。
+ここではスーパークラスのスロットである<code>FILENAME</code>をサブクラスである<code>ENTRY-IMAGE</code>内で指定してバリデーションを行っている点要注目。
+これにより<code>USER</code>オブジェクトのバリデーションでは<code>FILENAME</code>は<code>:REQUIRE</code>ではないが、ここでは<code>:REQUIRE</code>としてバリデートされる。</p>
+
+<p>なおこれはオーバーライドではない点要注意。
+スーパークラスのバリデーションは別途行われている。
+よってスーパークラスではゆるいバリデーションを行い、ことと次第でサブクラスで厳密なバリデーションを行うことは可能だが、その反対はできない。</p>
+
+<h3>index</h3>
+
+<h4>templates/entry-images/index.html</h4>
+
+<p>まずはテンプレートを作成。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+
+{% block title %}{% lisp (title! "Entry images") %}{% endblock %}
+
+{% block content %}
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
+&lt;h2&gt;{{ entry.title }}&lt;/h2&gt;
+
+&lt;ul class="toolbar"&gt;
+        &lt;a href="/entries/{{entry.id}}"&gt;Go back entry&lt;/a&gt;
+        &lt;a href="/entries/{{entry.id}}/images/new"&gt;Add image&lt;/a&gt;
+&lt;/ul&gt;
+
+{% if images %}
+&lt;table class="list"&gt;
+        &lt;thead&gt;
+                &lt;tr&gt;
+                        &lt;th&gt;Number&lt;/th&gt;
+                        &lt;th&gt;Image&lt;/th&gt;
+                        &lt;th&gt;Alt text&lt;/th&gt;
+                        &lt;th&gt;Operation&lt;/th&gt;
+                &lt;/tr&gt;
+        &lt;/thead&gt;
+        &lt;tbody&gt;
+                {% for (image . index) in images %}
+                &lt;tr&gt;
+                        &lt;td&gt;{{index}}&lt;/td&gt;
+                        &lt;td&gt;
+                                &lt;img src="/storage/{{user.id}}/entry{{entry.id}}/{{image.filename}}?CONTENT-TYPE={{image.content-type}}&SIZE=100x100" alt="{{image.alt-text}}"&gt;
+                        &lt;/td&gt;
+                        &lt;td&gt;{{image.alt-text}}&lt;/td&gt;
+                        &lt;td&gt;
+                                &lt;div&gt;
+                                        &lt;a href="/entries/{{entry.id}}/images/{{image.id}}/edit"&gt;Edit&lt;/a&gt;
+                                        &lt;form action="/entries/{{entry.id}}/images/{{image.id}}" method="post"&gt;
+                                                &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}"&gt;
+                                                &lt;input type="hidden" name="METHOD" value="delete"&gt;
+                                                &lt;input type="submit" value="Delete"&gt;
+                                        &lt;/form&gt;
+                                &lt;/div&gt;
+                        &lt;/td&gt;
+                &lt;/tr&gt;
+                {% endfor %}
+        &lt;/tbody&gt;
+&lt;/table&gt;
+{% else %}
+&lt;p&gt;No images&lt;/p&gt;
+{% endif %}
+{% endblock %}</code></pre>
+
+<h4>routing</h4>
+
+<p>テンプレートに引数を渡せるようにルーティングを定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> index-entry-image <span class="string">"/entries/:id/images"</span><span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren3">(<span class="code"><span class="keyword">:logged-in</span></span>)</span>
+    <span class="paren3">(<span class="code">ensure-let<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">entry<span class="paren6">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">images<span class="paren1">(<span class="code">mito:retrieve-dao 'your-app.model::entry-image <span class="keyword">:entry-id</span> <span class="paren2">(<span class="code">mito:object-id entry</span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">render <span class="string">"entry-images/index.html"</span> `<span class="paren6">(<span class="code">,@<span class="paren1">(<span class="code">roles</span>)</span>
+                                             <span class="keyword">:images</span> ,<span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> image <span class="keyword">:in</span> images
+                                                            <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 1
+                                                            <span class="keyword">:collect</span> <span class="paren2">(<span class="code">cons image i</span>)</span></span>)</span>
+                                             <span class="keyword">:entry</span> ,entry
+                                             <span class="keyword">:user</span> ,<span class="paren1">(<span class="code">current-user</span>)</span>
+                                             <span class="keyword">:token</span> ,<span class="paren1">(<span class="code">token</span>)</span>
+                                             <span class="keyword">:news</span> ,<span class="paren1">(<span class="code">articles 5</span>)</span>
+                                             <span class="keyword">:blogs</span> ,<span class="paren1">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span>
+                                             </span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/caveman/index-entry-images.png" alt="Screen shot of index entry images" /></p>
+
+<h3>show</h3>
+
+<p>編集フォームへリダイレクトする形で定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> show-image <span class="string">"/entries/:id/images/:image-id"</span><span class="paren2">(<span class="code">&amp;key id image-id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren3">(<span class="code"><span class="keyword">:logged-in</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i><span class="paren4">(<span class="code">null<span class="paren5">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> id</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">myway:next-route</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i><span class="paren5">(<span class="code">null<span class="paren6">(<span class="code">mito:find-dao 'your-app.model::entry-image <span class="keyword">:id</span> image-id</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">myway:next-route</span>)</span>
+        `<span class="paren5">(<span class="code">,status-code:+see-other+<span class="paren6">(<span class="code"><span class="keyword">:location</span> ,<span class="paren1">(<span class="code">format nil <span class="string">"/entries/~A/images/~A/edit"</span> id image-id</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>new</h3>
+
+<h4>templates/entry-images/new.html</h4>
+
+<p>テンプレートを作成。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+
+{% block title %}{% lisp (title! "Add image") %}{% endblock %}
+
+{% block content %}
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
+&lt;h2&gt;{{entry.title}}&lt;/h2&gt;
+
+&lt;form action="/entries/{{entry.id}}/images" method="post" enctype="multipart/form-data"&gt;
+        &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}"&gt;
+        &lt;input type="hidden" name="METHOD" value="put"&gt;
+        {% include "entry-images/form.html" %}
+        &lt;div&gt;&lt;input type="submit" value="Add"/&gt;&lt;/div&gt;
+&lt;/form&gt;
+
+{% endblock %}</code></pre>
+
+<h4>templates/entry-images/form.html</h4>
+
+<p>部分テンプレートを作成。</p>
+
+<pre><code>{% include "shared/errors.html" %}
+&lt;table class="attr"&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="image-new-data"&gt;New data&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input type="file" name="IMAGE" id="image-new-data"/&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+        &lt;tr&gt;
+                &lt;th&gt;&lt;label for="image-alt-text"&gt;Alt text&lt;/label&gt;&lt;/th&gt;
+                &lt;td&gt;&lt;input type="text" name="ALT-TEXT" value="{{image.alt-text}}" id="image-alt-text" size="40"/&gt;&lt;/td&gt;
+        &lt;/tr&gt;
+&lt;/table&gt;</code></pre>
+
+<h4>routing</h4>
+
+<p>引数を渡せるようにルーティングを定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> add-image <span class="string">"/entries/:id/images/new"</span><span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren3">(<span class="code"><span class="keyword">:logged-in</span></span>)</span>
+    <span class="paren3">(<span class="code">ensure-let<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">entry<span class="paren6">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">render <span class="string">"entry-images/new.html"</span> `<span class="paren5">(<span class="code">,@<span class="paren6">(<span class="code">roles</span>)</span>
+                                         <span class="keyword">:entry</span> ,entry
+                                         <span class="keyword">:user</span> ,<span class="paren6">(<span class="code">current-user</span>)</span>
+                                         <span class="keyword">:token</span> ,<span class="paren6">(<span class="code">token</span>)</span>
+                                         <span class="keyword">:news</span> ,<span class="paren6">(<span class="code">articles 5</span>)</span>
+                                         <span class="keyword">:blogs</span> ,<span class="paren6">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span>
+                                         </span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/caveman/add-image.png" alt="Screen shot of adding entry image" /></p>
+
+<h3>create</h3>
+
+<h4>dispatcher</h4>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i><span class="paren2">(<span class="code"><span class="string">"/entries"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key method</span>)</span>
+  <span class="paren2">(<span class="code">method-case method
+    <span class="paren3">(<span class="code"><span class="string">"put"</span> <span class="paren4">(<span class="code">create-entry<span class="paren5">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>create-entry-image</h4>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> create-entry-image<span class="paren2">(<span class="code"><span class="string">"/entries/:entry-id/images"</span> <span class="keyword">:method</span> <span class="keyword">:put</span></span>)</span><span class="paren2">(<span class="code">&amp;key authenticity-token entry-id image</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="keyword">:token</span> <span class="paren5">(<span class="code">car authenticity-token</span>)</span></span>)</span><span class="keyword">:logged-in</span></span>)</span>
+    <span class="paren3">(<span class="code">ensure-let<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">entry<span class="paren6">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> entry-id</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">multiple-value-bind<span class="paren5">(<span class="code">entry-image errors</span>)</span><span class="paren5">(<span class="code">validation:validate
+                                                <span class="paren6">(<span class="code">make-instance 'your-app.model::entry-image
+                                                               <span class="keyword">:entry</span> entry <span class="keyword">:image</span> image</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">user<span class="paren2">(<span class="code">current-user</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> errors
+            `<span class="paren1">(<span class="code">,status-code:+bad-request+<span class="paren2">(<span class="code"></span>)</span>
+               <span class="paren2">(<span class="code">,<span class="paren3">(<span class="code">render <span class="string">"entry-images/new.html"</span> `<span class="paren4">(<span class="code">,@<span class="paren5">(<span class="code">roles</span>)</span> <span class="keyword">:errors</span> ,errors <span class="keyword">:entry</span> ,entry <span class="keyword">:user</span> ,user
+                                                             <span class="keyword">:token</span> ,<span class="paren5">(<span class="code">token</span>)</span> <span class="keyword">:news</span> ,<span class="paren5">(<span class="code">articles 5</span>)</span>
+                                                             <span class="keyword">:blogs</span> ,<span class="paren5">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren2">(<span class="code">storage::write <span class="paren3">(<span class="code">car image</span>)</span>
+                                   <span class="paren3">(<span class="code">mito:object-id user</span>)</span>
+                                   <span class="paren3">(<span class="code">format nil <span class="string">"entry~A"</span>entry-id</span>)</span>
+                                   <span class="paren3">(<span class="code">make-image-file image</span>)</span></span>)</span>
+                   <span class="paren2">(<span class="code">mito:insert-dao entry-image</span>)</span>
+                   `<span class="paren2">(<span class="code">,status-code:+see-other+<span class="paren3">(<span class="code"><span class="keyword">:location</span> ,<span class="paren4">(<span class="code">format nil <span class="string">"/entries/~A/images"</span> entry-id</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Edit</h3>
+
+<h4>templates/entry-images/edit.html</h4>
+
+<p>テンプレートを作成。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+
+{% block title %}{% lisp (title! "Edit image") %}{% endblock %}
+
+{% block content %}
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
+&lt;h2&gt;{{entry.title}}&lt;/h2&gt;
+
+&lt;form action="/entries/{{entry.id}}/images/{{image.id}}" method="post" enctype="multipart/form-data"&gt;
+        &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}"/&gt;
+        &lt;input type="hidden" name="METHOD" value="post"/&gt;
+        {% include "entry-images/form.html" %}
+        &lt;div&gt;&lt;input type="submit" value="Update" /&gt;&lt;/div&gt;
+&lt;/form&gt;
+{% endblock %}</code></pre>
+
+<h4>routing</h4>
+
+<p>引数を渡せるようにルーティングを定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> edit-entry-image <span class="string">"/entries/:entry-id/images/:image-id/edit"</span><span class="paren2">(<span class="code">&amp;key entry-id image-id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren3">(<span class="code"><span class="keyword">:logged-in</span></span>)</span>
+    <span class="paren3">(<span class="code">ensure-let<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">entry<span class="paren6">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> entry-id</span>)</span></span>)</span>
+                <span class="paren5">(<span class="code">image<span class="paren6">(<span class="code">mito:find-dao 'your-app.model::entry-image <span class="keyword">:id</span> image-id</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">render <span class="string">"entry-images/edit.html"</span> `<span class="paren5">(<span class="code">,@<span class="paren6">(<span class="code">roles</span>)</span> <span class="keyword">:token</span> ,<span class="paren6">(<span class="code">token</span>)</span> <span class="keyword">:user</span> ,<span class="paren6">(<span class="code">current-user</span>)</span> <span class="keyword">:news</span> ,<span class="paren6">(<span class="code">articles 5</span>)</span>
+                                                   <span class="keyword">:entry</span> ,entry
+                                                   <span class="keyword">:image</span> ,image
+                                                   <span class="keyword">:blogs</span> ,<span class="paren6">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span>
+                                                   </span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>update</h3>
+
+<h4>dispatcher</h4>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> dispatch-entry-image<span class="paren2">(<span class="code"><span class="string">"/entries/:entry-id/images/:image-id"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key method entry-id image-id</span>)</span>
+  <span class="paren2">(<span class="code">method-case<span class="paren3">(<span class="code">alexandria:ensure-car method</span>)</span>
+    <span class="paren3">(<span class="code"><span class="string">"post"</span>
+     <span class="paren4">(<span class="code">update-entry-image <span class="paren5">(<span class="code">acons <span class="string">"ENTRY-ID"</span> entry-id
+                                <span class="paren6">(<span class="code">acons <span class="string">"IMAGE-ID"</span> image-id <span class="paren1">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="string">"delete"</span>
+     <span class="paren4">(<span class="code">destroy-entry-image <span class="paren5">(<span class="code">acons <span class="string">"ENTRY-ID"</span> entry-id
+                                 <span class="paren6">(<span class="code">acons <span class="string">"IMAGE-ID"</span> image-id <span class="paren1">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>update-entry-image</h4>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> update-entry-image<span class="paren2">(<span class="code">request</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind<span class="paren3">(<span class="code">&amp;key authenticity-token entry-id image-id image &amp;allow-other-keys</span>)</span><span class="paren3">(<span class="code">request-params request</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code"><span class="keyword">:token</span> <span class="paren6">(<span class="code">car authenticity-token</span>)</span></span>)</span><span class="keyword">:logged-in</span></span>)</span>
+      <span class="paren4">(<span class="code">ensure-let<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">entry<span class="paren1">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> entry-id</span>)</span></span>)</span>
+                  <span class="paren6">(<span class="code">entry-image<span class="paren1">(<span class="code">mito:find-dao 'your-app.model::entry-image <span class="keyword">:id</span> image-id</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">old <span class="paren2">(<span class="code">your-app.model::filename-of entry-image</span>)</span></span>)</span>
+             <span class="paren1">(<span class="code">user <span class="paren2">(<span class="code">current-user</span>)</span></span>)</span>
+             <span class="paren1">(<span class="code">subdirectory<span class="paren2">(<span class="code">format nil <span class="string">"entry~A"</span><span class="paren3">(<span class="code">mito:object-id entry</span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">multiple-value-bind<span class="paren1">(<span class="code">entry-image errors</span>)</span><span class="paren1">(<span class="code">validation:validate
+                                                    <span class="paren2">(<span class="code">your-app.model::update-instance entry-image <span class="keyword">:image</span> image</span>)</span></span>)</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> errors
+              `<span class="paren2">(<span class="code">,status-code:+bad-request+<span class="paren3">(<span class="code"></span>)</span>
+                 <span class="paren3">(<span class="code">,<span class="paren4">(<span class="code">render <span class="string">"entry-images/edit.html"</span> `<span class="paren5">(<span class="code">,@<span class="paren6">(<span class="code">roles</span>)</span> <span class="keyword">:user</span> ,user <span class="keyword">:news</span> ,<span class="paren6">(<span class="code">articles 5</span>)</span>
+                                                                <span class="keyword">:blogs</span> ,<span class="paren6">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span> <span class="keyword">:token</span> ,<span class="paren6">(<span class="code">token</span>)</span>
+                                                                <span class="keyword">:entry</span> ,entry <span class="keyword">:image</span> ,entry-image
+                                                                <span class="keyword">:errors</span> ,errors</span>)</span></span>)</span></span>)</span></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren3">(<span class="code">unless<span class="paren4">(<span class="code">equal old <span class="paren5">(<span class="code">your-app.model::filename-of entry-image</span>)</span></span>)</span>
+                       <span class="paren4">(<span class="code">your-app.model::purge user subdirectory old</span>)</span>
+                       <span class="paren4">(<span class="code">storage::write <span class="paren5">(<span class="code">car image</span>)</span>
+                                       <span class="paren5">(<span class="code">mito:object-id user</span>)</span>
+                                       subdirectory
+                                       <span class="paren5">(<span class="code">make-image-file image</span>)</span></span>)</span></span>)</span>
+                     <span class="paren3">(<span class="code">mito:save-dao entry-image</span>)</span>
+                     `<span class="paren3">(<span class="code">,status-code:+see-other+<span class="paren4">(<span class="code"><span class="keyword">:location</span> ,<span class="paren5">(<span class="code">format nil <span class="string">"/entries/~A/images"</span>
+                                                                   <span class="paren6">(<span class="code">mito:object-id entry</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>destroy</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> destroy-entry-image<span class="paren2">(<span class="code"><span class="string">"/entries/:entry-id/images/:image-id"</span> <span class="keyword">:method</span> <span class="keyword">:delete</span></span>)</span>
+          <span class="paren2">(<span class="code">&amp;key authenticity-token entry-id image-id &amp;allow-other-keys</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="keyword">:token</span> authenticity-token</span>)</span><span class="keyword">:logged-in</span></span>)</span>
+    <span class="paren3">(<span class="code">ensure-let<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">entry<span class="paren6">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> entry-id</span>)</span></span>)</span>
+                <span class="paren5">(<span class="code">entry-image<span class="paren6">(<span class="code">mito:find-dao 'your-app.model::entry-image <span class="keyword">:id</span> image-id</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">your-app.model::purge <span class="paren5">(<span class="code">current-user</span>)</span> <span class="paren5">(<span class="code">format nil <span class="string">"entry~A"</span><span class="paren6">(<span class="code">mito:object-id entry</span>)</span></span>)</span>
+                             <span class="paren5">(<span class="code">your-app.model::filename-of entry-image</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">mito:delete-dao entry-image</span>)</span>
+      `<span class="paren4">(<span class="code">,status-code:+see-other+ <span class="paren5">(<span class="code"><span class="keyword">:location</span> ,<span class="paren6">(<span class="code">format nil <span class="string">"/entries/~A/images"</span><span class="paren1">(<span class="code">mito:object-id entry</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>footer</h3>
+
+<p>フッタにリンクを追加。</p>
+
+<h4>templates/entries/footer.html</h4>
+
+<pre><code>        &lt;a href="/entries/{{entry.id}}/edit"&gt;Edit&lt;/a&gt;
+        &lt;a href="/entries/{{entry.id}}/images"&gt;Images&lt;/a&gt;
+        &lt;form action="/entries/{{entry.id}}" method="post"&gt;</code></pre>
+
+<h3>Show on blog.</h3>
+
+<h4>templates/entries/show.html</h4>
+
+<pre><code>&lt;h2&gt;{{entry.title}}&lt;/h2&gt;
+
+{% if images.first %}
+&lt;div&gt;
+        &lt;img alt="{{images.first.alt-text}}" style="display: block; margin: 0 auto 15px" src="/storage/{{user.id}}/entry{{entry.id}}/{{images.first.filename}}?CONTENT-TYPE={{images.first.content-type}}"/&gt;
+&lt;/div&gt;
+{% endif %}
+{{ entry.body | simple-format | safe }}
+{% if images.rest %}
+{% for image in images.rest %}
+&lt;div&gt;
+        &lt;img alt="{{image.alt-text}}" style="display: block; margin: 0 auto 15px" src="/storage/{{user.id}}/entry{{entry.id}}/{{image.filename}}?CONTENT-TYPE={{image.content-type}}"/&gt;
+&lt;/div&gt;
+{% endfor %}
+{% endif %}</code></pre>
+
+<p><img src="../img/caveman/show-on-blog.png" alt="Screen shot of blog images" /></p>
+
+<h2>13.5 Changing image position.</h2>
+
+<p>TODO</p>
+
+<h2>13.6 Cloud Storage</h2>
+
+<p>TODO</p>
+
+<h2>Summary</h2>
+
+<ul>
+<li>Active Storageのサポートなどありません。</li>
+<li>ディスクサービスをでっちあげるのは難しくありません。</li>
+<li>画像処理ソフトウェアImageMagickを導入すれば、画像ファイルのりサイズ、回転、グレースケール化などの処理を行えます。ImageMagickのAPIを叩くにはUIOP:RUN-PROGRAMを使います。</li>
+<li>モデルに添付ファイルの属性を追加するには定義時に継承します。
+<!-- {% endraw %} --></li>
+</ul>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
