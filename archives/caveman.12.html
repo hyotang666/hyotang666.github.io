@@ -1,0 +1,97 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>caveman.12
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><!-- {% raw %} -->
+
+<h1>Caveman kills ruby on rails - Chapter 12</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Cavemanアプリにjavascriptを導入したいCLer</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p>本稿は<a href="https://book.impress.co.jp/books/1117101135" >原著</a>の各章をCommon Lispに翻訳するシリーズの第12章である。
+Cavemanにはjavascript周りをいい具合に導入できるようなサポートはない。
+原始的で愚直な最低限の事のみを行う。</p>
+
+<p>よって12.1、12.2、12.3章はTODOとして無視する。</p>
+
+<h2>12.1 credentials</h2>
+
+<h2>12.2 asset pipeline</h2>
+
+<h2>12.3 Sass</h2>
+
+<h2>12.4 javascript</h2>
+
+<p>Cavemanに於いてjavascriptを書く場合、ソースはデフォルトではstatic/js/下に配置することとなる。</p>
+
+<h3>jQuery</h3>
+
+<p>いい具合に導入できたりはしない。
+ここではgoogleのCDNを利用することとする。</p>
+
+<h4>templates/layouts/app.html</h4>
+
+<pre><code>&lt;head&gt;
+        &lt;meta charset="utf-8"&gt;
+        &lt;title&gt;{% block title %}Your-app{% endblock %}&lt;/title&gt;
+        &lt;link rel="stylesheet" type="text/css" media="screen" href="/css/app.css"&gt;
+        &lt;script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.0/jquery.min.js"&gt;&lt;/script&gt;
+&lt;/head&gt;</code></pre>
+
+<h3>extends article form.</h3>
+
+<p>jsコードを以下のように作成。</p>
+
+<h4>static/js/articles.js</h4>
+
+<pre><code>$(document).ready(function(){
+        var cb = $("#no-expiration");
+        var field = $("#article-expired-at");
+
+        var changeExpiredAt = function(){
+                if (cb.prop("checked"))
+                        field.hide()
+                else
+                        field.show()
+        }
+
+        cb.bind("click", changeExpiredAt);
+
+        changeExpiredAt();
+});</code></pre>
+
+<p>scriptタグを追加。</p>
+
+<h4>templates/articles/new.html</h4>
+
+<pre><code>{% block content %}
+&lt;script src="/js/articles.js"&gt;&lt;/script&gt;</code></pre>
+
+<h2>Summary</h2>
+
+<ul>
+<li>Javascriptを導入したい場合はstatic/js下に配置してロードします。
+<!-- {% endraw %} --></li>
+</ul>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
