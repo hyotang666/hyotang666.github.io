@@ -1,0 +1,292 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>caveman.14
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><!-- {% raw %} -->
+
+<h1>Caveman kills ruby on rails - Chapter 14</h1>
+
+<h2>Meta info</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Cavemanに於いて多対多のモデリングを行いたいCLer。</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p>本稿は<a href="https://book.impress.co.jp/books/1117101135" >原著</a>の各章をCommon Lispに翻訳するシリーズの第14章である。
+本章ではCavemanにおける多対多のモデリングを修めていく。</p>
+
+<h2>14.1 Many to many relationship.</h2>
+
+<h2>14.2 VOTE model</h2>
+
+<p>まずはモデルを定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> vote<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">entry <span class="keyword">:col-type</span> entry <span class="keyword">:initarg</span> <span class="keyword">:entry</span> <span class="keyword">:accessor</span> entry-of</span>)</span>
+   <span class="paren3">(<span class="code">user <span class="keyword">:col-type</span> user <span class="keyword">:initarg</span> <span class="keyword">:user</span> <span class="keyword">:accessor</span> user-of</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> mito:dao-table-class</span>)</span></span>)</span></span></code></pre>
+
+<p>テーブル作成。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">with-connection</span></i><span class="paren2">(<span class="code">db</span>)</span>
+  <span class="paren2">(<span class="code">mapc #'mito:ensure-table-exists '<span class="paren3">(<span class="code">user article entry entry-image vote</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>マイグレーション。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> rebuild<span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-connection</span></i><span class="paren3">(<span class="code">db</span>)</span>
+    <span class="paren3">(<span class="code">mapc #'mito:recreate-table '<span class="paren4">(<span class="code">user article entry entry-image vote</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">seeds</span>)</span></span>)</span></span></code></pre>
+
+<p>ユーザを消すときにVOTEも消えるように。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> mito:delete-dao <span class="keyword">:before</span><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">user user</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">mito:delete-by-values 'vote <span class="keyword">:user-id</span> <span class="paren3">(<span class="code">mito:object-id user</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">mito:delete-by-values 'entry <span class="keyword">:user-id</span> <span class="paren3">(<span class="code">mito:object-id user</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>エントリを消すときにVOTEも消えるように。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> mito:delete-dao <span class="keyword">:before</span><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o entry</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">mito:delete-by-values 'vote <span class="keyword">:entry-id</span> <span class="paren3">(<span class="code">mito:object-id o</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">mito:delete-by-values 'entry-image <span class="keyword">:entry-id</span> <span class="paren3">(<span class="code">mito:object-id o</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>ENTRYがUSERにとって投票可能か否か試験する述語。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> votablep<span class="paren2">(<span class="code">entry user</span>)</span>
+  <span class="paren2">(<span class="code">and entry
+       <span class="paren3">(<span class="code">not <span class="paren4">(<span class="code">mito:object= user <span class="paren5">(<span class="code">author-of entry</span>)</span></span>)</span></span>)</span>
+       <span class="paren3">(<span class="code">null <span class="paren4">(<span class="code">mito:select-dao 'vote
+                              <span class="paren5">(<span class="code">sxql:where <span class="paren6">(<span class="code"><span class="keyword">:and</span> <span class="paren1">(<span class="code"><span class="keyword">:=</span> <span class="keyword">:user-id</span> <span class="paren2">(<span class="code">mito:object-id user</span>)</span></span>)</span>
+                                                <span class="paren1">(<span class="code"><span class="keyword">:=</span> <span class="keyword">:entry-id</span> <span class="paren2">(<span class="code">mito:object-id entry</span>)</span></span>)</span></span>)</span></span>)</span>
+                              <span class="paren5">(<span class="code">sxql:limit 1</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>シードデータを編集。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> seeds<span class="paren2">(<span class="code"></span>)</span>
+  ...
+          <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">user<span class="paren5">(<span class="code">mito:find-dao 'user <span class="keyword">:name</span> name</span>)</span></span>)</span></span>)</span>
+            <span class="paren3">(<span class="code">when user
+              <span class="paren4">(<span class="code">dotimes<span class="paren5">(<span class="code">x 10</span>)</span>
+                <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i><span class="paren6">(<span class="code"><span class="paren1">(<span class="code">entry<span class="paren2">(<span class="code">mito:create-dao 'entry
+                                            <span class="keyword">:user</span> user
+                                            <span class="keyword">:title</span> <span class="paren3">(<span class="code">format nil <span class="string">"Title~D"</span> x</span>)</span>
+                                            <span class="keyword">:body</span> body
+                                            <span class="keyword">:date-posted</span> <span class="paren3">(<span class="code">local-time:timestamp- now <span class="paren4">(<span class="code">- 10 x</span>)</span> <span class="keyword">:day</span></span>)</span>
+                                            <span class="keyword">:status</span> <span class="paren3">(<span class="code">nth <span class="paren4">(<span class="code">rem x 3</span>)</span>'<span class="paren4">(<span class="code"><span class="string">"draft"</span> <span class="string">"member-only"</span> <span class="string">"public"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                  <span class="paren6">(<span class="code">when<span class="paren1">(<span class="code">find x '<span class="paren2">(<span class="code">7 8</span>)</span></span>)</span>
+                    <span class="paren1">(<span class="code">dolist<span class="paren2">(<span class="code">name '<span class="paren3">(<span class="code"><span class="string">"John"</span> <span class="string">"Mike"</span> <span class="string">"Sophy"</span></span>)</span></span>)</span>
+                      <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">voter <span class="paren5">(<span class="code">mito:find-dao 'user <span class="keyword">:name</span> name</span>)</span></span>)</span></span>)</span>
+                        <span class="paren3">(<span class="code">mito:create-dao 'vote <span class="keyword">:user</span> voter <span class="keyword">:entry</span> entry</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>)
+      )))</span></code></pre>
+
+<h2>14.3 Like button.</h2>
+
+<h3>Index</h3>
+
+<h4>templates/entries/index.html</h4>
+
+<p>テンプレートを修正。</p>
+
+<pre><code>        &lt;/li&gt;
+        {% if votes %}
+        &lt;li&gt;&lt;span class="vote"&gt;★{{votes}}&lt;/span&gt;&lt;/li&gt;
+        {% endif %}
+&lt;/ul&gt;</code></pre>
+
+<p>テンプレートに引数を渡すようにルーティングを修正。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> entries-index <span class="string">"/entries"</span> <span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code">author<span class="paren5">(<span class="code">when id
+                 <span class="paren6">(<span class="code">mito:find-dao 'your-app.model::user <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">entries<span class="paren5">(<span class="code">entries <span class="keyword">:author</span> author</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">render <span class="string">"entries/index.html"</span> `<span class="paren4">(<span class="code"><span class="keyword">:member</span> ,author
+                                           <span class="keyword">:user</span> ,<span class="paren5">(<span class="code">current-user</span>)</span>
+                                           <span class="keyword">:news</span> ,<span class="paren5">(<span class="code">articles 5</span>)</span>
+                                           <span class="keyword">:entries</span> ,<span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> entry <span class="keyword">:in</span> entries
+                                                           <span class="keyword">:for</span> votes = <span class="paren6">(<span class="code">mito:count-dao 'your-app.model::vote <span class="keyword">:entry-id</span> <span class="paren1">(<span class="code">mito:object-id entry</span>)</span></span>)</span>
+                                                           <span class="keyword">:collect</span> <span class="paren6">(<span class="code">cons entry <span class="paren1">(<span class="code">and <span class="paren2">(<span class="code">&lt; 0 votes</span>)</span>
+                                                                                     votes</span>)</span></span>)</span></span>)</span>
+                                           <span class="keyword">:blogs</span> ,<span class="paren5">(<span class="code">subseq entries 0 5</span>)</span>
+                                           ,@<span class="paren5">(<span class="code">roles</span>)</span>
+                                           <span class="keyword">:token</span> ,<span class="paren5">(<span class="code">token</span>)</span>
+                                           </span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/caveman/entries-index-with-like.png" alt="Screen shot of entries index with like" /></p>
+
+<h3>Show</h3>
+
+<h4>templates/entries/show.html</h4>
+
+<p>テンプレートを修正。</p>
+
+<pre><code>{% include "entries/footer.html" %}
+{% include "entries/votes.html" %}
+{% endblock %}</code></pre>
+
+<h4>templates/entires/votes.html</h4>
+
+<p>部分テンプレートを作成。</p>
+
+<pre><code>&lt;div class="vote"&gt;
+        {% for voter in voters %}
+        ★{{voter.name}}
+        {% endfor %}
+        
+        {% if votablep %}
+        &lt;form action="/entries/{{entry.id}}/like" method="post"&gt;
+                &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}"&gt;
+                &lt;input type="hidden" name="METHOD" value="post"&gt;
+                &lt;input type="submit" value="★Like!"&gt;
+        &lt;/form&gt;
+        {% endif %}
+&lt;/div&gt;</code></pre>
+
+<p>引数をテンプレートに渡すようにルーティングを修正。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> show-entry <span class="string">"/entries/:id"</span><span class="paren2">(<span class="code">&amp;key id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren3">(<span class="code"><span class="keyword">:logged-in</span></span>)</span>
+    <span class="paren3">(<span class="code">ensure-let<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">entry<span class="paren6">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i><span class="paren5">(<span class="code"><span class="paren6">(<span class="code">entries<span class="paren1">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span></span>)</span>
+           <span class="paren6">(<span class="code">user<span class="paren1">(<span class="code">current-user</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">render <span class="string">"entries/show.html"</span> `<span class="paren6">(<span class="code">,@<span class="paren1">(<span class="code">roles</span>)</span>
+                                       <span class="keyword">:entry</span> ,entry
+                                       <span class="keyword">:token</span> ,<span class="paren1">(<span class="code">token</span>)</span>
+                                       <span class="keyword">:user</span> ,user
+                                       <span class="keyword">:entries</span> ,entries
+                                       <span class="keyword">:blogs</span> ,entries
+                                       <span class="keyword">:news</span> ,<span class="paren1">(<span class="code">articles 5</span>)</span>
+                                       <span class="keyword">:member</span> ,<span class="paren1">(<span class="code">your-app.model::author-of entry</span>)</span>
+                                       <span class="keyword">:images</span> ,<span class="paren1">(<span class="code">mito:retrieve-dao 'your-app.model::entry-image <span class="keyword">:entry-id</span> id</span>)</span>
+                                       <span class="keyword">:voters</span> ,<span class="paren1">(<span class="code">mapcar #'your-app.model::user-of
+                                                        <span class="paren2">(<span class="code">mito:retrieve-dao 'your-app.model::vote <span class="keyword">:entry-id</span> id</span>)</span></span>)</span>
+                                       <span class="keyword">:votablep</span> ,<span class="paren1">(<span class="code">your-app.model::votablep entry user</span>)</span>
+                                       </span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/caveman/show-entry-with-like.png" alt="Screen shot of show entry with like" /></p>
+
+<h3>Like</h3>
+
+<p>ディスパッチャを以下のように定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="paren2">(<span class="code"><span class="string">"/entries/:id/like"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key method id</span>)</span>
+  <span class="paren2">(<span class="code">method-case method
+    <span class="paren3">(<span class="code"><span class="string">"post"</span> <span class="paren4">(<span class="code">like-entry <span class="paren5">(<span class="code">acons <span class="string">"ID"</span> id<span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>postメソッドの本体を定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> like-entry<span class="paren2">(<span class="code">request</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind<span class="paren3">(<span class="code">&amp;key authenticity-token id &amp;allow-other-keys</span>)</span><span class="paren3">(<span class="code">request-params request</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code"><span class="keyword">:token</span> authenticity-token</span>)</span><span class="keyword">:logged-in</span></span>)</span>
+      <span class="paren4">(<span class="code">ensure-let<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">entry<span class="paren1">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">mito:create-dao 'your-app.model::vote <span class="keyword">:user</span> <span class="paren6">(<span class="code">current-user</span>)</span> <span class="keyword">:entry</span> entry</span>)</span>
+        <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span> <span class="string">"Voted"</span></span>)</span>
+        `<span class="paren5">(<span class="code">,status-code:+see-other+<span class="paren6">(<span class="code"><span class="keyword">:location</span> ,<span class="paren1">(<span class="code">format nil <span class="string">"/entries/~A"</span>id</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/caveman/show-entry-after-liked.png" alt="Screen shot of show entry after liked" /></p>
+
+<h2>14.4</h2>
+
+<h3>liked</h3>
+
+<h4>templates/entries/liked.html</h4>
+
+<p>テンプレートを作成。</p>
+
+<pre><code>{% extends "layouts/app.html" %}
+
+{% block title %}{% lisp (title! "Liked entries") %}{% endblock %}
+
+{% block content %}
+&lt;h1&gt;{% lisp (title!) %}&lt;/h1&gt;
+{% if entries %}
+&lt;ul&gt;
+        {% for entry in entries %}
+        &lt;li&gt;
+                &lt;a href="/entries/{{entry.id}}"&gt;{{entry.title}}&lt;/a&gt;
+                by
+                &lt;a href="/user/{{entry.author.id}}/entries"&gt;{{entry.author.name}}&lt;/a&gt;
+                -
+                &lt;form action="/entries/{{entry.id}}/like" method="post"&gt;
+                        &lt;input type="hidden" name="AUTHENTICITY-TOKEN" value="{{token}}"&gt;
+                        &lt;input type="hidden" name="METHOD" value="delete"&gt;
+                        &lt;input type="submit" value="Unlike"&gt;
+                &lt;/form&gt;
+        &lt;/li&gt;
+        {% endfor %}
+&lt;/ul&gt;
+{% else %}
+&lt;p&gt;No entries&lt;/p&gt;
+{% endif %}
+{% endblock %}</code></pre>
+
+<p>ルーティングを定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="string">"/entries/liked"</span><span class="paren2">(<span class="code">&amp;key</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren3">(<span class="code"><span class="keyword">:logged-in</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i><span class="paren4">(<span class="code"><span class="paren5">(<span class="code">user<span class="paren6">(<span class="code">current-user</span>)</span></span>)</span>
+          <span class="paren5">(<span class="code">entries<span class="paren6">(<span class="code">mapcar #'your-app.model::entry-of
+                          <span class="paren1">(<span class="code">mito:retrieve-dao 'your-app.model::vote <span class="keyword">:user-id</span> <span class="paren2">(<span class="code">mito:object-id user</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">render <span class="string">"entries/voted.html"</span> `<span class="paren5">(<span class="code">,@<span class="paren6">(<span class="code">roles</span>)</span> <span class="keyword">:news</span> ,<span class="paren6">(<span class="code">articles 5</span>)</span> <span class="keyword">:blogs</span> ,<span class="paren6">(<span class="code">entries <span class="keyword">:limit</span> 5</span>)</span> <span class="keyword">:token</span> ,<span class="paren6">(<span class="code">token</span>)</span>
+                                               <span class="keyword">:user</span> ,user
+                                               <span class="keyword">:entries</span> ,entries
+                                               </span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>templates/entries/index.html</h4>
+
+<p>indexを修正。</p>
+
+<pre><code>{% if user %}
+&lt;ul class="toolbar"&gt;
+        &lt;li&gt;&lt;a href="/entries/new"&gt;Write blog&lt;/a&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;a href="/entries/liked"&gt;Liked bog&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+{% endif %}</code></pre>
+
+<h3>Destroy</h3>
+
+<p>ルーティングを以下のよう修正。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> <span class="paren2">(<span class="code"><span class="string">"/entries/:id/like"</span> <span class="keyword">:method</span> <span class="keyword">:post</span></span>)</span><span class="paren2">(<span class="code">&amp;key method id</span>)</span>
+  <span class="paren2">(<span class="code">method-case method
+    <span class="paren3">(<span class="code"><span class="string">"delete"</span> <span class="paren4">(<span class="code">unlike-entry <span class="paren5">(<span class="code">acons <span class="string">"ID"</span> id<span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="string">"post"</span> <span class="paren4">(<span class="code">like-entry <span class="paren5">(<span class="code">acons <span class="string">"ID"</span> id<span class="paren6">(<span class="code">lack.request:request-body-parameters <span class="special">ningle:*request*</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>本体は以下のように定義。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defroute</span></i> unlike-entry<span class="paren2">(<span class="code"><span class="string">"/entries/:id/like"</span> <span class="keyword">:method</span> <span class="keyword">:delete</span></span>)</span><span class="paren2">(<span class="code">&amp;key authenticity-token id</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-authenticity-check</span></i><span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="keyword">:token</span> authenticity-token</span>)</span><span class="keyword">:logged-in</span></span>)</span>
+    <span class="paren3">(<span class="code">ensure-let<span class="paren4">(<span class="code"><span class="paren5">(<span class="code">entry<span class="paren6">(<span class="code">mito:find-dao 'your-app.model::entry <span class="keyword">:id</span> id</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">mito:delete-dao<span class="paren5">(<span class="code">mito:find-dao 'your-app.model::vote
+                                     <span class="keyword">:user-id</span> <span class="paren6">(<span class="code">mito:object-id<span class="paren1">(<span class="code">current-user</span>)</span></span>)</span>
+                                     <span class="keyword">:entry-id</span> <span class="paren6">(<span class="code">mito:object-id entry</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">setf<span class="paren5">(<span class="code">gethash <span class="keyword">:notice</span> <span class="special">ningle:*session*</span></span>)</span><span class="string">"Unliked"</span></span>)</span>
+      `<span class="paren4">(<span class="code">,status-code:+see-other+<span class="paren5">(<span class="code"><span class="keyword">:location</span> <span class="string">"/entries/liked"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/caveman/liked-entries-index.png" alt="Screen shot of like entries index" /></p>
+
+<h2>Summary</h2>
+
+<ul>
+<li>リレーショナルデータベースで多対多の関連付けを行うときには、２テーブル間の結びつきを記録するための中間テーブルを別途用意します。</li>
+<li>中間テーブルのためのモデルでは、各テーブルを:COL-TYPEで指定します。</li>
+</ul>
+
+<!-- {% endraw %} -->
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
