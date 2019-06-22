@@ -1,0 +1,181 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>ojilang-cl
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>ojilang-cl</h1>
+
+<h2>Meta Note</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>暇人</li>
+<li>ojilangファン</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<p><a href="https://twitter.com/grethlen/status/1142414723121655808" >ojilang</a>設計にチャレンジしてみた。</p>
+
+<h2>entry point</h2>
+
+<p>ゼロから言語を設計することは難しい。
+そこで、むしろ既存の言語を架空の（かつ理想の）ojilangに変換するコードを書けば、おのずとojilangが出来上がるのではあるまいか。</p>
+
+<h2>Common Lisp</h2>
+
+<p>Common Lispは25の特殊形式を持つ。
+すなわち、25特殊形式すべてをojilangに変換できれば、事実上すべてのCommon Lispコードはojilangに変換できることとなる。</p>
+
+<h2>Atom</h2>
+
+<p>アトムはそのまま出力することとする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ojilang 0</span>)</span> =&gt; 0</span></code></pre>
+
+<h2>Function call</h2>
+
+<p>関数呼び出しは以下のように変換される。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ojilang '<span class="paren2">(<span class="code">+ 1 2</span>)</span></span>)</span> =&gt; "今度+しようよ😍❓1❓2❓どうカナ💦" 
+
+<span class="paren1">(<span class="code">ojilang '<span class="paren2">(<span class="code">print <span class="keyword">:hello-world</span></span>)</span></span>)</span> =&gt; "今度PRINTしようよ😍❓:HELLO-WORLD❓どうカナ💦" </span></code></pre>
+
+<p>なお、これはあくまで現時点での変換である。
+（すなわちアルファクオリティである。）
+ojilangとして自然なシンタックスになるように、安定版になるまでは頻繁に変更されることとなろう。</p>
+
+<p>現行の設計では、ある程度ネストに耐えうるようになっている。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ojilang '<span class="paren2">(<span class="code">+ <span class="paren3">(<span class="code">- 1 2</span>)</span> 3</span>)</span></span>)</span> =&gt; "今度+しようよ😍❓今度-しようよ😍❓1❓2❓どうカナ💦❓3❓どうカナ💦" </span></code></pre>
+
+<h2>IF</h2>
+
+<p>条件分岐は以下のようになる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ojilang '<span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> <span class="keyword">:a</span> <span class="keyword">:b</span> <span class="keyword">:c</span></span>)</span></span>)</span>
+
+"暇ができたらさ、:Aﾉｼ
+大丈夫なら:B❤️
+えっ❓違う❓❓💦💦
+じゃあ:Cナンチャッテ（笑）" </span></code></pre>
+
+<h2>LET</h2>
+
+<p>ローカル変数宣言は以下のように変換される。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ojilang '<span class="paren2">(<span class="code"><i><span class="symbol">let</span></i><span class="paren3">(<span class="code">a</span>)</span>a</span>)</span></span>)</span>
+
+"ヤッホー<span class="paren1">(<span class="code">^з&lt;</span>)</span>🎵
+Aチャン、
+ﾁｭｯ😘❤️ ❤️ 
+A
+<span class="paren1">(<span class="code">^_^</span>)</span>v" </span></code></pre>
+
+<h2>BLOCK</h2>
+
+<p>ブロック宣言は以下のように変換される。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ojilang '<span class="paren2">(<span class="code"><i><span class="symbol">block</span></i> <span class="keyword">:a</span> <span class="paren3">(<span class="code"><i><span class="symbol">return-from</span></i> <span class="keyword">:a</span> 0</span>)</span></span>)</span></span>)</span>
+
+"おじさんも:Aに行くの、すっごくスキ（＞＿＜）なんだよ❗
+今度一緒に:Aに行こうよ❗
+0ってダメかな❓
+楽しみだね🥰 🥰 
+なんだか、ドキドキ❤️ しちゃうね<span class="paren1">(<span class="code">^_^</span>)</span>" </span></code></pre>
+
+<h2>TAGBODY</h2>
+
+<p>タグによるGOは以下のように変換される。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ojilang '<span class="paren2">(<span class="code"><i><span class="symbol">tagbody</span></i> <span class="keyword">:start</span> <span class="paren3">(<span class="code"><i><span class="symbol">go</span></i> <span class="keyword">:start</span></span>)</span></span>)</span></span>)</span>
+
+"最近連絡くれないけど、忙しいのかな❓
+:STARTとか好きだったよね❓
+そろそろおじさんと:STARTとか行こうよ😝
+今日も素敵な夢が見られますように❤️ " </span></code></pre>
+
+<h2>ojilang-cl</h2>
+
+<p><a href="https://github.com/hyotang666/ojilang-cl/blob/master/src/ojilang-cl.lisp" >現行バージョン（1.2.0）</a>では、都合１１の特殊形式をサポートしている。
+１１しかなくとも、簡単なコードなら必要充分である。
+たとえばfizzbazzは以下のように変換される。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ojilang '<span class="paren2">(<span class="code">dotimes<span class="paren3">(<span class="code">x 100</span>)</span>
+            <span class="paren3">(<span class="code"><i><span class="symbol">cond</span></i>
+              <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">and <span class="paren6">(<span class="code">zerop <span class="paren1">(<span class="code">rem x 3</span>)</span></span>)</span>
+                    <span class="paren6">(<span class="code">zerop <span class="paren1">(<span class="code">rem x 5</span>)</span></span>)</span></span>)</span>
+               <span class="paren5">(<span class="code">print <span class="keyword">:fizzbazz</span></span>)</span></span>)</span>
+              <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">zerop<span class="paren6">(<span class="code">rem x 3</span>)</span></span>)</span><span class="paren5">(<span class="code">print <span class="keyword">:fizz</span></span>)</span></span>)</span>
+              <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">zerop<span class="paren6">(<span class="code">rem x 5</span>)</span></span>)</span><span class="paren5">(<span class="code">print <span class="keyword">:bazz</span></span>)</span></span>)</span>
+              <span class="paren4">(<span class="code">t <span class="paren5">(<span class="code">print x</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+"おじさんもNILに行くの、すっごくスキ（＞＿＜）なんだよ❗
+ヤッホー<span class="paren1">(<span class="code">^з&lt;</span>)</span>🎵
+Xチャン、0
+ﾁｭｯ😘❤️ ❤️ 
+今度DECLAREしようよ😍❓今度TYPEしようよ😍❓UNSIGNED-BYTE❓X❓どうカナ💦❓どうカナ💦
+最近連絡くれないけど、忙しいのかな❓
+そろそろおじさんと#:G1741とか行こうよ😝
+#:G1740とか好きだったよね❓
+最近連絡くれないけど、忙しいのかな❓
+暇ができたらさ、暇ができたらさ、今度ZEROPしようよ😍❓今度REMしようよ😍❓X❓3❓どうカナ💦❓どうカナ💦ﾉｼ
+大丈夫なら今度ZEROPしようよ😍❓今度REMしようよ😍❓X❓5❓どうカナ💦❓どうカナ💦❤️
+えっ❓違う❓❓💦💦
+じゃあNILナンチャッテ（笑）ﾉｼ
+大丈夫なら今度PRINTしようよ😍❓:FIZZBAZZ❓どうカナ💦❤️
+えっ❓違う❓❓💦💦
+じゃあ暇ができたらさ、今度ZEROPしようよ😍❓今度REMしようよ😍❓X❓3❓どうカナ💦❓どうカナ💦ﾉｼ
+大丈夫なら今度PRINTしようよ😍❓:FIZZ❓どうカナ💦❤️
+えっ❓違う❓❓💦💦
+じゃあ暇ができたらさ、今度ZEROPしようよ😍❓今度REMしようよ😍❓X❓5❓どうカナ💦❓どうカナ💦ﾉｼ
+大丈夫なら今度PRINTしようよ😍❓:BAZZ❓どうカナ💦❤️
+えっ❓違う❓❓💦💦
+じゃあこれはTだけど、大丈夫❓
+今度PRINTしようよ😍❓X❓どうカナ💦ナンチャッテ（笑）ナンチャッテ（笑）ナンチャッテ（笑）
+今日も素敵な夢が見られますように❤️ 
+早く会いたいよ〜🥺 
+突然だけど、Xチャン、今度1+しようよ😍❓X❓どうカナ💦
+やっぱりおじさんとはイヤかなσ<span class="paren1">(<span class="code">^_^</span>)</span><span class="comment">;汗汗💦💦
+</span>NIL
+待っててね❗❓
+#:G1741とか好きだったよね❓
+暇ができたらさ、今度&gt;=しようよ😍❓X❓100❓どうカナ💦ﾉｼ
+大丈夫ならNIL❤️
+えっ❓違う❓❓💦💦
+じゃあそろそろおじさんと#:G1740とか行こうよ😝ナンチャッテ（笑）
+今度一緒にNILに行こうよ❗
+早く会いたいよ〜🥺 
+NIL
+待っててね❗❓ってダメかな❓
+楽しみだね🥰 🥰 
+今日も素敵な夢が見られますように❤️ 
+<span class="paren1">(<span class="code">^_^</span>)</span>v
+なんだか、ドキドキ❤️ しちゃうね<span class="paren1">(<span class="code">^_^</span>)</span>" </span></code></pre>
+
+<p>現行では<code>DECLARE</code>がサポートされていないので、関数であるかのように扱われている点要注意。</p>
+
+<h2>TODO （やるとは言っていない）</h2>
+
+<ol>
+<li>残る特殊形式の設計。</li>
+<li>充分整合が取れるようになったら、パーズ（すなわちojilangからS式生成）できるようにする。</li>
+</ol>
+
+<h2>Conclusion</h2>
+
+<p>地獄絵図。</p>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
