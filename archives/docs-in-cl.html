@@ -1,0 +1,118 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>docs-in-cl
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>Docs in Common Lisp</h1>
+
+<h2>Meta notes</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>ドキュメンテーション文字列の扱いについて関心のあるCLer。</li>
+</ul>
+
+<h2>Documentation string</h2>
+
+<p>Common Lispには、例えば関数定義構文にドキュメンテーション文字列を挿入できる機能がある。</p>
+
+<p>たとえば以下のようにする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> example<span class="paren2">(<span class="code">x</span>)</span>
+  <span class="string">"This is documentation."</span>
+  x</span>)</span></span></code></pre>
+
+<p>ドキュメンテーション文字列は、たとえば<code>DESCRIBE</code>経由で参照できる。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">describe 'example</span>)</span>
+
+COMMON-LISP-USER::EXAMPLE
+  [symbol]
+
+EXAMPLE names a compiled function:
+  Lambda-list: <span class="paren1">(<span class="code">X</span>)</span>
+  Derived type: <span class="paren1">(<span class="code"><i><span class="symbol">FUNCTION</span></i> <span class="paren2">(<span class="code">T</span>)</span> <span class="paren2">(<span class="code">VALUES T &amp;OPTIONAL</span>)</span></span>)</span>
+  Documentation:
+    This is documentation.
+  Source form:
+    <span class="paren1">(<span class="code"><i><span class="symbol">LAMBDA</span></i> <span class="paren2">(<span class="code">X</span>)</span> <span class="string">"This is documentation."</span> <span class="paren2">(<span class="code"><i><span class="symbol">BLOCK</span></i> EXAMPLE X</span>)</span></span>)</span></span></code></pre>
+
+<p><code>DESCRIBE</code>の欠点は出力内容が処理系依存なことである。
+（なお、上記出力はSBCLのもの。）</p>
+
+<p>余計な出力が必要ないなら<code>DOCUMENTATION</code>でドキュメンテーション文字列のみを取り出せる。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">documentation 'example '<i><span class="symbol">function</span></i></span>)</span>
+"This is documentation."</span></code></pre>
+
+<h2>Issue</h2>
+
+<p>個人的にこの機能はなかなか良い機能だと思ってはいるのだが、それがうまく機能しているかというと少々疑問がある。</p>
+
+<p>そもそもエンドユーザーとしてドキュメンテーション文字列に期待するのはどのような情報だろうか？</p>
+
+<p>僕が期待するものは引数の型情報、返り値の型情報、副作用があるかないか、コンディションを投げることがあるかなどであり、これは要するにHYPERSPECのような内容である。</p>
+
+<p>当然それは一行やそこらで収まるものではない。
+僕が見てきた中で最長のものは<a href="https://github.com/edicl/drakma/blob/master/request.lisp#L189" ><code>DRAKMA:HTTP-REQUEST</code></a>のそれで、実に243行に渡る。</p>
+
+<p>そのような長いドキュメンテーション文字列はソースコードを少々読みにくくさせる。
+特に問題なのが、最悪の場合ラムダリストがエディタの画面外に行ってしまう点である。
+（もっとも、<code>DRAKMA:HTTP-REQUEST</code>のラムダリストはそれだけで45行もあるのだが。）</p>
+
+<p>こういった点を苦々しく思っているのは僕だけではないようで、なんとかしようと試みている例は幾つかある。</p>
+
+<h2>Solution 1</h2>
+
+<p><a href="https://github.com/m2ym/cl-annot#user-content-annotation-doc" ><code>CL-ANNOT</code></a>はアノテーションを使うことでドキュメンテーション文字列を関数定義フォームの外側へ出せるようにしている。</p>
+
+<pre><code><span class="code">@doc
+"This is documentation"
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> example<span class="paren2">(<span class="code">x</span>)</span>
+  x</span>)</span></span></code></pre>
+
+<p>欠点はドキュメンテーション文字列がフォームに束縛される点である。
+すなわち、別ファイルに分けることができない。</p>
+
+<h2>Solution 2</h2>
+
+<p><a href="https://github.com/Shinmera/documentation-utils" ><code>DOCUMENTATION-UTILS</code></a>はマクロで後からドキュメンテーション文字列を<code>SETF</code>するようにしている。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> example<span class="paren2">(<span class="code">x</span>)</span>
+  x</span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">docs:define-docs</span></i>
+  <span class="paren2">(<span class="code">example <span class="string">"This is documentation"</span></span>)</span></span>)</span></span></code></pre>
+
+<p>同様のことは<a href="https://github.com/Bike/introspect-environment/blob/master/doc.lisp" ><code>INTROSPECT-ENVIRONMENT</code></a>も独自のマクロで行っている。</p>
+
+<p>欠点はポータビリティに欠ける点である。
+総称関数<code>DOCUMENTATION</code>への<code>SETF</code>は言語仕様上できるはずなのだが、少なくともECLはそれに違反しており<code>SETF</code>できない。</p>
+
+<h2>Conclusion</h2>
+
+<p>個人的には関数定義フォームへのドキュメンテーション文字列は<code>ASDF</code>でいうところのショートデスクリプションであるべきなのではないかと思っている。</p>
+
+<p>そして、長さが必要なら（<code>ASDF</code>でいうところのロングデスクリプションは）総称関数<code>DOCUMENTATION</code>への<code>:AROUND</code>メソッドとして定義するのがスマートではなかろうか。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> example<span class="paren2">(<span class="code">x</span>)</span>
+  <span class="string">"This is documentation title"</span>
+  x</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> documentation <span class="keyword">:around</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">name <span class="paren4">(<span class="code">eql 'example</span>)</span></span>)</span><span class="paren3">(<span class="code">type <span class="paren4">(<span class="code">eql '<i><span class="symbol">function</span></i></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">format nil <span class="string">"~@[~A~2%~]~A"</span>
+      <span class="paren3">(<span class="code">call-next-method</span>)</span>
+      <span class="string">"This is documentation body"</span></span>)</span></span>)</span></span></code></pre>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
