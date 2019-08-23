@@ -40,6 +40,47 @@
 <p>なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。</p>
 
+<h2>*MACROEXPAND-HOOK*</h2>
+
+<p>変数*MACROEXPAND-HOOK*が受け取る関数のAPIは(expander form env)である。
+使い方としては、何らかの処理を行った後、MACRO-FUNCTIONであるEXPANDERにFORMとENVとを渡す形でFUNCALLしてあげれば良い。
+例えばCLHSには以下のような例がある。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> hook <span class="paren2">(<span class="code">expander form env</span>)</span>
+   <span class="paren2">(<span class="code">format t <span class="string">"Now expanding: ~S~%"</span> form</span>)</span>
+   <span class="paren2">(<span class="code">funcall expander form env</span>)</span></span>)</span> =&gt;  HOOK 
+<span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> machook <span class="paren2">(<span class="code">x y</span>)</span> `<span class="paren2">(<span class="code">/ <span class="paren3">(<span class="code">+ ,x ,y</span>)</span> 2</span>)</span></span>)</span> =&gt;  MACHOOK 
+<span class="paren1">(<span class="code">macroexpand '<span class="paren2">(<span class="code">machook 1 2</span>)</span></span>)</span> =&gt;  <span class="paren1">(<span class="code">/ <span class="paren2">(<span class="code">+ 1 2</span>)</span> 2</span>)</span>, true 
+<span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="special">*macroexpand-hook*</span> #'hook</span>)</span></span>)</span> <span class="paren2">(<span class="code">macroexpand '<span class="paren3">(<span class="code">machook 1 2</span>)</span></span>)</span></span>)</span>
+&gt;&gt;  Now expanding <span class="paren1">(<span class="code">MACHOOK 1 2</span>)</span> 
+=&gt;  <span class="paren1">(<span class="code">/ <span class="paren2">(<span class="code">+ 1 2</span>)</span> 2</span>)</span>, true</span></code></pre>
+
+<p>気をつけなければならないのは、このような書き方では外側にある別な*MACROEXPAND-HOOK*関数をシャドウしてしまう点だ。
+これにより、内側のフックは機能するが外側のフックが機能せず全体として期待と異なる振る舞いになってしまう場合が起こりうる。
+これを避けるためにはクロージャを利用して以下のようにすると良い。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> hooker<span class="paren2">(<span class="code">outer-hook</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">expander form env</span>)</span>
+    ...
+    <span class="paren3">(<span class="code">funcall outer-hook expander form env</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">let</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="special">*macroexpand-hook*</span><span class="paren4">(<span class="code">hooker <span class="special">*macroexpand-hook*</span></span>)</span></span>)</span></span>)</span>
+  ...</span>)</span></span></code></pre>
+
+<p>HOOKER関数はその時点での外側のフック関数を引数として補足し、フック関数を返す関数である。</p>
+
+<p>変数*MACROEXPAND-HOOK*はスペシャル変数、すなわち動的な束縛を行うので、外側の変数を補足することができない点要注意。
+以下のコード例は無限ループに陥る。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">let</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="special">*macroexpand-hook*</span>
+       <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren5">(<span class="code">expander form env</span>)</span>
+         ...
+         <span class="paren5">(<span class="code">funcall <span class="special">*macroexpand-hook*</span> expander form env</span>)</span></span>)</span></span>)</span></span>)</span>
+  ...</span>)</span></span></code></pre>
+
+<p>LAMBDAの中の*MACROEXPAND-HOOK*の値は動的な（レキシカルでない）値なので、LAMBDA自信になる。
+よって一度呼び出されると、自分自信を無限再起呼び出しし続けることとなる。</p>
+
 <h2>IGNORE-ERRORS with multiple-value.</h2>
 
 <p>マクロ<code>IGNORE-ERRORS</code>はformが<code>ERROR</code>をシグナルするとそのコンディションを捕まえて<code>(VALUES NULL CONDITION)</code>を返す。

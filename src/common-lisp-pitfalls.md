@@ -21,6 +21,52 @@ SBCL、CLISP、ECL、CCL
 なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。
 
+## \*MACROEXPAND-HOOK\*
+変数\*MACROEXPAND-HOOK\*が受け取る関数のAPIは(expander form env)である。
+使い方としては、何らかの処理を行った後、MACRO-FUNCTIONであるEXPANDERにFORMとENVとを渡す形でFUNCALLしてあげれば良い。
+例えばCLHSには以下のような例がある。
+
+```lisp
+(defun hook (expander form env)
+   (format t "Now expanding: ~S~%" form)
+   (funcall expander form env)) =>  HOOK 
+(defmacro machook (x y) `(/ (+ ,x ,y) 2)) =>  MACHOOK 
+(macroexpand '(machook 1 2)) =>  (/ (+ 1 2) 2), true 
+(let ((*macroexpand-hook* #'hook)) (macroexpand '(machook 1 2)))
+>>  Now expanding (MACHOOK 1 2) 
+=>  (/ (+ 1 2) 2), true
+```
+
+気をつけなければならないのは、このような書き方では外側にある別な\*MACROEXPAND-HOOK\*関数をシャドウしてしまう点だ。
+これにより、内側のフックは機能するが外側のフックが機能せず全体として期待と異なる振る舞いになってしまう場合が起こりうる。
+これを避けるためにはクロージャを利用して以下のようにすると良い。
+
+```lisp
+(defun hooker(outer-hook)
+  (lambda(expander form env)
+    ...
+    (funcall outer-hook expander form env)))
+
+(let((*macroexpand-hook*(hooker *macroexpand-hook*)))
+  ...)
+```
+
+HOOKER関数はその時点での外側のフック関数を引数として補足し、フック関数を返す関数である。
+
+変数\*MACROEXPAND-HOOK\*はスペシャル変数、すなわち動的な束縛を行うので、外側の変数を補足することができない点要注意。
+以下のコード例は無限ループに陥る。
+
+```lisp
+(let((*macroexpand-hook*
+       (lambda(expander form env)
+         ...
+         (funcall *macroexpand-hook* expander form env))))
+  ...)
+```
+
+LAMBDAの中の\*MACROEXPAND-HOOK\*の値は動的な（レキシカルでない）値なので、LAMBDA自信になる。
+よって一度呼び出されると、自分自信を無限再起呼び出しし続けることとなる。
+
 ## IGNORE-ERRORS with multiple-value.
 マクロ`IGNORE-ERRORS`はformが`ERROR`をシグナルするとそのコンディションを捕まえて`(VALUES NULL CONDITION)`を返す。
 formが`ERROR`をシグナルすることがなければformの返り値をそのまま返す。
