@@ -21,6 +21,13 @@ SBCL、CLISP、ECL、CCL
 なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。
 
+## LOOP
+:ON節に非NILアトムが渡ってきた場合、エラーではなくNILとなる。
+
+```lisp
+(loop :for a :on 'non-nil-atom :collect a) => NIL
+```
+
 ## \*MACROEXPAND-HOOK\*
 変数\*MACROEXPAND-HOOK\*が受け取る関数のAPIは(expander form env)である。
 使い方としては、何らかの処理を行った後、MACRO-FUNCTIONであるEXPANDERにFORMとENVとを渡す形でFUNCALLしてあげれば良い。

@@ -40,6 +40,12 @@
 <p>なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。</p>
 
+<h2>LOOP</h2>
+
+<p>:ON節に非NILアトムが渡ってきた場合、エラーではなくNILとなる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> a <span class="keyword">:on</span> 'non-nil-atom <span class="keyword">:collect</span> a</span>)</span> =&gt; NIL</span></code></pre>
+
 <h2>*MACROEXPAND-HOOK*</h2>
 
 <p>変数*MACROEXPAND-HOOK*が受け取る関数のAPIは(expander form env)である。
