@@ -21,6 +21,30 @@ SBCL、CLISP、ECL、CCL
 なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。
 
+## VALUES as type specifier
+通常の型指定子は第一返り値の型を示すものであり、暗黙理に多値が返る可能性があることを示している。
+
+
+```lisp
+(the integer (values 0 1)) ; <--- ok
+```
+
+多値の型指定をする場合には`VALUES`型指定子が使える。
+
+```lisp
+(the (values integer integer)(values 0 1)) ; <--- ok
+```
+ただ、上記の場合も暗黙理に第三返り値以降の多値が返る可能性があることを示していることとなる。
+
+```lisp
+(the (values integer integer)(values 0 1 2)) ; <--- ok
+```
+例えば返り値は１つだけでけして多値が返ることはないということを示したいなら`&OPTIONAL`を使って以下のようにする。
+
+```lisp
+(the (values integer &optional)(values 1 2)) ; <--- not ok
+```
+
 ## LOOP
 :ON節に非NILアトムが渡ってきた場合、エラーではなくNILとなる。
 
