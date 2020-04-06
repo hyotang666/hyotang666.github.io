@@ -1,0 +1,154 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html>
+  <head>
+    <title>uiop
+    </title>
+    <meta http-equiv='content-type' content='text/html; charset=UTF-8' />
+    <meta name='auhtor' content='hyotang666' />
+    <meta name='generator' content='pages' />
+<link rel='stylesheet' href='../css/css.css' type='text/css' />
+  </head>
+<body><h1>To query OS distribution with Common Lisp especially UIOP.</h1>
+
+<h2>Introduction</h2>
+
+<p><a href="https://komi.hatenadiary.com/entry/2020/04/05/235243" >このような記事</a>を読み、脊髄反射で<a href="https://twitter.com/hyotang666/status/1246819542946304000" >このように返信</a>してしまったのだけど、よく読んでみたら<code>UIOP:RUN-PROGRAM</code>要らなくね？ってなったので、自分ならこう書くかなってのをメモ程度に書きとどめておくと同時に<code>UIOP</code>の各種機能を紹介していこうと思う。</p>
+
+<h2>対象読者。</h2>
+
+<ul>
+<li>元記事作者様。</li>
+<li><code>UIOP</code>？なにそれ？おいしいの？っていう初級CLer。</li>
+</ul>
+
+<h2>Useful UIOP functions.</h2>
+
+<p>僕が書くなら<code>GET-DIST</code>は以下のようになる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> get-dist <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> file <span class="keyword">:in</span> <span class="paren3">(<span class="code">uiop:directory-files <span class="string">"/etc/"</span> <span class="string">"*-release"</span></span>)</span>
+        <span class="keyword">:do</span> <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> line <span class="keyword">:in</span> <span class="paren4">(<span class="code">uiop:read-file-lines file</span>)</span>
+                  <span class="keyword">:if</span> <span class="paren4">(<span class="code">uiop:string-prefix-p <span class="string">"ID="</span> line</span>)</span>
+                  <span class="keyword">:do</span> <span class="paren4">(<span class="code"><i><span class="symbol">return-from</span></i> get-dist <span class="paren5">(<span class="code">subseq line 3</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>イカれたメンバー達を紹介しよう！</p>
+
+<h3>UIOP:DIRECTORY-FILES</h3>
+
+<p>第一引数で指定されたディレクトリにあるファイルpathnameをリストでくくって返すぜ！
+オプショナルな第二引数にパターンを渡せばそのパターンにマッチするファイルのみを返してくれるぜ！
+ここで言う「ファイル」はいわゆるファイルでディレクトリはファイルに含まれないぜ！</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">uiop:directory-files <span class="string">"/etc/"</span> <span class="string">"*-release"</span></span>)</span>
+
+<span class="paren1">(<span class="code">#P<span class="string">"/etc/lsb-release"</span> #P<span class="string">"/etc/os-release"</span></span>)</span></span></code></pre>
+
+<h3>UIOP:READ-FILE-LINES</h3>
+
+<p>pathnameを受け取ってその各行をリストにくくって返すぜ！</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">uiop:read-file-lines <span class="paren2">(<span class="code">car *</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><span class="string">"DISTRIB_ID=Ubuntu"</span> <span class="string">"DISTRIB_RELEASE=18.04"</span> <span class="string">"DISTRIB_CODENAME=bionic"</span>
+ <span class="string">"DISTRIB_DESCRIPTION=</span><span class="string">\"</span><span class="string">Ubuntu 18.04.4 LTS</span><span class="string">\"</span><span class="string">"</span></span>)</span></span></code></pre>
+
+<p>このファミリーとして、ファイルの最初の行だけを返す<code>UIOP:READ-FILE-LINE</code>、ファイル内の各S式をリストにくくって返す<code>UIOP:READ-FILE-FORMS</code>、最初のS式だけを返す<code>UIOP:READ-FILE-FORM</code>、ファイルの内容を文字列として返す<code>UIOP:READ-FILE-STRING</code>などがあるぜ！</p>
+
+<p>なかでも<code>UIOP:READ-FILE-STRING</code>はプロジェクトのREADMEの中身をASDFのLONG-DESCRIPTIONとして読み込むのに使われたりしているから要チェックだ！</p>
+
+<h3>UIOP:STRING-PREFIX-P</h3>
+
+<p>第二引数に渡した文字列指定子が第一引数で指定したプリフィックスで始まっているかテストするぜ！</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">uiop:string-prefix-p <span class="string">"ID="</span> <span class="paren2">(<span class="code">car *</span>)</span></span>)</span>
+
+NIL</span></code></pre>
+
+<p>元記事では<code>(CL:SEARCH &quot;ID=&quot; i)</code>という形でテストしてあったけど、<code>CL:SEARCH</code>は文字列に含まれるか否かをテストするものだから、元記事の文脈には沿わないバグとなっているぜ！
+現に僕の環境で元記事の<code>GET-DIST</code>は以下のような返り値となるぜ！</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">get-dist</span>)</span>
+
+"TRIB_ID=Ubuntu"</span></code></pre>
+
+<p>これは期待とは異なる振る舞いのはずだ。
+僕の環境では&ldquo;ID=&rdquo;より先に&ldquo;DISTRIB_ID=&rdquo;が先に現れ、これは<code>(CL:SEARCH &quot;ID=&quot; ...)</code>を満足させるので結果このような振る舞いになってしまっているんだ。</p>
+
+<p>せめて<code>CL:SUBSEQ</code>に渡す３をハードコーディングせず以下のようにしていればよかったのだけれど。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> get-dist <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">os-data <span class="paren5">(<span class="code">split <span class="paren6">(<span class="code">string <span class="character">#\Newline</span></span>)</span>
+                        <span class="paren6">(<span class="code">system <span class="string">"cat /etc/*-release"</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:in</span> os-data
+          <span class="keyword">:for</span> position <span class="keyword">:=</span> <span class="paren4">(<span class="code">search <span class="string">"ID="</span> i</span>)</span>
+          <span class="keyword">:if</span> position
+          <span class="keyword">:do</span> <span class="paren4">(<span class="code">return <span class="paren5">(<span class="code">subseq i <span class="paren6">(<span class="code">+ position 3</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>とはいえ上記のコードもけしてパーフェクトとは言い難く、というのも、例えば僕の環境には他に&ldquo;VERSION_ID=&quot;18.04&quot;&rdquo;なんて行もあるからだ。
+まがり間違ってこの行が先に現れた場合、返り値は&ldquo;18.04&rdquo;となる。
+<code>GET-DIST</code>という関数の返り値としてこれは不適切だろう。</p>
+
+<p>でも<code>UIOP:STRING-PREFIX-P</code>を使えばこんなバグとはおさらばだ！</p>
+
+<p>ちな、ファミリーとして<code>UIOP:STRING-SUFFIX-P</code>もあるゾ！</p>
+
+<h3>UIOP:SPLIT-STRING</h3>
+
+<p>元記事では<code>SPLIT</code>関数が作られてるけど、<code>UIOP</code>はすでに同じものをもっているぜ！</p>
+
+<p>使い方はだいたい以下の通りだ！</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">uiop:split-string string <span class="keyword">:separator</span> #.<span class="paren2">(<span class="code">string <span class="character">#\newline</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>TRIVIAL-FEATURES</h2>
+
+<p><code>CL:*FEATURES*</code>に入っている値は処理系依存で、これは割とやっかいな問題だ。
+MACであるかどうかをある処理系は<code>:DARWIN</code>で表し、ある処理系は<code>:MACOS</code>で表し、またある処理系は<code>:MACOSX</code>で表したりしている。
+それは困るということで、ある程度<code>CL:*FEATURES*</code>の中身をポータブルにしようという試みがある。
+それが<code>TRIVIAL-FEATURES</code>だ！</p>
+
+<p>ちな、<code>TRIVIAL-FEATURES</code>は世にも珍しい<code>PACKAGE</code>を作らないライブラリだ！</p>
+
+<h2>Conclusion.</h2>
+
+<p>見てきたように<code>UIOP</code>は多くの便利関数を提供してくれているぜ！
+他のライブラリと違って<code>UIOP</code>は<code>ASDF</code>が提供しているものであり、<code>ASDF</code>は多くの処理系にバンドルされているものであり、すなわち<code>UIOP</code>はインストールしなくても使える（場合が多い）ぜ！</p>
+
+<p>一つ一つの機能は小さく（比較的）把握しやすいので、一通り入門記事は読み終えたけど次は何をしようかな？と迷っているような初級CLerが読み始めるにはおすすめのライブラリだ！</p>
+
+<p>機能自体は小さいのに処理系可搬性のためにクソデカコードになってしまっている関数もあり、その労力には涙と感謝を禁じ得ないぜ！</p>
+
+<p>最後に注意点を。</p>
+
+<p><code>UIOP</code>のコードは読みやすさやメンテナンスのしやすさが重要視されているようで（推測）、効率を追求する場合は他のライブラリを使ったほうがいい場合がある。</p>
+
+<p>例えば<code>UIOP:WHILE-COLLECTING</code>はいわゆる<code>PUSH/REVERSE</code>（<code>NREVESRSE</code>ですらない！）に変換されるマクロだ。
+効率を求めるなら<code>TCONC</code>で実装されている<code>CL-UTILITIES:WITH-COLLECTORS</code>の方がいいだろう。</p>
+
+<p>また、<code>UIOP</code>はあくまで<code>ASDF</code>のためのものだ。
+幾つかのAPIは<code>ASDF</code>から使いやすいやすいように実装されている。</p>
+
+<p>例えば上記<code>UIOP:SPLIT-STRING</code>はキーワード引数<code>MAX</code>を受け付ける。
+その振る舞いは何も知らなければ若干奇妙だ。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">uiop:split-string <span class="string">"ototo"</span> <span class="keyword">:separator</span> <span class="string">"t"</span> <span class="keyword">:max</span> 2</span>)</span>
+
+<span class="paren1">(<span class="code"><span class="string">"oto"</span> <span class="string">"o"</span></span>)</span></span></code></pre>
+
+<p>先頭からではなく後ろから切り分ける振る舞いとなっている。
+これはファイル名&ldquo;hoge.fuga.piyo&rdquo;をファイル名と拡張子とに切り分けるのに使われたり、package-infered-systemのsystem名&ldquo;hoge/fuga/piyo&rdquo;からコンポネント名（ここでは&ldquo;piyo&rdquo;）を切り分けたりするのに使われるためのものだ。</p>
+
+<p>こういった恣意的なAPIを快く思わない場合も別なライブラリが魅力的に見えることとなろう。</p>
+
+<p>それでも<code>UIOP</code>はめちゃくちゃ便利だ。
+<code>ENSURE-LIST</code>や<code>IF-LET</code>のためだけに巨大な<code>ALEXANDRIA</code>に依存したくないなんて場合も<code>UIOP</code>が使えるぜ！（どちらも<code>UIOP</code>にあるのさ！）</p>
+
+<p>さぁ君も<code>UIOP</code>をマスターして一歩上のCler（謎）になろう！</p>
+
+<footer>
+  <a href='../index.html'>Index
+  </a>
+</footer>
+</body>
+</html>
