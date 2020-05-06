@@ -22,7 +22,7 @@ SBCL、CLISP、ECL、CCL
 また、項目は重複する可能性があるものとする。
 
 ## READ-SEQUENCE
-言語仕様では第二引数の型エラーについて触れられていない。
+[言語仕様では第二引数の型エラーについて触れられていない。](www.lispworks.com/documentation/HyperSpec/Body/f_rd_seq.htm)
 多くの処理系では第二引数がストリームでない場合`TYPE-ERROR`を発するが、そうでない処理系もある。
 
 CCLは第一引数が空シーケンスの場合、第二引数がなんであれ成功裏に0を返す。
@@ -60,6 +60,7 @@ CCLは第一引数が空シーケンスの場合、第二引数がなんであ�
 
 ## LOOP
 :ON節に非NILアトムが渡ってきた場合、エラーではなくNILとなる。
+[仕様によりエンドチェックは`ATOM`で行われると定められている。](http://www.lispworks.com/documentation/lw51/CLHS/Body/06_abac.htm)
 
 ```lisp
 (loop :for a :on 'non-nil-atom :collect a) => NIL
@@ -68,7 +69,7 @@ CCLは第一引数が空シーケンスの場合、第二引数がなんであ�
 ## \*MACROEXPAND-HOOK\*
 変数\*MACROEXPAND-HOOK\*が受け取る関数のAPIは(expander form env)である。
 使い方としては、何らかの処理を行った後、MACRO-FUNCTIONであるEXPANDERにFORMとENVとを渡す形でFUNCALLしてあげれば良い。
-例えばCLHSには以下のような例がある。
+例えば[CLHSには以下のような例がある。](http://clhs.lisp.se/Body/v_mexp_h.htm)
 
 ```lisp
 (defun hook (expander form env)
@@ -142,7 +143,7 @@ CLISP, ECL, CCLではリスト`(function hoge)`の出力方法は見つけられ
 ```
 ドキュメンテーション自動生成ツール開発中に、メソッドの各シグネチャを出力する際、シグネチャが`(function function)`だった場合に`#'FUNCTION`と出力されてしまうという形で出会った。
 
-## STRING family
+## [STRING family](http://www.lispworks.com/documentation/HyperSpec/Body/f_stgeq_.htm)
 `STRING`のファミリーは引数に文字列指定子を受け付ける。
 すなわち、文字、シンボルも受け付けられる。
 
@@ -162,7 +163,7 @@ CLISP, ECL, CCLではリスト`(function hoge)`の出力方法は見つけられ
 `NIL`を操作したい場合、必ずリストに括って渡さなければならない。
 
 ## CONSTANTP with &WHOLE
-`CONSTANTP`は受け取った引数がマクロフォームであった場合、マクロ展開を行う可能性がある。
+`CONSTANTP`は受け取った引数がマクロフォームであった場合、[マクロ展開を行う可能性がある。](http://clhs.lisp.se/Body/f_consta.htm)
 この点は仕様上明示的に処理系依存とされている。
 
 もしマクロフォームが`&WHOLE`ラムダリストキーワードで受けたフォームを返した場合、無限マクロ展開に陥る。
@@ -195,8 +196,9 @@ SBCL,ECLでは型名はカウントせず、スロット：値の対を一要素
 CLISPでは構造体自体は言わばアトムであると解釈されている。
 
 ```lisp
-=> FOO
 (defstruct foo a b c d)
+=> FOO
+
 (let((*print-length* 2))
   (print(make-foo :a (list 1 2 3 4 5))))
 
@@ -211,7 +213,7 @@ CLISPでは構造体自体は言わばアトムであると解釈されている
 ```
 
 ## READ
-これは処理系のバグに相当するが、`+.`や`-.`はAnsiスタンダードでは数ではないとされているが、ECLでは０に解釈される。
+これは処理系のバグに相当するが、`+.`や`-.`は[Ansiスタンダードでは数ではないとされている](http://clhs.lisp.se/Body/02_ca.htm#syntaxfornumerictokens)が、ECLでは０に解釈される。
 
 ```lisp
 (read-from-string "+.") => implementation-dependent.
@@ -222,7 +224,7 @@ CLISPでは構造体自体は言わばアトムであると解釈されている
 通常問題になることは無いと思われるが、Common LispでCommon Lispのパーザを書き、それをテストしたところ遭遇した。
 
 ## BACKQUOTE
-バッククォートの実装は処理系依存である。
+[バッククォートの実装は処理系依存である。](http://clhs.lisp.se/Body/02_dfa.htm)
 多くの処理系でバッククォートはマクロに展開され、すなわちコンパイル時に等価なフォームが生成されるが、そうでない処理系も存在する。
 具体的にはCCLはフォーム生成をリード時に行う。
 
@@ -232,7 +234,7 @@ CLISPでは構造体自体は言わばアトムであると解釈されている
                           ; (LIST* 'HOGE (CDR '(1 2 3))) in CCL.
 ```
 
-## SIGNAL
+## [SIGNAL](http://clhs.lisp.se/Body/f_signal.htm#signal)
 `SIGNAL`の振る舞いは、受け取ったコンディションを元にハンドラを探し、ハンドラがあればコールしてまわり、どのハンドラもコントロールフロー制御をしなければ最終的に`NIL`を返すというものである。
 
 トップレベルにハンドラがあるかどうかは処理系依存となる。
@@ -267,13 +269,13 @@ CLISPでは構造体自体は言わばアトムであると解釈されている
 ```
 
 ## LOOP
-`:MAXIMIZE`や`:MINIMIZE`が実行されなかった場合の返り値は未定義。
+`:MAXIMIZE`や`:MINIMIZE`が実行されなかった場合の返り値は[未定義。](http://www.lispworks.com/documentation/lw51/CLHS/Body/06_ac.htm)
 
 ```lisp
 (loop :for i :in () :minimize i) => unspecified. NIL or 0.
 ```
 
-終端チェック節の後に変数束縛節を使うのはinvalid。
+[終端チェック節の後に変数束縛節を使うのはinvalid。](http://www.lispworks.com/documentation/lw51/CLHS/Body/m_loop.htm#loop)
 期待通り動く処理系とそうでない処理系とがある。
 
 ```lisp

@@ -42,7 +42,7 @@
 
 <h2>READ-SEQUENCE</h2>
 
-<p>言語仕様では第二引数の型エラーについて触れられていない。
+<p><a href="www.lispworks.com/documentation/HyperSpec/Body/f_rd_seq.htm" >言語仕様では第二引数の型エラーについて触れられていない。</a>
 多くの処理系では第二引数がストリームでない場合<code>TYPE-ERROR</code>を発するが、そうでない処理系もある。</p>
 
 <p>CCLは第一引数が空シーケンスの場合、第二引数がなんであれ成功裏に0を返す。</p>
@@ -72,7 +72,8 @@
 
 <h2>LOOP</h2>
 
-<p>:ON節に非NILアトムが渡ってきた場合、エラーではなくNILとなる。</p>
+<p>:ON節に非NILアトムが渡ってきた場合、エラーではなくNILとなる。
+<a href="http://www.lispworks.com/documentation/lw51/CLHS/Body/06_abac.htm" >仕様によりエンドチェックは<code>ATOM</code>で行われると定められている。</a></p>
 
 <pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> a <span class="keyword">:on</span> 'non-nil-atom <span class="keyword">:collect</span> a</span>)</span> =&gt; NIL</span></code></pre>
 
@@ -80,7 +81,7 @@
 
 <p>変数*MACROEXPAND-HOOK*が受け取る関数のAPIは(expander form env)である。
 使い方としては、何らかの処理を行った後、MACRO-FUNCTIONであるEXPANDERにFORMとENVとを渡す形でFUNCALLしてあげれば良い。
-例えばCLHSには以下のような例がある。</p>
+例えば<a href="http://clhs.lisp.se/Body/v_mexp_h.htm" >CLHSには以下のような例がある。</a></p>
 
 <pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> hook <span class="paren2">(<span class="code">expander form env</span>)</span>
    <span class="paren2">(<span class="code">format t <span class="string">"Now expanding: ~S~%"</span> form</span>)</span>
@@ -149,7 +150,7 @@ CLISP, ECL, CCLではリスト<code>(function hoge)</code>の出力方法は見�
 
 <p>ドキュメンテーション自動生成ツール開発中に、メソッドの各シグネチャを出力する際、シグネチャが<code>(function function)</code>だった場合に<code>#'FUNCTION</code>と出力されてしまうという形で出会った。</p>
 
-<h2>STRING family</h2>
+<h2><a href="http://www.lispworks.com/documentation/HyperSpec/Body/f_stgeq_.htm" >STRING family</a></h2>
 
 <p><code>STRING</code>のファミリーは引数に文字列指定子を受け付ける。
 すなわち、文字、シンボルも受け付けられる。</p>
@@ -171,7 +172,7 @@ CLISP, ECL, CCLではリスト<code>(function hoge)</code>の出力方法は見�
 
 <h2>CONSTANTP with &amp;WHOLE</h2>
 
-<p><code>CONSTANTP</code>は受け取った引数がマクロフォームであった場合、マクロ展開を行う可能性がある。
+<p><code>CONSTANTP</code>は受け取った引数がマクロフォームであった場合、<a href="http://clhs.lisp.se/Body/f_consta.htm" >マクロ展開を行う可能性がある。</a>
 この点は仕様上明示的に処理系依存とされている。</p>
 
 <p>もしマクロフォームが<code>&amp;WHOLE</code>ラムダリストキーワードで受けたフォームを返した場合、無限マクロ展開に陥る。
@@ -206,8 +207,9 @@ CCLでは型名もスロット名も「リスト内の要素」と解釈され�
 SBCL,ECLでは型名はカウントせず、スロット：値の対を一要素と解釈されている。
 CLISPでは構造体自体は言わばアトムであると解釈されている。</p>
 
-<pre><code><span class="code">=&gt; FOO
-<span class="paren1">(<span class="code"><i><span class="symbol">defstruct</span></i> foo a b c d</span>)</span>
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defstruct</span></i> foo a b c d</span>)</span>
+=&gt; FOO
+
 <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i><span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="special">*print-length*</span> 2</span>)</span></span>)</span>
   <span class="paren2">(<span class="code">print<span class="paren3">(<span class="code">make-foo <span class="keyword">:a</span> <span class="paren4">(<span class="code">list 1 2 3 4 5</span>)</span></span>)</span></span>)</span></span>)</span>
 
@@ -222,7 +224,7 @@ CLISPでは構造体自体は言わばアトムであると解釈されている
 
 <h2>READ</h2>
 
-<p>これは処理系のバグに相当するが、<code>+.</code>や<code>-.</code>はAnsiスタンダードでは数ではないとされているが、ECLでは０に解釈される。</p>
+<p>これは処理系のバグに相当するが、<code>+.</code>や<code>-.</code>は<a href="http://clhs.lisp.se/Body/02_ca.htm#syntaxfornumerictokens" >Ansiスタンダードでは数ではないとされている</a>が、ECLでは０に解釈される。</p>
 
 <pre><code><span class="code"><span class="paren1">(<span class="code">read-from-string <span class="string">"+."</span></span>)</span> =&gt; implementation-dependent.
                         <span class="comment">; Symbol +. in spec.
@@ -232,7 +234,7 @@ CLISPでは構造体自体は言わばアトムであると解釈されている
 
 <h2>BACKQUOTE</h2>
 
-<p>バッククォートの実装は処理系依存である。
+<p><a href="http://clhs.lisp.se/Body/02_dfa.htm" >バッククォートの実装は処理系依存である。</a>
 多くの処理系でバッククォートはマクロに展開され、すなわちコンパイル時に等価なフォームが生成されるが、そうでない処理系も存在する。
 具体的にはCCLはフォーム生成をリード時に行う。</p>
 
@@ -240,7 +242,7 @@ CLISPでは構造体自体は言わばアトムであると解釈されている
                           <span class="comment">; `(HOGE ,`(CDR '(1 2 3))) in many impls.
 </span>                          <span class="comment">; (LIST* 'HOGE (CDR '(1 2 3))) in CCL.</span></span></code></pre>
 
-<h2>SIGNAL</h2>
+<h2><a href="http://clhs.lisp.se/Body/f_signal.htm#signal" >SIGNAL</a></h2>
 
 <p><code>SIGNAL</code>の振る舞いは、受け取ったコンディションを元にハンドラを探し、ハンドラがあればコールしてまわり、どのハンドラもコントロールフロー制御をしなければ最終的に<code>NIL</code>を返すというものである。</p>
 
@@ -273,11 +275,11 @@ CLISPでは構造体自体は言わばアトムであると解釈されている
 
 <h2>LOOP</h2>
 
-<p><code>:MAXIMIZE</code>や<code>:MINIMIZE</code>が実行されなかった場合の返り値は未定義。</p>
+<p><code>:MAXIMIZE</code>や<code>:MINIMIZE</code>が実行されなかった場合の返り値は<a href="http://www.lispworks.com/documentation/lw51/CLHS/Body/06_ac.htm" >未定義。</a></p>
 
 <pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:in</span> <span class="paren2">(<span class="code"></span>)</span> <span class="keyword">:minimize</span> i</span>)</span> =&gt; unspecified. NIL or 0.</span></code></pre>
 
-<p>終端チェック節の後に変数束縛節を使うのはinvalid。
+<p><a href="http://www.lispworks.com/documentation/lw51/CLHS/Body/m_loop.htm#loop" >終端チェック節の後に変数束縛節を使うのはinvalid。</a>
 期待通り動く処理系とそうでない処理系とがある。</p>
 
 <pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:in</span> '<span class="paren2">(<span class="code">1 1 1 <span class="character">#\1</span></span>)</span>
