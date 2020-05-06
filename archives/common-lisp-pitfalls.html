@@ -40,6 +40,18 @@
 <p>なお、記事が追加される場合は先頭に追加していくこととする。
 また、項目は重複する可能性があるものとする。</p>
 
+<h2>READ-SEQUENCE</h2>
+
+<p>言語仕様では第二引数の型エラーについて触れられていない。
+多くの処理系では第二引数がストリームでない場合<code>TYPE-ERROR</code>を発するが、そうでない処理系もある。</p>
+
+<p>CCLは第一引数が空シーケンスの場合、第二引数がなんであれ成功裏に0を返す。</p>
+
+<pre><code><span class="code">? <span class="paren1">(<span class="code">read-sequence #<span class="paren2">(<span class="code"></span>)</span> <span class="keyword">:not-stream</span></span>)</span>
+=&gt; 0</span></code></pre>
+
+<p>通常このような愚かなコードは書かないが、「引数がストリームでない場合エラーとなる」というようなテストを書いている場合想定外に成功するという形で出会うことがある。</p>
+
 <h2>VALUES as type specifier</h2>
 
 <p>通常の型指定子は第一返り値の型を示すものであり、暗黙理に多値が返る可能性があることを示している。</p>
