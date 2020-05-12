@@ -1,0 +1,128 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>replayer</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Common Lisp製Audio File Player &ldquo;REPLAYER&rdquo; の紹介。</h1>
+
+<h2>Introduction.</h2>
+
+<p>Twitterで<a href="https://twitter.com/KTakahiro1729/status/1255761609563111427" >このようなやりとり</a>があってですね。
+残念ながらCommon Lispは選ばれなかったっぽいので見切り発車で勝手にCommon Lisp製のAudio File Playerを作り始めてみた訳です。</p>
+
+<p>一通り必要とされているらしい機能は実装できたぽいので簡単に紹介だけ。</p>
+
+<h2>REPLAYER</h2>
+
+<p>名前は「REPL」での「PLayer」から。
+特に深い意味はありません。</p>
+
+<h2>Installation.</h2>
+
+<p>俺々ライブラリを使っているのでroswellでのインストール推奨です。</p>
+
+<p><a href="https://github.com/roswell/roswell/wiki/Installation" >roswellのインストールはこちら</a></p>
+
+<p>またデータベースとして<a href="https://sqlite.org/index.html" >sqlite3</a>を使用しているのでそちらも各自インストールしてください。</p>
+
+<p>roswellとsqlite3をインストールし終わったら以下のコマンドを叩きます。</p>
+
+<pre><code>$ ros install hyotang666/r-iff hyotang666/wav-parser hyotang666/replayer</code></pre>
+
+<p>これで準備はおｋ。</p>
+
+<h2>Inside REPL.</h2>
+
+<p>quicklispでロードできます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">ql:quickload <span class="keyword">:replayer</span></span>)</span></span></code></pre>
+
+<p>後は再生したいファイルを関数<code>PLAY</code>に渡せばいいだけ。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">replayer:play <span class="string">"~/Music/path/to/file"</span></span>)</span></span></code></pre>
+
+<p>現時点では<code>wav</code>と<code>mp3</code>のみサポートされてます。</p>
+
+<h2><a href="https://twitter.com/KTakahiro1729/status/1255740954679496704" >Play list</a></h2>
+
+<p><code>PLAY</code>は総称関数として実装されています。
+リストを渡せば順繰りに再生してくれます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">replayer:play <span class="paren2">(<span class="code">uiop:directory-files <span class="string">"~/Music/"</span> <span class="string">"*.wav"</span></span>)</span></span>)</span></span></code></pre>
+
+<h2><a href="https://twitter.com/KTakahiro1729/status/1255740954679496704" >Saving play list</a></h2>
+
+<p>ファイルへのパスはpathnameオブジェクトでも文字列でもOkです。
+保存したい場合は以下のようにすると取り回しが楽になるでしょう。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">with-open-file</span></i> <span class="paren2">(<span class="code">s <span class="string">"play-list"</span> <span class="keyword">:direction</span> <span class="keyword">:output</span> <span class="keyword">:if-not-exist</span> <span class="keyword">:create</span></span>)</span>
+    <span class="paren2">(<span class="code">format s <span class="string">"~{~A~%~}"</span> <span class="paren3">(<span class="code">uiop:directory-files <span class="string">"~/Music/"</span> <span class="string">"*.wav"</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>保存したプレイリストを再生したい場合は<code>UIOP:READ-FILE-LINES</code>が便利に使えます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">replayer:play <span class="paren2">(<span class="code">uiop:read-file-lines <span class="string">"play-list"</span></span>)</span></span>)</span></span></code></pre>
+
+<p>保存されたプレイリストはただのtxtファイルなので共有もできますし（ディレクトリ構造が同じであれば。）表計算ソフトで開くこともできます。</p>
+
+<h2><a href="https://twitter.com/KTakahiro1729/status/1255751612691169280" >Tagging</a></h2>
+
+<p><code>TAG</code>関数を使えばファイルとタグとを紐付けることができます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">tag <span class="string">"tag"</span> <span class="paren2">(<span class="code">uiop:directory-files <span class="string">"~/Music/"</span> <span class="string">"*.wav"</span></span>)</span></span>)</span></span></code></pre>
+
+<h3><a href="https://twitter.com/KTakahiro1729/status/1255752412553338880" >Tagging example</a></h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> tag <span class="keyword">:in</span> <span class="paren2">(<span class="code">remove <span class="string">""</span> <span class="paren3">(<span class="code">ppcre:split <span class="string">"(</span><span class="string">\\</span><span class="string">()|(</span><span class="string">\\</span><span class="string">))|(,)|(&amp;)|( )"</span> <span class="string">"原村和(小清水亜美), 宮永咲(植田佳奈), 染谷まこ(白石涼子), 片岡優希(釘宮理恵) &amp; 竹井久(伊藤静)"</span></span>)</span></span>)</span>
+        <span class="keyword">:do</span> <span class="paren2">(<span class="code">tag tag <span class="string">"~/Music/四角い宇宙で待ってるよ"</span></span>)</span></span>)</span></span></code></pre>
+
+<h2><a href="https://twitter.com/KTakahiro1729/status/1255753010019356673" >Filter</a></h2>
+
+<p>正規表現での検索には現時点では対応していませんが論理式によるタグ検索は可能です。
+タグによる検索＆再生には中間オブジェクトとして<code>TAG</code>オブジェクトを作成します。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">replayer:play <span class="paren2">(<span class="code">replayer:make-tag <span class="keyword">:exp</span> '<span class="paren3">(<span class="code">and <span class="string">"Death-metal"</span> <span class="paren4">(<span class="code">not <span class="string">"America"</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上記例ではDeath-metalというタグがついている音楽を再生しますがAmericaというタグがついている音楽は再生されません。</p>
+
+<h2>Shuffle</h2>
+
+<p>変数<code>*shuffle*</code>はシャッフル再生するか否かを制御します。
+既定値は<code>NIL</code>です。</p>
+
+<h2>Repeat</h2>
+
+<p>変数<code>*repeat*</code>はリピートモードを制御します。
+<code>:one</code>、<code>:all</code>、<code>NIL</code>のいずれかが入ります。
+既定値は<code>NIL</code>です。</p>
+
+<h2>Stop</h2>
+
+<p>停止させるには<code>STOP</code>を呼びます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">replayer:stop</span>)</span></span></code></pre>
+
+<h2>Skip</h2>
+
+<p>次の曲へ飛ばすには<code>SKIP</code>を呼びます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">replayer:skip</span>)</span></span></code></pre>
+
+<h2>紹介を終えて。</h2>
+
+<p>ros-scriptをサポートしているのでシェルからの操作もできますが、その紹介はまた気が向いたら。
+（READMEに書いてあります。）</p>
+
+<p>まだまだ機能は足りないとは思うのですが、まぁとりあえずはこんなところで。</p>
+
+<p>自分で使うぶんには割と満足しているので、このあと何をしたらいいのかよく分かってない。</p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
