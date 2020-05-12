@@ -5,7 +5,7 @@ Twitterで[このようなやりとり](https://twitter.com/KTakahiro1729/status
 
 一通り必要とされているらしい機能は実装できたぽいので簡単に紹介だけ。
 
-## REPLAYER
+## [REPLAYER](https://github.com/hyotang666/replayer)
 名前は「REPL」での「PLayer」から。
 特に深い意味はありません。
 
@@ -117,7 +117,7 @@ quicklispでロードできます。
 
 ## 紹介を終えて。
 ros-scriptをサポートしているのでシェルからの操作もできますが、その紹介はまた気が向いたら。
-（READMEに書いてあります。）
+（[README](https://github.com/hyotang666/replayer) に書いてあります。）
 
 まだまだ機能は足りないとは思うのですが、まぁとりあえずはこんなところで。
 
