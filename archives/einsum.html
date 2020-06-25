@@ -1,0 +1,349 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>einsum</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Summary of numcl:einsum.</h1>
+
+<h2>Meta notes.</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>numcl、特にeinsumに興味のあるプログラマ。</li>
+<li>einsumのユースケース、あるいはチートシートが欲しいかた。</li>
+<li>numclのauthor。</li>
+</ul>
+
+<h3>What is NOT.</h3>
+
+<ul>
+<li>numclのtutorialではない。</li>
+<li>Common Lispのtutorialではない。</li>
+<li>einsumの解説ではない。</li>
+<li>線形代数の解説ではない。</li>
+</ul>
+
+<h2>Introduction</h2>
+
+<h3>今北産業</h3>
+
+<ol>
+<li>英詩を生成するプログラムを作りたい。</li>
+<li>自然言語処理が必要。</li>
+<li>自然言語処理の流行りはDeep learning。</li>
+<li>Deep learningには線形代数が必要。</li>
+<li>Common Lispの線形代数ライブラリはほとんどが死んでいて、2020年現在生きていて（僕の目から見て）最も筋の良いライブラリは<a href="https://github.com/numcl/numcl" >numcl</a>。</li>
+<li>Numclは開発途上でまだまだ機能が足りない。具体的には<code>dot</code>関数がない。</li>
+<li><code>Dot</code>関数なしにMatrix * Vectorをどうやるのか分からない。</li>
+<li>ソースコードに目を通したところ抽象度の高い関数のヘルパとして<code>einsum</code>関数が共通して使われているのを発見。</li>
+<li><code>einsum</code>関数もnumpy由来らしい。</li>
+<li><code>einsum</code>関数の振る舞いを把握したらMatrix * Vectorも実装できそうとあたりをつけて調査　&larr; イマココ</li>
+</ol>
+
+<p>筆者自信は線形代数にもnumpyにも、もちろんnumpyのeinsumにも暗い人間である。
+ここでは</p>
+
+<ul>
+<li><a href="https://numpy.org/doc/stable/reference/generated/numpy.einsum.html" >numpyの公式ドキュメント</a>におけるexample。</li>
+<li>einsumで検索して出てきたありがたいtutorial系ブログのexample。</li>
+</ul>
+
+<p>をnumclで再現する形でnumcl:einsumの振る舞いを学んでいきたい。</p>
+
+<h2>https://numpy.org/doc/stable/reference/generated/numpy.einsum.html</h2>
+
+<h3>Note</h3>
+
+<p>本節はnumpyコードとnumclコードが交互に示されます。</p>
+
+<p>そのままの移植では結果が異なるものについてはあれこれ試した式を残してあります。</p>
+
+<p>また、本節末尾にはnumclがサポートしていない（と思しき再現方法の分からなかった）numpyコードをまとめて置いてあります。</p>
+
+<h3>Example</h3>
+
+<pre><code><span class="code">&gt;&gt;&gt; a = np.arange<span class="paren1">(<span class="code">25</span>)</span>.reshape<span class="paren1">(<span class="code">5,5</span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> a <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 25</span>)</span> '<span class="paren3">(<span class="code">5 5</span>)</span></span>)</span></span>)</span>
+A</span></code></pre>
+
+<pre><code><span class="code">&gt;&gt;&gt; b = np.arange<span class="paren1">(<span class="code">5</span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> b <span class="paren2">(<span class="code">numcl:arange 5</span>)</span></span>)</span>
+B</span></code></pre>
+
+<pre><code><span class="code">&gt;&gt;&gt; c = np.arange<span class="paren1">(<span class="code">6</span>)</span>.reshape<span class="paren1">(<span class="code">2,3</span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> c <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 6</span>)</span> '<span class="paren3">(<span class="code">2 3</span>)</span></span>)</span></span>)</span>
+C</span></code></pre>
+
+<h3>Trace of a matrix:</h3>
+
+<p>互換性のないspecがさっそく登場。</p>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'ii'</span>, a</span>)</span>
+60</span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ii</span>)</span> a</span>)</span>
+#<span class="paren1">(<span class="code">0 6 12 18 24</span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ii -&gt;</span>)</span> a</span>)</span>
+60</span></code></pre>
+
+<h3>Extract the diagonal (requires explicit form):</h3>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'ii-&gt;i'</span>, a</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"> 0,  6, 12, 18, 24</span>]</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ii -&gt; i</span>)</span> a</span>)</span>
+#<span class="paren1">(<span class="code">0 6 12 18 24</span>)</span></span></code></pre>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.diag<span class="paren1">(<span class="code">a</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"> 0,  6, 12, 18, 24</span>]</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:diag a</span>)</span>
+#<span class="paren1">(<span class="code">0 6 12 18 24</span>)</span></span></code></pre>
+
+<h3>Compute a matrix transpose, or reorder any number of axes:</h3>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'ji'</span>, c</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code">0, 3</span>]</span>,
+       <span class="paren3">[<span class="code">1, 4</span>]</span>,
+       <span class="paren3">[<span class="code">2, 5</span>]</span></span>]</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum  '<span class="paren2">(<span class="code">ji</span>)</span> c</span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">0 3</span>)</span> <span class="paren2">(<span class="code">1 4</span>)</span> <span class="paren2">(<span class="code">2 5</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">&gt;&gt;&gt; c.T
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code">0, 3</span>]</span>,
+       <span class="paren3">[<span class="code">1, 4</span>]</span>,
+       <span class="paren3">[<span class="code">2, 5</span>]</span></span>]</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:transpose c</span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">0 3</span>)</span> <span class="paren2">(<span class="code">1 4</span>)</span> <span class="paren2">(<span class="code">2 5</span>)</span></span>)</span></span></code></pre>
+
+<h3>Vector inner products:</h3>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'i,i'</span>, b, b</span>)</span>
+30</span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">i i</span>)</span> b b</span>)</span>
+#<span class="paren1">(<span class="code">0 1 4 9 16</span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">i i -&gt;</span>)</span> b b</span>)</span>
+30</span></code></pre>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.inner<span class="paren1">(<span class="code">b,b</span>)</span>
+30</span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:inner b b</span>)</span>
+30</span></code></pre>
+
+<h3>Matrix vector multiplication:</h3>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'ij,j'</span>, a, b</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"> 30,  80, 130, 180, 230</span>]</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ij j</span>)</span> a b</span>)</span> 
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">0 1 4 9 16</span>)</span> <span class="paren2">(<span class="code">0 6 14 24 36</span>)</span> <span class="paren2">(<span class="code">0 11 24 39 56</span>)</span> <span class="paren2">(<span class="code">0 16 34 54 76</span>)</span> <span class="paren2">(<span class="code">0 21 44 69 96</span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ij j -&gt;</span>)</span> a b</span>)</span> 
+650
+
+* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ij j -&gt; i</span>)</span> a b</span>)</span>
+#<span class="paren1">(<span class="code">30 80 130 180 230</span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ij j -&gt; j</span>)</span> a b</span>)</span> 
+#<span class="paren1">(<span class="code">0 55 120 195 280</span>)</span></span></code></pre>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'i...-&gt;...'</span>, a</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code">50, 55, 60, 65, 70</span>]</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ij -&gt; j</span>)</span> a</span>)</span>
+#<span class="paren1">(<span class="code">50 55 60 65 70</span>)</span></span></code></pre>
+
+<h3>Broadcasting and scalar multiplication:</h3>
+
+<p>Broadcastingは実験的な機能とnumclのドキュメントにはあります。</p>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'..., ...'</span>, 3, c</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code"> 0,  3,  6</span>]</span>,
+       <span class="paren3">[<span class="code"> 9, 12, 15</span>]</span></span>]</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ij -&gt; <span class="paren3">(<span class="code">cl:+ @1 <span class="paren4">(<span class="code">cl:* 3 $1</span>)</span></span>)</span> -&gt; ij</span>)</span> c</span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">0 3 6</span>)</span> <span class="paren2">(<span class="code">9 12 15</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.multiply<span class="paren1">(<span class="code">3, c</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code"> 0,  3,  6</span>]</span>,
+       <span class="paren3">[<span class="code"> 9, 12, 15</span>]</span></span>]</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:* 3 c</span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">0 3 6</span>)</span> <span class="paren2">(<span class="code">9 12 15</span>)</span></span>)</span></span></code></pre>
+
+<h3>Vector outer product:</h3>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'i,j'</span>, np.arange<span class="paren2">(<span class="code">2</span>)</span>+1, b</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code">0, 1, 2, 3, 4</span>]</span>,
+       <span class="paren3">[<span class="code">0, 2, 4, 6, 8</span>]</span></span>]</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">i j</span>)</span> <span class="paren2">(<span class="code">numcl:+ <span class="paren3">(<span class="code">numcl:arange 2</span>)</span> 1</span>)</span> b</span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">0 1 2 3 4</span>)</span> <span class="paren2">(<span class="code">0 2 4 6 8</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.outer<span class="paren1">(<span class="code">np.arange<span class="paren2">(<span class="code">2</span>)</span>+1, b</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code">0, 1, 2, 3, 4</span>]</span>,
+       <span class="paren3">[<span class="code">0, 2, 4, 6, 8</span>]</span></span>]</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:outer <span class="paren2">(<span class="code">numcl:+ <span class="paren3">(<span class="code">numcl:arange 2</span>)</span> 1</span>)</span> b</span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">0 1 2 3 4</span>)</span> <span class="paren2">(<span class="code">0 2 4 6 8</span>)</span></span>)</span></span></code></pre>
+
+<h3>Tensor contraction:</h3>
+
+<pre><code><span class="code">&gt;&gt;&gt; a = np.arange<span class="paren1">(<span class="code">60.</span>)</span>.reshape<span class="paren1">(<span class="code">3,4,5</span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> a <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 60</span>)</span> '<span class="paren3">(<span class="code">3 4 5</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">&gt;&gt;&gt; b = np.arange<span class="paren1">(<span class="code">24.</span>)</span>.reshape<span class="paren1">(<span class="code">4,3,2</span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> b <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 24</span>)</span> '<span class="paren3">(<span class="code">4 3 2</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'ijk,jil-&gt;kl'</span>, a, b</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code"> 4400.,  4730.</span>]</span>,
+       <span class="paren3">[<span class="code"> 4532.,  4874.</span>]</span>,
+       <span class="paren3">[<span class="code"> 4664.,  5018.</span>]</span>,
+       <span class="paren3">[<span class="code"> 4796.,  5162.</span>]</span>,
+       <span class="paren3">[<span class="code"> 4928.,  5306.</span>]</span></span>]</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ijk jil -&gt; kl</span>)</span> a b</span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">4400 4730</span>)</span> <span class="paren2">(<span class="code">4532 4874</span>)</span> <span class="paren2">(<span class="code">4664 5018</span>)</span> <span class="paren2">(<span class="code">4796 5162</span>)</span> <span class="paren2">(<span class="code">4928 5306</span>)</span></span>)</span></span></code></pre>
+
+<h3>Unsupported?</h3>
+
+<pre><code><span class="code">np.einsum<span class="paren1">(<span class="code">a, <span class="paren2">[<span class="code">0,0</span>]</span></span>)</span>
+60
+&gt;&gt;&gt; np.trace<span class="paren1">(<span class="code">a</span>)</span>
+60
+&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code">a, <span class="paren2">[<span class="code">0,0</span>]</span>, <span class="paren2">[<span class="code">0</span>]</span></span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"> 0,  6, 12, 18, 24</span>]</span></span>)</span>
+&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code">a, <span class="paren2">[<span class="code">0,1</span>]</span>, b, <span class="paren2">[<span class="code">1</span>]</span></span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"> 30,  80, 130, 180, 230</span>]</span></span>)</span>
+&gt;&gt;&gt; np.dot<span class="paren1">(<span class="code">a, b</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"> 30,  80, 130, 180, 230</span>]</span></span>)</span>
+&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'...j,j'</span>, a, b</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"> 30,  80, 130, 180, 230</span>]</span></span>)</span>
+&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code">c, <span class="paren2">[<span class="code">1,0</span>]</span></span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code">0, 3</span>]</span>,
+       <span class="paren3">[<span class="code">1, 4</span>]</span>,
+       <span class="paren3">[<span class="code">2, 5</span>]</span></span>]</span></span>)</span>
+&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code">3, <span class="paren2">[<span class="code">Ellipsis</span>]</span>, c, <span class="paren2">[<span class="code">Ellipsis</span>]</span></span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code"> 0,  3,  6</span>]</span>,
+       <span class="paren3">[<span class="code"> 9, 12, 15</span>]</span></span>]</span></span>)</span>
+&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code">b, <span class="paren2">[<span class="code">0</span>]</span>, b, <span class="paren2">[<span class="code">0</span>]</span></span>)</span>
+30
+&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code">np.arange<span class="paren2">(<span class="code">2</span>)</span>+1, <span class="paren2">[<span class="code">0</span>]</span>, b, <span class="paren2">[<span class="code">1</span>]</span></span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code">0, 1, 2, 3, 4</span>]</span>,
+       <span class="paren3">[<span class="code">0, 2, 4, 6, 8</span>]</span></span>]</span></span>)</span>
+&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code">a, <span class="paren2">[<span class="code">0,Ellipsis</span>]</span>, <span class="paren2">[<span class="code">Ellipsis</span>]</span></span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code">50, 55, 60, 65, 70</span>]</span></span>)</span>
+&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code">a, <span class="paren2">[<span class="code">0,1,2</span>]</span>, b, <span class="paren2">[<span class="code">1,0,3</span>]</span>, <span class="paren2">[<span class="code">2,3</span>]</span></span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code"> 4400.,  4730.</span>]</span>,
+       <span class="paren3">[<span class="code"> 4532.,  4874.</span>]</span>,
+       <span class="paren3">[<span class="code"> 4664.,  5018.</span>]</span>,
+       <span class="paren3">[<span class="code"> 4796.,  5162.</span>]</span>,
+       <span class="paren3">[<span class="code"> 4928.,  5306.</span>]</span></span>]</span></span>)</span>
+&gt;&gt;&gt; np.tensordot<span class="paren1">(<span class="code">a,b, axes=<span class="paren2">(<span class="code"><span class="paren3">[<span class="code">1,0</span>]</span>,<span class="paren3">[<span class="code">0,1</span>]</span></span>)</span></span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code"> 4400.,  4730.</span>]</span>,
+       <span class="paren3">[<span class="code"> 4532.,  4874.</span>]</span>,
+       <span class="paren3">[<span class="code"> 4664.,  5018.</span>]</span>,
+       <span class="paren3">[<span class="code"> 4796.,  5162.</span>]</span>,
+       <span class="paren3">[<span class="code"> 4928.,  5306.</span>]</span></span>]</span></span>)</span>
+&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'ki,...k-&gt;i...'</span>, a, b</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code">10, 28, 46, 64</span>]</span>,
+       <span class="paren3">[<span class="code">13, 40, 67, 94</span>]</span></span>]</span></span>)</span>
+&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'k...,jk'</span>, a, b</span>)</span>
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code">10, 28, 46, 64</span>]</span>,
+       <span class="paren3">[<span class="code">13, 40, 67, 94</span>]</span></span>]</span></span>)</span>
+&gt;&gt;&gt; np.einsum<span class="paren1">(<span class="code"><span class="string">'ii-&gt;i'</span>, a</span>)</span><span class="paren1">[<span class="code">:</span>]</span> = 1
+&gt;&gt;&gt; a
+array<span class="paren1">(<span class="code"><span class="paren2">[<span class="code"><span class="paren3">[<span class="code"> 1.,  0.,  0.</span>]</span>,
+       <span class="paren3">[<span class="code"> 0.,  1.,  0.</span>]</span>,
+       <span class="paren3">[<span class="code"> 0.,  0.,  1.</span>]</span></span>]</span></span>)</span></span></code></pre>
+
+<h2>https://rockt.github.io/2018/04/30/einsum</h2>
+
+<p>本節はチートシートとして使えると思われ。</p>
+
+<h3>Note</h3>
+
+<p>参照ブログでは<code>torch.einsum</code>が使われているのですが、numpyのeinsumとは実装が違ったりするんですかね？（調べてない。）
+本節のコードは全てそのままの移植で動いたのでpythonコードは省略してあります。</p>
+
+<h3>Matrix transpose.</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ij -&gt; ji</span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 6</span>)</span> '<span class="paren3">(<span class="code">2 3</span>)</span></span>)</span></span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">0 3</span>)</span> <span class="paren2">(<span class="code">1 4</span>)</span> <span class="paren2">(<span class="code">2 5</span>)</span></span>)</span></span></code></pre>
+
+<h3>Sum</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ij -&gt;</span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 6</span>)</span> '<span class="paren3">(<span class="code">2 3</span>)</span></span>)</span></span>)</span>
+15</span></code></pre>
+
+<h3>Columns sum</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ij -&gt; j</span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 6</span>)</span> '<span class="paren3">(<span class="code">2 3</span>)</span></span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">3 5 7</span>)</span></span></code></pre>
+
+<h3>Row sum</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ij -&gt; i</span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 6</span>)</span> '<span class="paren3">(<span class="code">2 3</span>)</span></span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">3 12</span>)</span></span></code></pre>
+
+<h3>Matrix vector multiplication</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ik k -&gt; i</span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 6</span>)</span> '<span class="paren3">(<span class="code">2 3</span>)</span></span>)</span> <span class="paren2">(<span class="code">numcl:arange 3</span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">5 14</span>)</span></span></code></pre>
+
+<h3>Matrix matrix multiplication</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ik kj -&gt; ij</span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 6</span>)</span> '<span class="paren3">(<span class="code">2 3</span>)</span></span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 15</span>)</span> '<span class="paren3">(<span class="code">3 5</span>)</span></span>)</span></span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">25 28 31 34 37</span>)</span> <span class="paren2">(<span class="code">70 82 94 106 118</span>)</span></span>)</span></span></code></pre>
+
+<h2>Dot product</h2>
+
+<h3>Vector</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">i i -&gt;</span>)</span> <span class="paren2">(<span class="code">numcl:arange 3</span>)</span> <span class="paren2">(<span class="code">numcl:arange 3 6</span>)</span></span>)</span>
+14</span></code></pre>
+
+<h3>Matrix</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ij ij -&gt;</span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 6</span>)</span> '<span class="paren3">(<span class="code">2 3</span>)</span></span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 6 12</span>)</span> '<span class="paren3">(<span class="code">2 3</span>)</span></span>)</span></span>)</span>
+145</span></code></pre>
+
+<h3>Hadamard product</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ij ij -&gt; ij</span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 6</span>)</span> '<span class="paren3">(<span class="code">2 3</span>)</span></span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 6 12</span>)</span> '<span class="paren3">(<span class="code">2 3</span>)</span></span>)</span></span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">0 7 16</span>)</span> <span class="paren2">(<span class="code">27 40 55</span>)</span></span>)</span></span></code></pre>
+
+<h3>Outer product</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">i j -&gt; ij</span>)</span> <span class="paren2">(<span class="code">numcl:arange 3</span>)</span> <span class="paren2">(<span class="code">numcl:arange 3 7</span>)</span></span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">0 0 0 0</span>)</span> <span class="paren2">(<span class="code">3 4 5 6</span>)</span> <span class="paren2">(<span class="code">6 8 10 12</span>)</span></span>)</span></span></code></pre>
+
+<h3>Batch matrix multiplication</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:einsum '<span class="paren2">(<span class="code">ijk ikl -&gt; ijl</span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 30</span>)</span> '<span class="paren3">(<span class="code">3 2 5</span>)</span></span>)</span> <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:arange 45</span>)</span> '<span class="paren3">(<span class="code">3 5 3</span>)</span></span>)</span></span>)</span>
+#3A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><span class="paren3">(<span class="code">90 100 110</span>)</span> <span class="paren3">(<span class="code">240 275 310</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">1290 1350 1410</span>)</span> <span class="paren3">(<span class="code">1815 1900 1985</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">3990 4100 4210</span>)</span> <span class="paren3">(<span class="code">4890 5025 5160</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
