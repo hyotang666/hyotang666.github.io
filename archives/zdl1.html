@@ -1,0 +1,542 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>zdl1</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>ゼロから作るDeep Learning. Common Lispで学ぶディープラーニングの理論と実装(1)</h1>
+
+<p>ゼロから作るDeep LearningのコードをCommon Lispに移植しながら学習していくシリーズです。</p>
+
+<h1>Common Lisp入門</h1>
+
+<h2>1.1 Common Lispとは</h2>
+
+<h2>1.2 処理系のインストール</h2>
+
+<p>ここではインストールに際しての注意点を説明します。</p>
+
+<h3>1.2.1 処理系</h3>
+
+<p>Common LispはANSI仕様が存在するため処理系は複数あります。
+ここでは最も開発が活発で実行速度の速さでも群を抜くSBCLを使用します。</p>
+
+<h3>1.2.2 Dependencies</h3>
+
+<p>必要な便利ライブラリはドシドシ使っていきます。</p>
+
+<ul>
+<li><a href="https://github.com/numcl/numcl" >Numcl</a></li>
+<li><a href="https://github.com/guicho271828/eazy-gnuplot" >Eazy-gnuplot</a></li>
+</ul>
+
+<h3>1.2.3 <a href="https://github.com/roswell/roswell" >Roswell</a></h3>
+
+<p>Common Lispのインストール方は様々ありますが、ここでは処理系マネージャであるRoswellを推奨します。
+Roswellのインストールに関しては<a href="https://github.com/roswell/roswell/wiki/Installation" >ここ</a>を参照してください。</p>
+
+<h2>1.3 REPL</h2>
+
+<p>処理系のREPL（対話的インターフェース）にはエディタからアクセスできると便利です。
+Emacsユーザーは<a href="https://github.com/slime/slime" >slime</a>、VIMユーザーは<a href="https://github.com/vlime/vlime" >vlime</a>を使うと幸せになれます。
+もしくは<a href="https://github.com/hanslub42/rlwrap" >rlwrap</a>を使ったほうが幸せになれるかたもいるかもしれません。</p>
+
+<h3>1.3.1 Arithmetic</h3>
+
+<p>加算や乗算などの算術計算は以下のように行います。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">- 1 2 3</span>)</span>
+-4
+
+* <span class="paren1">(<span class="code">* 4 5 6</span>)</span>
+120
+
+* <span class="paren1">(<span class="code">/ 7 5 3</span>)</span>
+7/15
+
+* <span class="paren1">(<span class="code">expt 3 2</span>)</span>
+9</span></code></pre>
+
+<p>除算の結果が分数になっている点要注意。
+少数が欲しい場合は引数か返り値を明示的に少数にする必要があります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">/ 7 5.0</span>)</span>
+1.4
+
+* <span class="paren1">(<span class="code">float <span class="paren2">(<span class="code">/ 7 5</span>)</span></span>)</span>
+1.4</span></code></pre>
+
+<h3>1.3.2 Data types</h3>
+
+<p>プログラミングではデータ型（data type）というものがあります。
+データ型とはデータの性質を表すもので、たとえば、整数、少数、文字列といった型があります。
+Common Lispには<code>TYPE-OF</code>という関数があり、この関数でデータの型を調べることができます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">type-of 10</span>)</span>
+<span class="paren1">(<span class="code">INTEGER 0 4611686018427387903</span>)</span>
+
+* <span class="paren1">(<span class="code">type-of 1.5</span>)</span>
+SINGLE-FLOAT
+
+* <span class="paren1">(<span class="code">type-of <span class="string">"hoge"</span></span>)</span>
+<span class="paren1">(<span class="code">SIMPLE-ARRAY CHARACTER <span class="paren2">(<span class="code">4</span>)</span></span>)</span></span></code></pre>
+
+<p>なお<code>TYPE-OF</code>の返り値は型指定子（type specifier）ですが、帰ってくる型指定子は処理系依存です。
+同じ処理系であってもバージョン違いで返り値が異なる場合があります。
+<code>TYPE-OF</code>は通常コードには書きません。
+（あくまでREPLと対話的に調べたい時のためのもの。）
+コード内で型をチェックしたい場合は<code>TYPEP</code>を使います。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">typep 10 'integer</span>)</span>
+T
+
+* <span class="paren1">(<span class="code">typep 10 'float</span>)</span>
+NIL</span></code></pre>
+
+<p>また、型により条件分岐を行いたい場合は<code>TYPECASE</code>のファミリーが便利に使えます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">typecase 10
+    <span class="paren2">(<span class="code">float <span class="keyword">:no</span></span>)</span>
+    <span class="paren2">(<span class="code">integer <span class="keyword">:yes</span></span>)</span></span>)</span>
+:YES</span></code></pre>
+
+<p><em>NOTE</em></p>
+
+<p>歴史的由来により厄介な点が一つあります。</p>
+
+<p>ここでいう歴史的由来とは素のLispの上にオブジェクトシステムが後づけで開発されたことです。
+それ自体はLispという言語の柔軟さや強力さを表していることなのですが、後追いで参入してきた初心者にはわかりづらいものとなっている問題点があります。</p>
+
+<p>全てのクラスは型ですが、全ての型がクラスを持つとは限らないのです。</p>
+
+<p>データのクラスを調べたい場合は<code>CLASS-OF</code>関数を使います。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">class-of 10</span>)</span>
+#&lt;BUILT-IN-CLASS FIXNUM&gt;
+
+* <span class="paren1">(<span class="code">class-of 1.5</span>)</span>
+#&lt;BUILT-IN-CLASS SINGLE-FLOAT&gt;
+
+* <span class="paren1">(<span class="code">class-of <span class="string">"hoge"</span></span>)</span>
+#&lt;BUILT-IN-CLASS SB-KERNEL:SIMPLE-CHARACTER-STRING&gt;</span></code></pre>
+
+<p>具体的な事例としては<code>T</code>や<code>NIL</code>は<code>BOOLEAN</code>型でもありますが、<code>BOOLEAN</code>型に対応するクラスは存在しません。 </p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">typep t 'boolean</span>)</span>
+T
+
+* <span class="paren1">(<span class="code">find-class 'boolean</span>)</span>
+<span class="comment">; Error</span></span></code></pre>
+
+<h3>1.3.3 Variable</h3>
+
+<p>グローバルな変数は<code>DEFPARAMETER</code>ないし<code>DEFVAR</code>で宣言してから使います。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*x*</span> 10</span>)</span> <span class="comment">; 宣言と初期化。グローバル変数名の左右に`*`をつけるのは作法。
+</span>*X*               <span class="comment">; DEFPARAMETER式は宣言された変数名を返す。
+</span>
+* <span class="paren1">(<span class="code">print <span class="special">*x*</span></span>)</span> <span class="comment">; *X*の値を出力。
+</span>10            <span class="comment">; 出力（副作用）
+</span>10            <span class="comment">; PRINT式は出力した値を返す。
+</span>
+* <span class="paren1">(<span class="code">setf <span class="special">*x*</span> 100</span>)</span> <span class="comment">; 代入には`SETF`を使う。
+</span>100              <span class="comment">; SETF式は最後に代入した値を返す。
+</span>
+* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*y*</span> 3.14</span>)</span>
+*Y*
+
+* <span class="paren1">(<span class="code">* <span class="special">*x*</span> <span class="special">*y*</span></span>)</span>
+314.0
+
+* <span class="paren1">(<span class="code">type-of <span class="paren2">(<span class="code">* <span class="special">*x*</span> <span class="special">*y*</span></span>)</span></span>)</span>
+SINGLE-FLOAT</span></code></pre>
+
+<p>Common Lispは動的型付けの言語なので変数に型宣言は必要ありません。
+ですが型宣言ができないわけではありません。
+型宣言をした場合の振る舞いは処理系依存です。
+ここで採用しているSBCLはオープンソース処理系の中でも特に型に厳しい処理系です。
+型宣言をした場合、コンパイル時に静的な型チェックが行われます。</p>
+
+<p>なお、「;」はコメントで、それ以降の文字は無視されます。</p>
+
+<h3>1.3.4 List</h3>
+
+<p><code>LIST</code>関数でリストオブジェクトを作れます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*l*</span> <span class="paren2">(<span class="code">list 1 2 3 4 5</span>)</span></span>)</span>
+*L*
+
+* *l* <span class="comment">; 中身の確認。
+</span><span class="paren1">(<span class="code">1 2 3 4 5</span>)</span>
+
+* <span class="paren1">(<span class="code">length <span class="special">*l*</span></span>)</span> <span class="comment">; 長さの取得。
+</span>5
+
+* <span class="paren1">(<span class="code">nth 0 <span class="special">*l*</span></span>)</span> <span class="comment">; 最初の要素にアクセス。
+</span>1
+
+* <span class="paren1">(<span class="code">nth 4 <span class="special">*l*</span></span>)</span>
+5
+
+* <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">nth 4 <span class="special">*l*</span></span>)</span> 99</span>)</span> <span class="comment">; 代入。
+</span>99
+
+* *l*
+<span class="paren1">(<span class="code">1 2 3 4 99</span>)</span></span></code></pre>
+
+<p>リスト要素へのアクセスには<code>NTH</code>関数を使います。
+Common Lispは汎変数をサポートしており、値を参照する式は通常、代入できます。
+上記例では<code>NTH</code>式を経由して<code>99</code>を代入しています。</p>
+
+<p>部分リストの取得には<code>SUBSEQ</code>関数を使います。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">subseq <span class="special">*l*</span> 0 2</span>)</span> <span class="comment">; インデックスの０番目から２番目まで（２番目は含まない）取得。
+</span><span class="paren1">(<span class="code">1 2</span>)</span>
+
+* <span class="paren1">(<span class="code">subseq <span class="special">*l*</span> 1</span>)</span> <span class="comment">; インデックスの１番目から最後まで取得。
+</span><span class="paren1">(<span class="code">2 3 4 99</span>)</span></span></code></pre>
+
+<h3>1.3.5 Hash-table</h3>
+
+<p>キーと値のペアを格納する専用のオブジェクトとして<code>HASH-TABLE</code>がサポートされています。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*ht*</span> <span class="paren2">(<span class="code">make-hash-table</span>)</span></span>)</span> <span class="comment">; 空のハッシュテーブルを作成。
+</span>*HT*
+
+* <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">gethash <span class="keyword">:key</span> <span class="special">*ht*</span></span>)</span> <span class="keyword">:value</span></span>)</span> <span class="comment">; 新しいペアを代入。
+</span>:VALUE
+
+* <span class="paren1">(<span class="code">gethash <span class="keyword">:key</span> <span class="special">*ht*</span></span>)</span> <span class="comment">; 参照。
+</span>:VALUE</span></code></pre>
+
+<p>ハッシュテーブルは多くの処理系で中身が見えません。</p>
+
+<pre><code><span class="code">* *ht*
+#&lt;HASH-TABLE :TEST EQL :COUNT 1 {1007F58EF3}&gt;
+
+* <span class="paren1">(<span class="code">print <span class="special">*ht*</span></span>)</span>                                <span class="comment">; PRINTしても
+</span>#&lt;HASH-TABLE :TEST EQL :COUNT 1 {1007F58EF3}&gt; <span class="comment">; 中身は見えない。
+</span>#&lt;HASH-TABLE :TEST EQL :COUNT 1 {1007F58EF3}&gt; <span class="comment">; PRINTは表示したオブジェクトを返す。</span></span></code></pre>
+
+<p>中身を見たい場合は<code>INSPECT</code>関数を使います。
+<code>INSPECT</code>の表示方法は処理系依存ですのでここでは割愛します。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">inspect <span class="special">*ht*</span></span>)</span> <span class="comment">; 表示例は割愛。</span></span></code></pre>
+
+<h3>1.3.6 Boolean</h3>
+
+<p>Common Lispは汎ブールをサポートする言語です。
+<code>NIL</code>が唯一の偽値（FALSE）で、それ以外はすべてTRUEと解釈されます。</p>
+
+<h4>AND</h4>
+
+<p><code>AND</code>マクロは左から順に評価していき、<code>NIL</code>を返すフォームに出会うとそれを返り値とします。
+どのフォームも<code>NIL</code>を返さなかった場合、最後のフォームの返り値が<code>AND</code>マクロの返り値となります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">and nil t nil</span>)</span>
+NIL
+
+* <span class="paren1">(<span class="code">and 1 2 3</span>)</span>
+3</span></code></pre>
+
+<h4>OR</h4>
+
+<p><code>OR</code>マクロは左から順に評価していき、非<code>NIL</code>値を返すフォームに出会うとそれを返り値とします。
+どのフォームも非<code>NIL</code>値を返さなかった場合、<code>NIL</code>が<code>OR</code>マクロの返り値となります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">or nil 1 2 3</span>)</span>
+1
+
+* <span class="paren1">(<span class="code">or nil nil nil</span>)</span>
+NIL</span></code></pre>
+
+<h4>NOT</h4>
+
+<p><code>NOT</code>関数はブールを反転させます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">not nil</span>)</span>
+T
+
+* <span class="paren1">(<span class="code">not 0</span>)</span>
+NIL</span></code></pre>
+
+<h4>BOOLEAN</h4>
+
+<p>より厳格な型としてブーリアン型も定義されています。
+この場合<code>T</code>と<code>NIL</code>のみがブーリアン型と解釈されます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">typep nil 'boolean</span>)</span>
+T
+
+* <span class="paren1">(<span class="code">typep 0 'boolean</span>)</span>
+NIL</span></code></pre>
+
+<p>ブーリアン型はクラスではありません。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">find-class 'boolean</span>)</span>
+<span class="comment">; Error.</span></span></code></pre>
+
+<h3>1.3.7 If</h3>
+
+<p>条件に応じて処理を分岐する場合は分岐に応じて各種コマンドを使い分けます。</p>
+
+<h4>IF</h4>
+
+<p>分岐が二分木となる場合<code>IF</code>を使います。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">num <span class="paren4">(<span class="code">random 2</span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren3">(<span class="code">zerop num</span>)</span>
+      <span class="keyword">:zero</span>
+      <span class="keyword">:one</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>COND, CASE, TYPECASE</h4>
+
+<p>分岐が多分木となる場合<code>COND</code>、<code>CASE</code>、<code>TYPECASE</code>などを使います。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">num <span class="paren4">(<span class="code">random 3</span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
+      <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">zerop num</span>)</span> <span class="keyword">:zero</span></span>)</span>
+      <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">evenp num</span>)</span> <span class="keyword">:even</span></span>)</span>
+      <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">oddp num</span>)</span> <span class="keyword">:odd</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>WHEN, UNLESS</h4>
+
+<p>エラーを投げたりするような副作用が目当ての場合は<code>WHEN</code>、<code>UNLESS</code>を使います。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> my-evenp <span class="paren2">(<span class="code">num</span>)</span>
+    <span class="paren2">(<span class="code">unless <span class="paren3">(<span class="code">integerp num</span>)</span>
+      <span class="paren3">(<span class="code">error <span class="string">"~S is not integer."</span> num</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">zerop <span class="paren3">(<span class="code">/ num 2</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>1.3.8 Loop</h3>
+
+<p>Loop処理を行うには<code>LOOP</code>マクロを使用します。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:in</span> '<span class="paren2">(<span class="code">1 2 3</span>)</span>
+        <span class="keyword">:do</span> <span class="paren2">(<span class="code">print i</span>)</span></span>)</span>
+1
+2
+3
+NIL</span></code></pre>
+
+<p><code>LOOP</code>マクロは強力でできることが非常に多うございます。
+初心者の方はとりあえず<a href="https://programgenjin.hatenablog.com/entry/2019/03/29/152157" >ここ</a>などで概要を学んでおくことをおすすめします。</p>
+
+<h3>1.3.9 Function</h3>
+
+<p>まとまりのある処理を関数として定義することができます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> hello <span class="paren2">(<span class="code"></span>)</span>
+    <span class="paren2">(<span class="code">print <span class="keyword">:hello</span></span>)</span></span>)</span>
+HELLO</span></code></pre>
+
+<p>また、関数は引数を取ることができます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> hello <span class="paren2">(<span class="code">name</span>)</span>
+    <span class="paren2">(<span class="code">format t <span class="string">"Hello, ~A!"</span> name</span>)</span></span>)</span>
+HELLO
+
+* <span class="paren1">(<span class="code">hello <span class="string">"guevara"</span></span>)</span>
+Hello, guevara!
+NIL</span></code></pre>
+
+<h2>1.4 Ros Script</h2>
+
+<h3>1.4.1 Save file</h3>
+
+<h3>1.4.2 Class</h3>
+
+<h2>1.5 NumCL</h2>
+
+<p>NumclはNumpyのCommon Lisp cloneです。</p>
+
+<h3>1.5.1 Using numcl</h3>
+
+<p>Numclはライブラリです。
+標準のCommon Lispには含まれません。
+ライブラリをインストールするにはquicklispのコマンドを叩きます。
+quicklispはunixのapt-getに相当するライブラリです。
+roswellをインストールしているなら、roswellがquicklispをインストールしてくれているのでここではquicklispのインストール方法については触れません。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">ql:quickload <span class="keyword">:numcl</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="keyword">:NUMCL</span></span>)</span></span></code></pre>
+
+<p>なお、numclはコンパイル時にメモリを大量に消費します。
+ヒープサイズが小さい場合、ヒープを食いつぶして途中で処理系が死にます。
+その場合でも途中まではコンパイルが済んでいるので、改めて処理系を立ち上げ直し、繰り返し<code>QUICKLOAD</code>をするといずれコンパイルは終了します。</p>
+
+<p>追い込んでいないので数字はおおよそのものですが、ヒープが２ギガあると食いつぶすことはないようです。
+ros経由で処理系を立ち上げている場合以下のようにしてヒープサイズを指定できます。</p>
+
+<pre><code>$&gt; ros -v dynamic-space-size=2gb run</code></pre>
+
+<h3>1.5.2 Making numcl array.</h3>
+
+<p>Numcl配列を作るには<code>NUMCL:ASARRAY</code>を使います。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:asarray '<span class="paren2">(<span class="code">1.0 2.0 3.0</span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">1.0 2.0 3.0</span>)</span></span></code></pre>
+
+<h3>1.5.3 Numcl arithmetics.</h3>
+
+<p>Numcl配列の算術計算例を示します。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*x*</span> <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">1.0 2.0 3.0</span>)</span></span>)</span></span>)</span>
+*X*
+
+* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*y*</span> <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">2.0 4.0 6.0</span>)</span></span>)</span></span>)</span>
+*Y*
+
+* <span class="paren1">(<span class="code">numcl:+ <span class="special">*x*</span> <span class="special">*y*</span></span>)</span> <span class="comment">; 要素ごとの足し算。
+</span>#<span class="paren1">(<span class="code">3.0 6.0 9.0</span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:- <span class="special">*x*</span> <span class="special">*y*</span></span>)</span>
+#<span class="paren1">(<span class="code">-1.0 -2.0 -3.0</span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:* <span class="special">*x*</span> <span class="special">*y*</span></span>)</span> <span class="comment">; Element-wise product
+</span>#<span class="paren1">(<span class="code">2.0 8.0 18.0</span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:/ <span class="special">*x*</span> <span class="special">*y*</span></span>)</span>
+#<span class="paren1">(<span class="code">0.5 0.5 0.5</span>)</span></span></code></pre>
+
+<p>Broadcast</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:/ <span class="special">*x*</span> 2.0</span>)</span>
+#<span class="paren1">(<span class="code">0.5 1.0 1.5</span>)</span></span></code></pre>
+
+<h3>1.5.4 Numcl multi dimensional array.</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*a*</span> <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">1 2</span>)</span> <span class="paren4">(<span class="code">3 4</span>)</span></span>)</span></span>)</span></span>)</span> <span class="comment">; 多次元配列の作成。
+</span>*A*
+
+* *a*            <span class="comment">; 中身の確認。
+</span>#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">1 2</span>)</span> <span class="paren2">(<span class="code">3 4</span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:shape <span class="special">*a*</span></span>)</span>
+<span class="paren1">(<span class="code">2 2</span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:dtype <span class="special">*a*</span></span>)</span>
+<span class="paren1">(<span class="code">UNSIGNED-BYTE 4</span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*b*</span> <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">3 0</span>)</span> <span class="paren4">(<span class="code">0 6</span>)</span></span>)</span></span>)</span></span>)</span>
+*B*
+
+* <span class="paren1">(<span class="code">numcl:+ <span class="special">*a*</span> <span class="special">*b*</span></span>)</span> <span class="comment">; Matrix同士の足し算。
+</span>#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">4 2</span>)</span> <span class="paren2">(<span class="code">3 10</span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:* <span class="special">*a*</span> <span class="special">*b*</span></span>)</span> <span class="comment">; Matrix同士の掛け算。
+</span>#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">3 0</span>)</span> <span class="paren2">(<span class="code">0 24</span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:* <span class="special">*a*</span> 10</span>)</span> <span class="comment">; Broadcast.
+</span>#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">10 20</span>)</span> <span class="paren2">(<span class="code">30 40</span>)</span></span>)</span></span></code></pre>
+
+<h3>1.5.5 Broadcast.</h3>
+
+<p>numpy用のものですがブロードキャストについては<a href="https://machinelearningmastery.com/broadcasting-with-numpy-arrays/" >例えばここ</a>などが参考になるかと思われます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:* <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">1 2</span>)</span> <span class="paren4">(<span class="code">3 4</span>)</span></span>)</span></span>)</span> <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">10 20</span>)</span></span>)</span></span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">10 40</span>)</span> <span class="paren2">(<span class="code">30 80</span>)</span></span>)</span></span></code></pre>
+
+<h3>1.5.6 Access element.</h3>
+
+<p>要素へのアクセスには<code>AREF</code>関数を使います。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*x*</span> <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">51 55</span>)</span> <span class="paren4">(<span class="code">14 19</span>)</span> <span class="paren4">(<span class="code">0 4</span>)</span></span>)</span></span>)</span></span>)</span>
+*x*
+
+* <span class="paren1">(<span class="code">numcl:aref <span class="special">*x*</span> 0</span>)</span>
+#<span class="paren1">(<span class="code">51 55</span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:aref <span class="special">*x*</span> 0 1</span>)</span>
+55</span></code></pre>
+
+<p><code>shape</code>の返り値を利用することでお好みの繰り返しコマンドを使用できます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">dotimes <span class="paren2">(<span class="code">x <span class="paren3">(<span class="code">car <span class="paren4">(<span class="code">numcl:shape <span class="special">*x*</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">print <span class="paren3">(<span class="code">numcl:aref <span class="special">*x*</span> x</span>)</span></span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">51 55</span>)</span>
+#<span class="paren1">(<span class="code">14 19</span>)</span>
+#<span class="paren1">(<span class="code">0 4</span>)</span>
+NIL</span></code></pre>
+
+<pre><code><span class="code">* *x*
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">51 55</span>)</span> <span class="paren2">(<span class="code">14 19</span>)</span> <span class="paren2">(<span class="code">0 4</span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:flatten <span class="special">*x*</span></span>)</span>
+#<span class="paren1">(<span class="code">51 55 14 19 0 4</span>)</span>     <span class="comment">; &lt;--- Main return value.
+</span>#<span class="paren1">(<span class="code">51 55 14 19 0 4 0 0</span>)</span> <span class="comment">; &lt;--- Background vector.
+</span>
+* *x*
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">51 55</span>)</span> <span class="paren2">(<span class="code">14 19</span>)</span> <span class="paren2">(<span class="code">0 4</span>)</span></span>)</span> <span class="comment">; &lt;--- Numcl:flatten has no side effect.</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:take <span class="paren2">(<span class="code">numcl:flatten <span class="special">*x*</span></span>)</span> '<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">0 2 4</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">51 14 0</span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:&gt; <span class="special">*x*</span> 15</span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">1 1</span>)</span> <span class="paren2">(<span class="code">0 1</span>)</span> <span class="paren2">(<span class="code">0 0</span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:take <span class="special">*x*</span> <span class="paren2">(<span class="code">numcl:where <span class="special">*x*</span> <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren4">(<span class="code">x</span>)</span> <span class="paren4">(<span class="code">&gt; x 15</span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">51 55 19</span>)</span></span></code></pre>
+
+<h2>1.6 Plot</h2>
+
+<p>ここではEazy-gnuplotを使います。</p>
+
+<h3>1.6.1 Drawing simple graph.</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">ql:quickload <span class="keyword">:eazy-gnuplot</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="keyword">:EAZY-GNUPLOT</span></span>)</span>
+
+* <span class="paren1">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">x <span class="paren4">(<span class="code">numcl:arange 0 6 0.1</span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">y <span class="paren4">(<span class="code">numcl:sin x</span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code"><i><span class="symbol">eazy-gnuplot:with-plots</span></i> <span class="paren3">(<span class="code"><span class="special">*standard-output*</span> <span class="keyword">:debug</span> nil</span>)</span>
+      <span class="paren3">(<span class="code">eazy-gnuplot:gp-setup <span class="keyword">:terminal</span> '<span class="paren4">(<span class="code">pngcairo</span>)</span> <span class="keyword">:output</span> <span class="string">"plot.png"</span></span>)</span>
+      <span class="paren3">(<span class="code">eazy-gnuplot:plot <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code"></span>)</span>
+                           <span class="paren5">(<span class="code">map nil <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren1">(<span class="code">x</span>)</span> <span class="paren1">(<span class="code">format t <span class="string">"~%~A"</span> x</span>)</span></span>)</span> y</span>)</span></span>)</span>
+                         <span class="keyword">:with</span> '<span class="paren4">(<span class="code"><span class="keyword">:lines</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">uiop:run-program <span class="string">"display plot.png"</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/zdl/simple-graph.png" alt="Simple graph" /></p>
+
+<h3>1.6.2 Features.</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">x <span class="paren4">(<span class="code">numcl:arange 0 6 0.1</span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">y1 <span class="paren4">(<span class="code">numcl:sin x</span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">y2 <span class="paren4">(<span class="code">numcl:cos x</span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code"><i><span class="symbol">eazy-gnuplot:with-plots</span></i> <span class="paren3">(<span class="code"><span class="special">*standard-output*</span> <span class="keyword">:debug</span> nil</span>)</span>
+      <span class="paren3">(<span class="code">eazy-gnuplot:gp-setup <span class="keyword">:terminal</span> <span class="keyword">:png</span> <span class="keyword">:output</span> <span class="string">"plot.png"</span> <span class="keyword">:title</span> <span class="string">"sin </span><span class="string">\\</span><span class="string">\\</span><span class="string">&amp; cos"</span>
+                             <span class="keyword">:xlabel</span> <span class="string">"x"</span> <span class="keyword">:ylabel</span> <span class="string">"y"</span></span>)</span>
+      <span class="paren3">(<span class="code">eazy-gnuplot:gp <span class="keyword">:set</span> <span class="keyword">:encoding</span> <span class="keyword">:utf8</span></span>)</span>
+      <span class="paren3">(<span class="code">eazy-gnuplot:plot <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code"></span>)</span>
+                           <span class="paren5">(<span class="code">map nil <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren1">(<span class="code">x</span>)</span> <span class="paren1">(<span class="code">format t <span class="string">"~%~A"</span> x</span>)</span></span>)</span> y1</span>)</span></span>)</span>
+                         <span class="keyword">:with</span> '<span class="paren4">(<span class="code"><span class="keyword">:lines</span> <span class="keyword">:title</span> <span class="string">"sin"</span></span>)</span></span>)</span>
+      <span class="paren3">(<span class="code">eazy-gnuplot:plot <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code"></span>)</span>
+                           <span class="paren5">(<span class="code">map nil <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren1">(<span class="code">x</span>)</span> <span class="paren1">(<span class="code">format t <span class="string">"~%~A"</span> x</span>)</span></span>)</span> y2</span>)</span></span>)</span>
+                         <span class="keyword">:with</span> '<span class="paren4">(<span class="code"><span class="keyword">:lines</span> <span class="keyword">:title</span> <span class="string">"cos"</span> <span class="keyword">:linestyle</span> <span class="string">"--"</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">uiop:run-program <span class="string">"display plot.png"</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/zdl/sin-and-cos.png" alt="Sin and Cos" /></p>
+
+<h3>1.6.3 Showing images.</h3>
+
+<h2>1.7 Summary.</h2>
+
+<p>本章で学んだこと。</p>
+
+<ul>
+<li>Common Lispはシンプルで覚えやすいプログラミング言語である。</li>
+<li>Common LispはANSI仕様があり処理系が複数ある。</li>
+<li>本シリーズではオープンソースで処理速度も早いSBCLを使用する。</li>
+<li>外部ライブラリとしてnumclとeazy-gnuplotを使用する。</li>
+<li>numclには多次元配列を操作するための便利な関数が数多くある。</li>
+</ul>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
