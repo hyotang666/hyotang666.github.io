@@ -1,0 +1,171 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>zdl2</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>ゼロから作るDeep Learning.Common Lispで学ぶディープラーニングの理論と実装(2)</h1>
+
+<p>源著の内容をCommon Lispに移植しながら学んでいくシリーズです。
+詳細は源著でお読みください。
+ここでは移植したCommon Lispコードについての解説や注意点を記していきます。</p>
+
+<h1>2 Perceptron</h1>
+
+<h2>2.1 What is</h2>
+
+<h2>2.2 Simple logicals</h2>
+
+<h3>2.2.1 AND gate.</h3>
+
+<h3>2.2.2 NAND gate and OR gate.</h3>
+
+<h2>2.3 Perceptron implementation.</h2>
+
+<h3>2.3.1 Naive implementation.</h3>
+
+<p>weightやbiasといったスロットを持つ関数ということで、ここではcloser-mopを使い<code>FUNCALLABLE-STANDARD-CLASS</code>を定義することとする。
+とはいえ、その理由は「せっかくあるから使ってみるか」くらいのものでしかなく、正直LET-OVER-LAMBDAでいいような気もする。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> perceptron <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">w1 <span class="keyword">:initarg</span> <span class="keyword">:w1</span> <span class="keyword">:accessor</span> w1</span>)</span>
+   <span class="paren3">(<span class="code">w2 <span class="keyword">:initarg</span> <span class="keyword">:w2</span> <span class="keyword">:accessor</span> w2</span>)</span>
+   <span class="paren3">(<span class="code">bias <span class="keyword">:initarg</span> <span class="keyword">:bias</span> <span class="keyword">:accessor</span> bias</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> c2mop:funcallable-standard-class</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> initialize-instance <span class="keyword">:after</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o perceptron</span>)</span> &amp;key <i><span class="symbol">function</span></i></span>)</span>
+  <span class="paren2">(<span class="code">c2mop:set-funcallable-instance-function o <i><span class="symbol">function</span></i></span>)</span></span>)</span></span></code></pre>
+
+<p>次にperceptronを定義する構文をマクロとして定義する。
+<code>WITH-SLOTS</code>があることで暗黙理にシンボルがインジェクトされるのは、通常は良くないスタイルだがここでは目を瞑る。
+というのも&amp;RESTで受けるinitargsで、キーワードとはいえ同名のシンボルを使って初期値を指定するからだ。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">define-perceptron</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">name &amp;rest initargs</span>)</span> lambda-list &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">progn</span></i>
+     <span class="paren3">(<span class="code">setf <span class="paren4">(<span class="code">symbol-function ',name</span>)</span>
+             <span class="paren4">(<span class="code">make-instance 'perceptron ,@initargs <span class="keyword">:function</span>
+                            <span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i> ,lambda-list
+                              <span class="paren6">(<span class="code"><i><span class="symbol">with-slots</span></i> <span class="paren1">(<span class="code">w1 w2 bias</span>)</span> <span class="paren1">(<span class="code">symbol-function ',name</span>)</span>
+                                <span class="paren1">(<span class="code">declare <span class="paren2">(<span class="code">ignorable w1 w2 bias</span>)</span></span>)</span>
+                                ,@body</span>)</span></span>)</span></span>)</span></span>)</span>
+     ',name</span>)</span></span>)</span></span></code></pre>
+
+<p>上で定義した構文を使い、各種perceptronを定義していく。
+名前の衝突を避けるためバーティカルバーで左右を挟んである点要注意。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-perceptron</span></i> <span class="paren2">(<span class="code">|and| <span class="keyword">:w1</span> 0.5 <span class="keyword">:w2</span> 0.5 <span class="keyword">:bias</span> 0.7</span>)</span> <span class="paren2">(<span class="code">x1 x2</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren3">(<span class="code">&lt;= <span class="paren4">(<span class="code">+ <span class="paren5">(<span class="code">* x1 w1</span>)</span> <span class="paren5">(<span class="code">* x2 w2</span>)</span></span>)</span> bias</span>)</span>
+    0
+    1</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">define-perceptron</span></i> <span class="paren2">(<span class="code">|nand| <span class="keyword">:w1</span> -0.5 <span class="keyword">:w2</span> -0.5 <span class="keyword">:bias</span> -0.7</span>)</span> <span class="paren2">(<span class="code">x1 x2</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren3">(<span class="code">&lt;= <span class="paren4">(<span class="code">+ <span class="paren5">(<span class="code">* x1 w1</span>)</span> <span class="paren5">(<span class="code">* x2 w2</span>)</span></span>)</span> bias</span>)</span>
+    0
+    1</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">define-perceptron</span></i> <span class="paren2">(<span class="code">|or| <span class="keyword">:w1</span> 0.5 <span class="keyword">:w2</span> 0.5 <span class="keyword">:bias</span> 0.4</span>)</span> <span class="paren2">(<span class="code">x1 x2</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren3">(<span class="code">&lt;= <span class="paren4">(<span class="code">+ <span class="paren5">(<span class="code">* x1 w1</span>)</span> <span class="paren5">(<span class="code">* x2 w2</span>)</span></span>)</span> bias</span>)</span>
+    0
+    1</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">define-perceptron</span></i> <span class="paren2">(<span class="code">|xor|</span>)</span> <span class="paren2">(<span class="code">x1 x2</span>)</span>
+  <span class="paren2">(<span class="code">|and| <span class="paren3">(<span class="code">|nand| x1 x2</span>)</span>
+         <span class="paren3">(<span class="code">|or| x1 x2</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>2.3.2 Weight and Bias.</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*x*</span> <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">0 1</span>)</span></span>)</span></span>)</span>
+*X*
+
+* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*w*</span> <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">0.5 0.5</span>)</span></span>)</span></span>)</span>
+*W*
+
+* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*b*</span> -0.7</span>)</span>
+*B*
+
+* <span class="paren1">(<span class="code">numcl:* <span class="special">*w*</span> <span class="special">*x*</span></span>)</span>
+#<span class="paren1">(<span class="code">0.0 0.5</span>)</span>
+
+* <span class="paren1">(<span class="code">numcl:sum <span class="paren2">(<span class="code">numcl:* <span class="special">*w*</span> <span class="special">*x*</span></span>)</span></span>)</span>
+0.5
+
+* <span class="paren1">(<span class="code">numcl:+ <span class="paren2">(<span class="code">numcl:sum <span class="paren3">(<span class="code">numcl:* <span class="special">*w*</span> <span class="special">*x*</span></span>)</span></span>)</span> <span class="special">*b*</span></span>)</span>
+-0.19999999</span></code></pre>
+
+<h3>2.3.3 Implementation with weight and bias.</h3>
+
+<p>前節で定義したコードをnumcl対応版に変更する。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> perceptron <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">weight <span class="keyword">:initarg</span> <span class="keyword">:weight</span> <span class="keyword">:accessor</span> weight</span>)</span>
+   <span class="paren3">(<span class="code">bias <span class="keyword">:initarg</span> <span class="keyword">:bias</span> <span class="keyword">:accessor</span> bias</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> c2mop:funcallable-standard-class</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">define-perceptron</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">name &amp;rest initargs</span>)</span> lambda-list &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">progn</span></i>
+     <span class="paren3">(<span class="code">setf <span class="paren4">(<span class="code">symbol-function ',name</span>)</span>
+             <span class="paren4">(<span class="code">make-instance 'perceptron ,@initargs <span class="keyword">:function</span>
+                            <span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i> ,lambda-list
+                              <span class="paren6">(<span class="code"><i><span class="symbol">with-slots</span></i> <span class="paren1">(<span class="code">weight bias</span>)</span> <span class="paren1">(<span class="code">symbol-function ',name</span>)</span>
+                                <span class="paren1">(<span class="code">declare <span class="paren2">(<span class="code">ignorable weight bias</span>)</span></span>)</span>
+                                ,@body</span>)</span></span>)</span></span>)</span></span>)</span>
+     ',name</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">define-perceptron</span></i> <span class="paren2">(<span class="code">|and| <span class="keyword">:weight</span> <span class="paren3">(<span class="code">numcl:asarray #<span class="paren4">(<span class="code">0.5 0.5</span>)</span></span>)</span> <span class="keyword">:bias</span> -0.7</span>)</span> <span class="paren2">(<span class="code">x1 x2</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren3">(<span class="code">&lt;= <span class="paren4">(<span class="code">numcl:+ <span class="paren5">(<span class="code">numcl:sum <span class="paren6">(<span class="code">numcl:* weight <span class="paren1">(<span class="code">numcl:asarray <span class="paren2">(<span class="code">vector x1 x2</span>)</span></span>)</span></span>)</span></span>)</span>
+                   bias</span>)</span>
+          0</span>)</span>
+    0
+    1</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">define-perceptron</span></i> <span class="paren2">(<span class="code">|nand| <span class="keyword">:weight</span> <span class="paren3">(<span class="code">numcl:asarray #<span class="paren4">(<span class="code">-0.5 -0.5</span>)</span></span>)</span> <span class="keyword">:bias</span> 0.7</span>)</span> <span class="paren2">(<span class="code">x1 x2</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren3">(<span class="code">&lt;= <span class="paren4">(<span class="code">numcl:+ <span class="paren5">(<span class="code">numcl:sum <span class="paren6">(<span class="code">numcl:* weight <span class="paren1">(<span class="code">numcl:asarray <span class="paren2">(<span class="code">vector x1 x2</span>)</span></span>)</span></span>)</span></span>)</span>
+                   bias</span>)</span>
+          0</span>)</span>
+    0
+    1</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">define-perceptron</span></i> <span class="paren2">(<span class="code">|or| <span class="keyword">:weight</span> <span class="paren3">(<span class="code">numcl:asarray #<span class="paren4">(<span class="code">0.5 0.5</span>)</span></span>)</span> <span class="keyword">:bias</span> -0.2</span>)</span> <span class="paren2">(<span class="code">x1 x2</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren3">(<span class="code">&lt;= <span class="paren4">(<span class="code">numcl:+ <span class="paren5">(<span class="code">numcl:sum <span class="paren6">(<span class="code">numcl:* weight <span class="paren1">(<span class="code">numcl:asarray <span class="paren2">(<span class="code">vector x1 x2</span>)</span></span>)</span></span>)</span></span>)</span>
+                   bias</span>)</span>
+          0</span>)</span>
+    0
+    1</span>)</span></span>)</span></span></code></pre>
+
+<h2>2.4 Limitation of perceptron</h2>
+
+<h3>2.4.1 XOR gate.</h3>
+
+<h3>2.4.2 Linear and Non-Linear.</h3>
+
+<h2>2.5 Multi layered perceptron.</h2>
+
+<h3>2.5.1 Combine gates.</h3>
+
+<h3>2.5.2 Implementation of XOR gate.</h3>
+
+<p><code>XOR</code>は既存のperceptronを利用して定義できるので通常の<code>DEFUN</code>で定義できる。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |xor| <span class="paren2">(<span class="code">x1 x2</span>)</span>
+  <span class="paren2">(<span class="code">|and| <span class="paren3">(<span class="code">|nand| x1 x2</span>)</span> <span class="paren3">(<span class="code">|or| x1 x2</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>2.6 From NAND to computer.</h2>
+
+<h2>2.7 Summary.</h2>
+
+<p>本章で学んだこと。</p>
+
+<ul>
+<li>Closer-mopを使うことで<code>FUNCALLABLE-STANDARD-CLASS</code>を継承したクラスを定義できる。</li>
+<li>DSLを作ってからその言語でアプリを書けるというのがCommon Lispの強みの一つである。</li>
+</ul>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
