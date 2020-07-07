@@ -1,0 +1,383 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>zdl3</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>ゼロから作るDeep Learning.Common Lispで学ぶディープラーニングの理論と実装(3)</h1>
+
+<p>原著の内容をCommon Lispに移植しながら学んでいくシリーズです。
+詳細は原著でお読みください。
+ここでは移植したCommon Lispコードについての解説や注意点を記していきます。</p>
+
+<h1>3 Neural Network.</h1>
+
+<h2>3.1. From perceptron to Neural network.</h2>
+
+<h3>3.1.1. Example of neural network.</h3>
+
+<h3>3.1.2. Review of perceptron.</h3>
+
+<h3>3.1.3 Activation functions.</h3>
+
+<h2>3.2. Activation functions.</h2>
+
+<h3>3.2.1 Sigmoid function.</h3>
+
+<h3>3.2.2. Implementation of step function.</h3>
+
+<p>シンボルの衝突を避けるためバーティカルバーでくくってある点要注意。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |step| <span class="paren2">(<span class="code">x</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren3">(<span class="code">&lt;= 0 x</span>)</span>
+    1
+    0</span>)</span></span>)</span></span></code></pre>
+
+<p>numcl対応版。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |step| <span class="paren2">(<span class="code">x</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">result <span class="paren5">(<span class="code">numcl:&lt;= 0 x</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">typecase result
+      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">eql t</span>)</span> 1</span>)</span>
+      <span class="paren4">(<span class="code">null 0</span>)</span>
+      <span class="paren4">(<span class="code">otherwise result</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>numclの不等号関数はブーリアンではなくバイナリ（ビットベクター）を返す点要注意。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*x*</span> <span class="paren2">(<span class="code">numcl:asarray #<span class="paren3">(<span class="code">-1.0 1.0 2.0</span>)</span></span>)</span></span>)</span>
+*X*
+
+* <span class="paren1">(<span class="code">numcl:&lt;= 0 <span class="special">*x*</span></span>)</span>
+#*011</span></code></pre>
+
+<h3>3.2.3. Graph of step function.</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">progn</span></i>
+    <span class="paren2">(<span class="code"><i><span class="symbol">eazy-gnuplot:with-plots</span></i> <span class="paren3">(<span class="code"><span class="special">*standard-output*</span> <span class="keyword">:debug</span> nil</span>)</span>
+      <span class="paren3">(<span class="code">eazy-gnuplot:gp-setup <span class="keyword">:terminal</span> <span class="keyword">:png</span> <span class="keyword">:output</span> <span class="string">"plot.png"</span></span>)</span>
+      <span class="paren3">(<span class="code">eazy-gnuplot:gp <span class="keyword">:set</span> <span class="keyword">:yr</span> <span class="keyword">:|</span>[-0.1:1.1]|)
+      (eazy-gnuplot:plot (lambda () (map nil 'print (|step| <span class="paren4">(<span class="code">numcl:arange -5.0 5.0 0.1</span>)</span></span>)</span></span>)</span></span>)</span>
+                         :with :lines))
+    <span class="paren1">(<span class="code">uiop:run-program <span class="string">"display plot.png"</span></span>)</span>)</span></code></pre>
+
+<p><img src="../img/zdl/step.png" alt="step function" /></p>
+
+<h3>3.2.4. Implementation of sigmoid function.</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> sigmoid <span class="paren2">(<span class="code">x</span>)</span>
+  <span class="paren2">(<span class="code">numcl:/ 1 <span class="paren3">(<span class="code">numcl:+ 1 <span class="paren4">(<span class="code">numcl:exp <span class="paren5">(<span class="code">numcl:- x</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">sigmoid <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">-1.0 1.0 2.0</span>)</span></span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">0.26894143 0.7310586 0.880797</span>)</span> </span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i>  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">temp <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">1.0 2.0 3.0</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">numcl:+ 1.0 temp</span>)</span>
+            <span class="paren3">(<span class="code">numcl:/ 1.0 temp</span>)</span></span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">2.0 3.0 4.0</span>)</span>
+#<span class="paren1">(<span class="code">1.0 0.5 0.33333334</span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">progn</span></i> 
+    <span class="paren2">(<span class="code"><i><span class="symbol">eazy-gnuplot:with-plots</span></i> <span class="paren3">(<span class="code"><span class="special">*standard-output*</span> <span class="keyword">:debug</span> nil</span>)</span>
+      <span class="paren3">(<span class="code">eazy-gnuplot:gp-setup <span class="keyword">:terminal</span> <span class="keyword">:png</span> <span class="keyword">:output</span> <span class="string">"sigmoid.png"</span></span>)</span>
+      <span class="paren3">(<span class="code">eazy-gnuplot:gp <span class="keyword">:set</span> <span class="keyword">:yr</span> <span class="keyword">:|</span>[-0.1:1.1]|)
+      (eazy-gnuplot:plot (lambda () (map nil 'print (sigmoid (numcl:arange -5.0 5.0 0.1))))
+                         :with :lines))
+    (uiop:run-program "display sigmoid.png"))</span></span></span></span></span></span></span></code></pre>
+
+<p><img src="../img/zdl/sigmoid.png" alt="Sigmoid functioin" /></p>
+
+<h3>3.2.5 Comparing sigmoid function and step function.</h3>
+
+<h3>3.2.6 Non linear functions.</h3>
+
+<h3>3.2.7 ReLU function.</h3>
+
+<p>ここでシンボルをバーティカルバーでくくってあるのは衝突対策ではなく、ケースを保持するためです。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |ReLU| <span class="paren2">(<span class="code">x</span>)</span>
+  <span class="paren2">(<span class="code">numcl:max 0 x</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">progn</span></i>
+    <span class="paren2">(<span class="code"><i><span class="symbol">eazy-gnuplot:with-plots</span></i> <span class="paren3">(<span class="code"><span class="special">*standard-output*</span> <span class="keyword">:debug</span> nil</span>)</span>
+      <span class="paren3">(<span class="code">eazy-gnuplot:gp-setup <span class="keyword">:terminal</span> <span class="keyword">:png</span> <span class="keyword">:output</span> <span class="string">"relu.png"</span></span>)</span>
+      <span class="paren3">(<span class="code">eazy-gnuplot:gp <span class="keyword">:set</span> <span class="keyword">:yr</span> <span class="keyword">:|</span>[-1:6]|)
+      (eazy-gnuplot:plot (lambda () (map nil 'print (|ReLU| <span class="paren4">(<span class="code">numcl:arange -5.0 5.0 0.1</span>)</span></span>)</span></span>)</span></span>)</span>
+                         :with :lines))
+    <span class="paren1">(<span class="code">uiop:run-program <span class="string">"display relu.png"</span></span>)</span>)</span></code></pre>
+
+<p><img src="../img/zdl/relu.png" alt="ReLU function" /></p>
+
+<h2>3.3 Computing multi dimentional array.</h2>
+
+<h3>3.3.1 Multi dimentional array.</h3>
+
+<p>numclの配列は通常のCommon Lisp配列でもありますので標準の配列用関数がそのまま使えます。
+ここではndimの代わりにそれに相当する標準の<code>ARRAY-RANK</code>関数を使っています。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">1 2 3 4</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">array-rank a</span>)</span>
+            <span class="paren3">(<span class="code">numcl:shape a</span>)</span>
+            <span class="paren3">(<span class="code">nth 0 <span class="paren4">(<span class="code">numcl:shape a</span>)</span></span>)</span></span>)</span></span>)</span>
+1
+<span class="paren1">(<span class="code">4</span>)</span>
+4</span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 2</span>)</span> <span class="paren6">(<span class="code">3 4</span>)</span> <span class="paren6">(<span class="code">5 6</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">array-rank a</span>)</span>
+            <span class="paren3">(<span class="code">numcl:shape a</span>)</span></span>)</span></span>)</span>
+2
+<span class="paren1">(<span class="code">3 2</span>)</span></span></code></pre>
+
+<h3>3.3.2 Dot function.</h3>
+
+<p>numclは開発途上のライブラリです。
+2020年7月現在未だdot関数は持ちません。
+状況に応じて必要な下層関数を呼び分ける必要があります。
+Matrix同士の積では<code>MATMUL</code>関数を使います。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 2</span>)</span> <span class="paren6">(<span class="code">3 4</span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren3">(<span class="code">b <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">5 6</span>)</span> <span class="paren6">(<span class="code">7 8</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">numcl:shape a</span>)</span>
+            <span class="paren3">(<span class="code">numcl:shape b</span>)</span>
+            <span class="paren3">(<span class="code">numcl:matmul a b</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">2 2</span>)</span>
+<span class="paren1">(<span class="code">2 2</span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">19 22</span>)</span> <span class="paren2">(<span class="code">43 50</span>)</span></span>)</span></span></code></pre>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 2 3</span>)</span> <span class="paren6">(<span class="code">4 5 6</span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren3">(<span class="code">b <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 2</span>)</span> <span class="paren6">(<span class="code">3 4</span>)</span> <span class="paren6">(<span class="code">5 6</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">numcl:shape a</span>)</span>
+            <span class="paren3">(<span class="code">numcl:shape b</span>)</span>
+            <span class="paren3">(<span class="code">numcl:matmul a b</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">2 3</span>)</span>
+<span class="paren1">(<span class="code">3 2</span>)</span>
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">22 28</span>)</span> <span class="paren2">(<span class="code">49 64</span>)</span></span>)</span></span></code></pre>
+
+<p>行列の形状が一致しない場合エラーとなります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 2 3</span>)</span> <span class="paren6">(<span class="code">4 5 6</span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren3">(<span class="code">c <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 2</span>)</span> <span class="paren6">(<span class="code">3 4</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">numcl:shape a</span>)</span>
+            <span class="paren3">(<span class="code">numcl:shape c</span>)</span>
+            <span class="paren3">(<span class="code">numcl:matmul a c</span>)</span></span>)</span></span>)</span>
+=&gt; Error</span></code></pre>
+
+<p>MatrixとVectorとのドット積を求める場合は<code>EINSUM</code>関数を使います。
+<code>EINSUM</code>関数に関しては<a href="https://hyotang666.github.io/archives/einsum" >こちらのチラ裏チートシート</a>が役立つかもしれません。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 2</span>)</span> <span class="paren6">(<span class="code">3 4</span>)</span> <span class="paren6">(<span class="code">5 6</span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren3">(<span class="code">b <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">7 8</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">numcl:shape a</span>)</span>
+            <span class="paren3">(<span class="code">numcl:shape b</span>)</span>
+            <span class="paren3">(<span class="code">numcl:einsum '<span class="paren4">(<span class="code">ij j -&gt; i</span>)</span> a b</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">3 2</span>)</span>
+<span class="paren1">(<span class="code">2</span>)</span>
+#<span class="paren1">(<span class="code">23 53 83</span>)</span></span></code></pre>
+
+<h3>3.3.3 Matrix * vector of neural network.</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">x <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">1 2</span>)</span></span>)</span></span>)</span>
+        <span class="paren3">(<span class="code">w <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 3 5</span>)</span> <span class="paren6">(<span class="code">2 4 6</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">numcl:shape x</span>)</span>
+            <span class="paren3">(<span class="code">numcl:shape w</span>)</span>
+            <span class="paren3">(<span class="code">numcl:einsum '<span class="paren4">(<span class="code">i ij -&gt; j</span>)</span> x w</span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">2</span>)</span>
+<span class="paren1">(<span class="code">2 3</span>)</span>
+#<span class="paren1">(<span class="code">5 11 17</span>)</span></span></code></pre>
+
+<h2>3.4 Implementation of 3 layered neural net.</h2>
+
+<h3>3.4.1 Symbols</h3>
+
+<h3>3.4.2 Implementation of each layer signals.</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">x <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">1.0 0.5</span>)</span></span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">w1 <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">0.1 0.3 0.5</span>)</span> <span class="paren6">(<span class="code">0.2 0.4 0.6</span>)</span></span>)</span></span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">b1 <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">0.1 0.2 0.3</span>)</span></span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">a1 <span class="paren4">(<span class="code">numcl:+ <span class="paren5">(<span class="code">numcl:einsum '<span class="paren6">(<span class="code">i ij -&gt; j</span>)</span> x w1</span>)</span>
+                      b1</span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">sigmoid <span class="paren3">(<span class="code">print a1</span>)</span></span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">0.3 0.7 1 1</span>)</span>
+#<span class="paren1">(<span class="code">0.5744425 0.66818774 0.7502601</span>)</span></span></code></pre>
+
+<h3>3.4.3 Summary of implementation.</h3>
+
+<p>原著のコードはpythonに最適化されたものです。
+そのままCommon Lispに移植するとかえってわかりにくくなります。
+ここでは大胆にCommon Lisp風コードに変更します。</p>
+
+<p>似たような処理を繰り返し手書きするのは嫌です。
+結局のところレイヤーが行っているのは入力に重みをかけ合わせバイアスを足し活性化関数を適用するという処理です。
+レイヤーは関数とみなせます。
+まずはレイヤー関数を返すコンストラクタを定義します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> make-layer <span class="paren2">(<span class="code">weight bias activator</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren3">(<span class="code">vector</span>)</span>
+    <span class="paren3">(<span class="code">funcall activator <span class="paren4">(<span class="code">numcl:+ <span class="paren5">(<span class="code">numcl:einsum '<span class="paren6">(<span class="code">i ij -&gt; j</span>)</span> vector weight</span>)</span>
+                                bias</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>各レイヤーをリストにくくって返すネットワークのコンストラクタを定義します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> make-network <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">list <span class="paren3">(<span class="code">make-layer <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">0.1 0.3 0.5</span>)</span> <span class="paren6">(<span class="code">0.2 0.4 0.6</span>)</span></span>)</span></span>)</span>
+                    <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">0.1 0.2 0.3</span>)</span></span>)</span>
+                    'sigmoid</span>)</span>
+        <span class="paren3">(<span class="code">make-layer <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">0.1 0.4</span>)</span> <span class="paren6">(<span class="code">0.2 0.5</span>)</span> <span class="paren6">(<span class="code">0.3 0.6</span>)</span></span>)</span></span>)</span>
+                    <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">0.1 0.2</span>)</span></span>)</span>
+                    'sigmoid</span>)</span>
+        <span class="paren3">(<span class="code">make-layer <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">0.1 0.3</span>)</span> <span class="paren6">(<span class="code">0.2 0.4</span>)</span></span>)</span></span>)</span>
+                    <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">0.1 0.2</span>)</span></span>)</span>
+                    'identity</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>最後にネットワークと初期入力を受取り畳み込む関数を定義すれば完成です。</p>
+
+<pre><code>(defun forward (network input)
+  (reduce (lambda (input layer) (funcall layer input))
+          network
+          :initial-value input))
+
+* (forward (make-network) (numcl:asarray '(1.0 0.5)))
+#(0.3168271 0.6962791)</code></pre>
+
+<h2>3.5 Design of output layer.</h2>
+
+<h3>3.5.1 Identity function and softmax function.</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">0.3 2.9 4.0</span>)</span></span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">exp <span class="paren4">(<span class="code">numcl:exp a</span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">numcl:/ exp <span class="paren3">(<span class="code">numcl:sum exp</span>)</span></span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">0.018211273 0.24519183 0.7365969</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> softmax <span class="paren2">(<span class="code">a</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">max <span class="paren5">(<span class="code">reduce #'max a</span>)</span></span>)</span>
+         <span class="paren4">(<span class="code">exp <span class="paren5">(<span class="code">numcl:exp <span class="paren6">(<span class="code">numcl:- a max</span>)</span></span>)</span></span>)</span></span>)</span> <span class="comment">; to prevent overflow.
+</span>    <span class="paren3">(<span class="code">numcl:/ exp <span class="paren4">(<span class="code">numcl:sum exp</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>3.5.2 Note about implementation of softmax function.</h3>
+
+<p>numclの<code>EXP</code>はオーバーフローすると<code>NAN</code>ではなくエラーを投げます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">1010 1000 900</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">numcl:exp a</span>)</span></span>)</span>
+:signals error</span></code></pre>
+
+<h3>3.5.3 Characteristics of softmax function.</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numcl:sum <span class="paren2">(<span class="code">print <span class="paren3">(<span class="code">softmax <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">0.3 2.9 4.0</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">0.018211273 0.24519183 0.73659694</span>)</span>
+1.0</span></code></pre>
+
+<h3>3.5.4 Neuron number of output layer.</h3>
+
+<h2>3.6 Classify hand written digits.</h2>
+
+<h3>3.6.1 MNIST dataset.</h3>
+
+<p>MNISTデータセットをさくっとロードできるスクリプトを作ってあるのでインストールします。</p>
+
+<pre><code>$ ros install hyotang666/slurp hyotang666/cl-mnist</code></pre>
+
+<p>デフォルトでcl-mnistはデータセットをLisp配列として持つので、ヒープを大量に消費します。
+ここでは<code>:SLURP</code>を指定し、関数として返してもらいます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ql:quickload <span class="keyword">:cl-mnist</span></span>)</span>
+
+<span class="paren1">(<span class="code">destructuring-bind <span class="paren2">(<span class="code">&amp;key train-labels test-labels train-images test-images</span>)</span>
+    <span class="paren2">(<span class="code">cl-mnist:load-mnist <span class="keyword">:flatten</span> t <span class="keyword">:slurp</span> t</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*train-labels*</span> train-labels</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*train-images*</span> train-images</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*test-labels*</span> test-labels</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*test-images*</span> test-images</span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">type-of <span class="special">*train-labels*</span></span>)</span>
+FUNCTION</span></code></pre>
+
+<p>イメージデータをいい具合に表示できるライブラリは（筆者の知る限り）ないっぽい。
+ここではpngファイルとして書き出してdisplayコマンドを叩くことでお茶を濁します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">ql:quickload <span class="keyword">:zpng</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> show-img <span class="paren2">(<span class="code">vector</span>)</span>
+  <span class="paren2">(<span class="code">zpng:write-png
+    <span class="paren3">(<span class="code">make-instance 'zpng:png
+                   <span class="keyword">:width</span> 28
+                   <span class="keyword">:height</span> 28
+                   <span class="keyword">:color-type</span> <span class="keyword">:grayscale</span>
+                   <span class="keyword">:image-data</span> vector</span>)</span>
+    <span class="string">"img.png"</span></span>)</span>
+  <span class="paren2">(<span class="code">uiop:run-program <span class="string">"display img.png"</span></span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">show-img <span class="paren2">(<span class="code">funcall <span class="special">*train-images*</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/zdl/digit.png" alt="Digit" /></p>
+
+<h3>3.6.2 Neural network inference process.</h3>
+
+<p>現在の実装ではネットワークを保存できないので、保存できるように実装を変更します。</p>
+
+<pre><code><span class="code"><span class="comment">;; Parameter に後からアクセスできるようにスロットとして持つ。
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> layer <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">weight <span class="keyword">:initarg</span> <span class="keyword">:weight</span> <span class="keyword">:accessor</span> weight</span>)</span>
+   <span class="paren3">(<span class="code">bias <span class="keyword">:initarg</span> <span class="keyword">:bias</span> <span class="keyword">:accessor</span> bias</span>)</span>
+   <span class="paren3">(<span class="code">activator <span class="keyword">:initarg</span> <span class="keyword">:activator</span> <span class="keyword">:accessor</span> activator <span class="keyword">:type</span> symbol</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> c2mop:funcallable-standard-class</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> initialize-instance <span class="keyword">:after</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o layer</span>)</span> &amp;key</span>)</span>
+  <span class="paren2">(<span class="code">c2mop:set-funcallable-instance-function
+    o
+    <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren4">(<span class="code">vector</span>)</span>
+      <span class="paren4">(<span class="code">funcall <span class="paren5">(<span class="code">activator o</span>)</span>
+               <span class="paren5">(<span class="code">numcl:+ <span class="paren6">(<span class="code">numcl:einsum '<span class="paren1">(<span class="code">i ij -&gt; j</span>)</span> vector <span class="paren1">(<span class="code">weight o</span>)</span></span>)</span>
+                        <span class="paren6">(<span class="code">bias o</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;; Closureを返すのではなくLAYERオブジェクトを返すように変更。
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> make-layer <span class="paren2">(<span class="code">weight bias activator</span>)</span>
+  <span class="paren2">(<span class="code">make-instance 'layer <span class="keyword">:weight</span> weight <span class="keyword">:bias</span> bias <span class="keyword">:activator</span> activator</span>)</span></span>)</span>
+
+<span class="comment">;; PRINT/READ 同一性を保護。
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> print-object <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o layer</span>)</span> stream</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren3">(<span class="code">not <span class="special">*print-readably*</span></span>)</span>
+    <span class="paren3">(<span class="code">call-next-method</span>)</span>
+    <span class="paren3">(<span class="code">format stream <span class="string">"#.~S"</span> `<span class="paren4">(<span class="code">make-layer ,<span class="paren5">(<span class="code">weight o</span>)</span> ,<span class="paren5">(<span class="code">bias o</span>)</span> ',<span class="paren5">(<span class="code">activator o</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;; 通常はUnreadableオブジェクトとしてプリントされる。
+</span>* <span class="paren1">(<span class="code">make-network</span>)</span>
+<span class="paren1">(<span class="code">#&lt;LAYER {100B3CE7BB}&gt; #&lt;LAYER {100B3CFC2B}&gt; #&lt;LAYER {100B3D0EEB}&gt;</span>)</span>
+
+<span class="comment">;; *PRINT-READBLY* がTRUEの場合に限り読み込み時実行フォームがプリントされる。
+</span>* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="special">*print-readably*</span> t</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">print <span class="paren3">(<span class="code">car *</span>)</span></span>)</span></span>)</span>
+
+#.<span class="paren1">(<span class="code">MAKE-LAYER #A<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">2 3</span>)</span> SINGLE-FLOAT <span class="paren3">(<span class="code">0.1 0.3 0.5</span>)</span> <span class="paren3">(<span class="code">0.2 0.4 0.6</span>)</span></span>)</span> <span class="comment">; &lt;--- 副作用
+</span>              #A<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">3</span>)</span> SINGLE-FLOAT 0.1 0.2 0.3</span>)</span> 'SIGMOID</span>)</span>
+#&lt;LAYER {100B3CE7BB}&gt;                                            <span class="comment">; &lt;--- 返り値</span></span></code></pre>
+
+<p>保存と読み込み。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> save-network <span class="paren2">(<span class="code">network pathname</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-open-file</span></i> <span class="paren3">(<span class="code">out pathname <span class="keyword">:direction</span> <span class="keyword">:output</span> <span class="keyword">:if-does-not-exist</span> <span class="keyword">:create</span> <span class="keyword">:if-exists</span> <span class="keyword">:supersede</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-standard-io-syntax</span></i>
+      <span class="paren4">(<span class="code">print network out</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> load-network <span class="paren2">(<span class="code">pathname package</span>)</span>
+  <span class="paren2">(<span class="code">uiop:safe-read-file-form pathname <span class="keyword">:package</span> package</span>)</span></span>)</span></span></code></pre>
+
+<h3>3.6.3 Batch process.</h3>
+
+<p>numclは2020年現在einsumのバックエンドはCommon Lispのみです。
+これはバッチが渡されても逐次処理が行われることを意味します。
+将来的には<code>*FEATURES*</code>などによりバックエンドを（たとえばGPUなどに）切り替えられるようになるようです。</p>
+
+<p>現時点ではネットワークにバッチを渡すメリットは無いのでネットワークは原著より一階層少ないものとなります。</p>
+
+<h2>3.7 Summary</h2>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
