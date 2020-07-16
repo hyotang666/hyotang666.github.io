@@ -1,0 +1,329 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>zdl4</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>ゼロから作るDeep Learning.Common Lispで学ぶディープラーニングの理論と実装(4)</h1>
+
+<p>原著の内容をCommon Lispに移植しながら学んでいくシリーズです。
+詳細は原著でお読みください。
+ここでは移植したCommon Lispコードについての解説や注意点を記していきます。</p>
+
+<h1>4 Learning.</h1>
+
+<h2>4.1 Learning from data.</h2>
+
+<h3>4.1.1 Data driven.</h3>
+
+<h3>4.1.2 Train data and test data.</h3>
+
+<h2>4.2 Loss functions.</h2>
+
+<h3>4.2.1 Sum squared error.</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> sum-squared-error <span class="paren2">(<span class="code">array teacher</span>)</span>
+  <span class="paren2">(<span class="code">numcl:* 0.5 <span class="paren3">(<span class="code">numcl:sum <span class="paren4">(<span class="code">numcl:expt <span class="paren5">(<span class="code">numcl:- array teacher</span>)</span> 2</span>)</span></span>)</span></span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">sum-squared-error <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">0.1 0.05 0.6 0.0 0.05 0.1 0.0 0.1 0.0 0.0</span>)</span></span>)</span>
+                     <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">0 0 1 0 0 0 0 0 0 0</span>)</span></span>)</span></span>)</span>
+0.0975</span></code></pre>
+
+<h3>4.2.2 Cross entropy error</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> cross-entropy-error <span class="paren2">(<span class="code">array teacher</span>)</span>
+  <span class="paren2">(<span class="code">numcl:- <span class="paren3">(<span class="code">numcl:sum <span class="paren4">(<span class="code">numcl:* teacher <span class="paren5">(<span class="code">numcl:log <span class="paren6">(<span class="code">numcl:+ array 1e-7</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">cross-entropy-error <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">0.1 0.05 0.6 0.0 0.05 0.1 0.0 0.1 0.0 0.0</span>)</span></span>)</span>
+                       <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">0 0 1 0 0 0 0 0 0 0</span>)</span></span>)</span></span>)</span>
+0.5108254
+
+* <span class="paren1">(<span class="code">cross-entropy-error <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">0.1 0.05 0.1 0.0 0.05 0.1 0.0 0.6 0.0 0.0</span>)</span></span>)</span>
+                       <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">0 0 1 0 0 0 0 0 0 0</span>)</span></span>)</span></span>)</span>
+2.3025842</span></code></pre>
+
+<h3>4.2.3 Mini batch.</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*mnist*</span> <span class="paren2">(<span class="code">cl-mnist:load-mnist <span class="keyword">:normalize</span> t <span class="keyword">:one-hot-label</span> t <span class="keyword">:flatten</span> t <span class="keyword">:slurp</span> t</span>)</span></span>)</span>
+*MNIST*
+
+<span class="comment">;; 訓練データ数。
+</span>* <span class="paren1">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-images-count</span></span>)</span>
+60000
+
+<span class="comment">;; 一画像のバイト数。
+</span>* <span class="paren1">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-images-size</span></span>)</span>
+784
+
+<span class="comment">;; 一ラベルのバイト数。
+</span>* <span class="paren1">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-labels-size</span></span>)</span>
+1
+
+<span class="comment">;; :ONE-HOT-LABELをTRUE指定したので取り出すとBIT-VECTORとなる。
+</span>* <span class="paren1">(<span class="code">funcall <span class="paren2">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-labels</span></span>)</span></span>)</span>
+#*0000010000</span></code></pre>
+
+<p>SLURPERはデフォルトでは先頭から順次読み込みますが、引数を与えることでランダムアクセスも可能です。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> index <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:repeat</span> 10 <span class="keyword">:collect</span> <span class="paren3">(<span class="code">random 60000</span>)</span></span>)</span></span>)</span>
+INDEX
+
+* index
+<span class="paren1">(<span class="code">39788 19943 49314 45683 17770 21816 14657 32591 2225 47617</span>)</span>
+
+* <span class="paren1">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">index <span class="paren4">(<span class="code">car index</span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">offset <span class="paren4">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-labels-offset</span></span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">size <span class="paren4">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-labels-size</span></span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">file-position <span class="paren4">(<span class="code">+ offset <span class="paren5">(<span class="code">* size index</span>)</span></span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">slurper <span class="paren4">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-labels</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">funcall slurper file-position</span>)</span></span>)</span>
+#*1000000000</span></code></pre>
+
+<h3>4.2.4 Implementation of cross entropy error.</h3>
+
+<p>Numclは開発途上のライブラリで、機能にはまだまだ不備があります。
+具体的にはARGMAXは持ちません。
+いい加減なものですが、実装していきます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> argmax <span class="paren2">(<span class="code">array &amp;key axes</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">doit <span class="paren5">(<span class="code">&amp;key size pred reader</span>)</span>
+           <span class="paren5">(<span class="code">do <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">champion 0</span>)</span>
+                <span class="paren1">(<span class="code">index 0</span>)</span>
+                <span class="paren1">(<span class="code">size <span class="paren2">(<span class="code">funcall size</span>)</span></span>)</span>
+                <span class="paren1">(<span class="code">current-position 0 <span class="paren2">(<span class="code">1+ current-position</span>)</span></span>)</span></span>)</span>
+             <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">funcall pred current-position size</span>)</span>
+              index</span>)</span>
+             <span class="paren6">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">challenger <span class="paren3">(<span class="code">funcall reader current-position</span>)</span></span>)</span></span>)</span>
+               <span class="paren1">(<span class="code">when <span class="paren2">(<span class="code">= challenger <span class="paren3">(<span class="code">max challenger champion</span>)</span></span>)</span>
+                 <span class="paren2">(<span class="code">setf champion challenger
+                       index current-position</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">cond</span></i>
+      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">null axes</span>)</span>
+       <span class="paren5">(<span class="code">doit <span class="keyword">:size</span> <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren1">(<span class="code"></span>)</span> <span class="paren1">(<span class="code">array-total-size array</span>)</span></span>)</span>
+             <span class="keyword">:pred</span> <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren1">(<span class="code">position size</span>)</span> <span class="paren1">(<span class="code">not <span class="paren2">(<span class="code">&lt; position size</span>)</span></span>)</span></span>)</span>
+             <span class="keyword">:reader</span> <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren1">(<span class="code">position</span>)</span> <span class="paren1">(<span class="code">row-major-aref array position</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">and <span class="paren6">(<span class="code">= 2 <span class="paren1">(<span class="code">array-rank array</span>)</span></span>)</span>
+            <span class="paren6">(<span class="code">zerop axes</span>)</span></span>)</span>
+       <span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> col <span class="keyword">:below</span> <span class="paren6">(<span class="code">array-dimension array 1</span>)</span>
+             <span class="keyword">:collect</span> <span class="paren6">(<span class="code">doit <span class="keyword">:size</span> <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren2">(<span class="code"></span>)</span> <span class="paren2">(<span class="code">array-dimension array 0</span>)</span></span>)</span>
+                            <span class="keyword">:pred</span> <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren2">(<span class="code">row size</span>)</span> <span class="paren2">(<span class="code">not <span class="paren3">(<span class="code">&lt; row size</span>)</span></span>)</span></span>)</span>
+                            <span class="keyword">:reader</span> <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren2">(<span class="code">row</span>)</span> <span class="paren2">(<span class="code">aref array row col</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">and <span class="paren6">(<span class="code">= 2 <span class="paren1">(<span class="code">array-rank array</span>)</span></span>)</span>
+            <span class="paren6">(<span class="code">= 1 axes</span>)</span></span>)</span>
+       <span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> row <span class="keyword">:below</span> <span class="paren6">(<span class="code">array-dimension array 0</span>)</span>
+             <span class="keyword">:collect</span> <span class="paren6">(<span class="code">doit <span class="keyword">:size</span> <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren2">(<span class="code"></span>)</span> <span class="paren2">(<span class="code">array-dimension array 1</span>)</span></span>)</span>
+                            <span class="keyword">:pred</span> <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren2">(<span class="code">col size</span>)</span> <span class="paren2">(<span class="code">not <span class="paren3">(<span class="code">&lt; col size</span>)</span></span>)</span></span>)</span>
+                            <span class="keyword">:reader</span> <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren2">(<span class="code">col</span>)</span> <span class="paren2">(<span class="code">aref array row col</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">t <span class="paren5">(<span class="code">error <span class="string">"NIY"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>以下の実装も、もっと綺麗に書けそうな気がします。
+（とくに<code>ASARRAY</code>を使っているところ）</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> cross-entropy-error <span class="paren2">(<span class="code">y teach</span>)</span>
+  <span class="paren2">(<span class="code">when <span class="paren3">(<span class="code">= 1 <span class="paren4">(<span class="code">array-rank y</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">setf teach <span class="paren4">(<span class="code">numcl:reshape teach <span class="paren5">(<span class="code">list 1 <span class="paren6">(<span class="code">numcl:size teach</span>)</span></span>)</span></span>)</span>
+          y <span class="paren4">(<span class="code">numcl:reshape y <span class="paren5">(<span class="code">list 1 <span class="paren6">(<span class="code">numcl:size y</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">when <span class="paren3">(<span class="code">= <span class="paren4">(<span class="code">numcl:size y</span>)</span> <span class="paren4">(<span class="code">numcl:size teach</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">setf teach <span class="paren4">(<span class="code">argmax teach <span class="keyword">:axes</span> 1</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">batch-size <span class="paren5">(<span class="code">nth 0 <span class="paren6">(<span class="code">numcl:shape y</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">numcl:/
+      <span class="paren4">(<span class="code">numcl:-
+        <span class="paren5">(<span class="code">numcl:sum
+          <span class="paren6">(<span class="code">numcl:log
+            <span class="paren1">(<span class="code">numcl:+
+              <span class="paren2">(<span class="code">numcl:asarray
+                <span class="paren3">(<span class="code">mapcar <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">i j</span>)</span> <span class="paren5">(<span class="code">numcl:aref y i j</span>)</span></span>)</span>
+                        <span class="paren4">(<span class="code">coerce <span class="paren5">(<span class="code">numcl:arange batch-size</span>)</span> 'list</span>)</span> teach</span>)</span></span>)</span>
+              1e-7</span>)</span></span>)</span></span>)</span></span>)</span>
+      batch-size</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>4.2.5 Why set loss function?</h3>
+
+<h2>4.3 Numerical Differential.</h2>
+
+<h3>4.3.1 Differential.</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> numerical-diff <span class="paren2">(<span class="code"><i><span class="symbol">function</span></i> number</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">h 1e-4</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">numcl:/ <span class="paren4">(<span class="code">numcl:- <span class="paren5">(<span class="code">funcall <i><span class="symbol">function</span></i> <span class="paren6">(<span class="code">numcl:+ number h</span>)</span></span>)</span>
+                      <span class="paren5">(<span class="code">funcall <i><span class="symbol">function</span></i> <span class="paren6">(<span class="code">numcl:- number h</span>)</span></span>)</span></span>)</span>
+             <span class="paren4">(<span class="code">numcl:* 2 h</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>4.3.2 Examples.</h3>
+
+<p>REPLに於いて自由シンボルの<code>*</code>は直前の返り値を表します。
+同様に<code>**</code>は二つ前の返り値を表します。
+言語仕様で<code>***</code>まで定義されています。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren2">(<span class="code">x</span>)</span> <span class="paren2">(<span class="code">numcl:+ <span class="paren3">(<span class="code">numcl:* 0.01 <span class="paren4">(<span class="code">numcl:expt x 2</span>)</span></span>)</span> <span class="paren3">(<span class="code">numcl:* 0.1 x</span>)</span></span>)</span></span>)</span>
+#&lt;FUNCTION <span class="paren1">(<span class="code"><i><span class="symbol">LAMBDA</span></i> <span class="paren2">(<span class="code">X</span>)</span></span>)</span> {537D075B}&gt;
+
+* <span class="paren1">(<span class="code">numerical-diff * 5</span>)</span>
+0.2002716
+
+* <span class="paren1">(<span class="code">numerical-diff ** 10</span>)</span>
+0.3004074</span></code></pre>
+
+<h3>4.3.3 Partial differential.</h3>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">numerical-diff <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren3">(<span class="code">x</span>)</span> <span class="paren3">(<span class="code">numcl:+ <span class="paren4">(<span class="code">numcl:* x x</span>)</span> <span class="paren4">(<span class="code">numcl:expt 4.0 2.0</span>)</span></span>)</span></span>)</span> 3.0</span>)</span>
+5.9890747
+
+* <span class="paren1">(<span class="code">numerical-diff <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren3">(<span class="code">x</span>)</span> <span class="paren3">(<span class="code">numcl:+ <span class="paren4">(<span class="code">expt 3.0 2.0</span>)</span> <span class="paren4">(<span class="code">numcl:* x x</span>)</span></span>)</span></span>)</span> 4.0</span>)</span>
+8.0013275</span></code></pre>
+
+<h2>4.4 Gradient.</h2>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> numerical-gradient <span class="paren2">(<span class="code"><i><span class="symbol">function</span></i> input</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">h 1e-4</span>)</span>
+        <span class="paren4">(<span class="code">grad <span class="paren5">(<span class="code">numcl:zeros-like input</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">dotimes <span class="paren4">(<span class="code">index <span class="paren5">(<span class="code">numcl:size input</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">tmp-value <span class="paren1">(<span class="code">row-major-aref input index</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">row-major-aref input index</span>)</span> <span class="paren6">(<span class="code">numcl:+ tmp-value h</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">fxh1 <span class="paren2">(<span class="code">funcall <i><span class="symbol">function</span></i> input</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">row-major-aref input index</span>)</span> <span class="paren1">(<span class="code">numcl:- tmp-value h</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">fxh2 <span class="paren3">(<span class="code">funcall <i><span class="symbol">function</span></i> input</span>)</span></span>)</span></span>)</span>
+            <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">row-major-aref grad index</span>)</span> <span class="paren2">(<span class="code">numcl:/ <span class="paren3">(<span class="code">numcl:- fxh1 fxh2</span>)</span> <span class="paren3">(<span class="code">numcl:* 2 h</span>)</span></span>)</span>
+                  <span class="paren2">(<span class="code">row-major-aref input index</span>)</span> tmp-value</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    grad</span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">numerical-gradient <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren3">(<span class="code">x</span>)</span> <span class="paren3">(<span class="code">numcl:+ <span class="paren4">(<span class="code">numcl:expt <span class="paren5">(<span class="code">aref x 0</span>)</span> 2</span>)</span> <span class="paren4">(<span class="code">numcl:expt <span class="paren5">(<span class="code">aref x 1</span>)</span> 2</span>)</span></span>)</span></span>)</span>
+                      <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">3.0 4.0</span>)</span></span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">5.9890747 8.0013275</span>)</span>
+
+* <span class="paren1">(<span class="code">numerical-gradient <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren3">(<span class="code">x</span>)</span> <span class="paren3">(<span class="code">numcl:+ <span class="paren4">(<span class="code">numcl:expt <span class="paren5">(<span class="code">aref x 0</span>)</span> 2</span>)</span> <span class="paren4">(<span class="code">numcl:expt <span class="paren5">(<span class="code">aref x 1</span>)</span> 2</span>)</span></span>)</span></span>)</span>
+                      <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">0.0 2.0</span>)</span></span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">0.0 3.9982796</span>)</span>
+
+* <span class="paren1">(<span class="code">numerical-gradient <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren3">(<span class="code">x</span>)</span> <span class="paren3">(<span class="code">numcl:+ <span class="paren4">(<span class="code">numcl:expt <span class="paren5">(<span class="code">aref x 0</span>)</span> 2</span>)</span> <span class="paren4">(<span class="code">numcl:expt <span class="paren5">(<span class="code">aref x 1</span>)</span> 2</span>)</span></span>)</span></span>)</span>
+                      <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">3.0 0.0</span>)</span></span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">5.993843 0.0</span>)</span></span></code></pre>
+
+<h3>4.4.1 Gradient descent.</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> gradient-descent <span class="paren2">(<span class="code"><i><span class="symbol">function</span></i> &amp;key initial-value <span class="paren3">(<span class="code">learning-rate 0.01</span>)</span> <span class="paren3">(<span class="code">step 100</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">x initial-value</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">dotimes <span class="paren4">(<span class="code">i step x</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">grad <span class="paren1">(<span class="code">numerical-gradient <i><span class="symbol">function</span></i> x</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">setf x <span class="paren6">(<span class="code">numcl:- x <span class="paren1">(<span class="code">numcl:* learning-rate grad</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code">gradient-descent <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren3">(<span class="code">x</span>)</span> <span class="paren3">(<span class="code">numcl:+ <span class="paren4">(<span class="code">numcl:expt <span class="paren5">(<span class="code">numcl:aref x 0</span>)</span> 2</span>)</span>
+                                         <span class="paren4">(<span class="code">numcl:expt <span class="paren5">(<span class="code">numcl:aref x 1</span>)</span> 2</span>)</span></span>)</span></span>)</span>
+                    <span class="keyword">:initial-value</span> <span class="paren2">(<span class="code">numcl:asarray '<span class="paren3">(<span class="code">-3.0 4.0</span>)</span></span>)</span>
+                    <span class="keyword">:learning-rate</span> 0.1</span>)</span>
+#<span class="paren1">(<span class="code">-6.116103e-10 8.156569e-10</span>)</span></span></code></pre>
+
+<h3>4.4.2 Gradient for neural network.</h3>
+
+<p>原著は分かりやすさが重視され、また各節のコードが共に存在できるようにクラスが定義されています。</p>
+
+<p>ここではCommon Lispらしく、次々と改良を施していくスタイルで行きます。
+中身が書き換わることで古いコード例は動かなくなります。
+中身を変える必要がないコードは再掲しません。</p>
+
+<pre><code><span class="code"><span class="comment">;; １レイヤーのネットワークを返すコンストラクタ。
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> make-simple-net <span class="paren2">(<span class="code">&amp;optional <span class="paren3">(<span class="code">weight <span class="paren4">(<span class="code">numcl:normal 0.0d0 1.0d0 '<span class="paren5">(<span class="code">2 3</span>)</span> 'single-float</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">list <span class="paren3">(<span class="code">make-layer weight
+                    <span class="paren4">(<span class="code">numcl:zeros <span class="paren5">(<span class="code">second <span class="paren6">(<span class="code">numcl:shape weight</span>)</span></span>)</span></span>)</span>
+                    'softmax</span>)</span></span>)</span></span>)</span>
+
+<span class="comment">;; PredictはForwardのaliasでしかない。
+</span><span class="comment">;; 以下のようにすることで呼び出しコストを軽減する。
+</span><span class="comment">;; 呼び出されたPredictが間接的にForwardを呼ぶのではなく、
+</span><span class="comment">;; Predictの呼び出しがそのままForwardの呼び出しとなる。
+</span><span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">symbol-function 'predict</span>)</span> #'forward</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> loss <span class="paren2">(<span class="code">net input teach</span>)</span>
+  <span class="paren2">(<span class="code">cross-entropy-error <span class="paren3">(<span class="code">predict net input</span>)</span>
+                       teach</span>)</span></span>)</span>
+
+* <span class="paren1">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">net <span class="paren4">(<span class="code">make-simple-net <span class="paren5">(<span class="code">numcl:asarray '<span class="paren6">(<span class="code"><span class="paren1">(<span class="code">0.47355232 0.9977393 0.84668094</span>)</span>
+                                                <span class="paren1">(<span class="code">0.85557411 0.03563661 0.69422093</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">input <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">0.6 0.9</span>)</span></span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">p <span class="paren4">(<span class="code">predict net input</span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">teach <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">0 0 1</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">values p
+            <span class="paren3">(<span class="code">argmax p</span>)</span>
+            <span class="paren3">(<span class="code">loss net input teach</span>)</span>
+            <span class="paren3">(<span class="code">numerical-gradient <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">w</span>)</span> <span class="paren5">(<span class="code">declare <span class="paren6">(<span class="code">ignore w</span>)</span></span>)</span>
+                                  <span class="paren5">(<span class="code">loss net input teach</span>)</span></span>)</span>
+                                <span class="paren4">(<span class="code">weight <span class="paren5">(<span class="code">car net</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">1.0541481 0.63071656 1.1328074</span>)</span>
+2
+0.9280684
+#2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">0.21904707 0.14334917 -0.3629923</span>)</span> <span class="paren2">(<span class="code">0.32931566 0.21487474 -0.54478645</span>)</span></span>)</span></span></code></pre>
+
+<h2>4.5 Implementation of learning algorithm.</h2>
+
+<h3>4.5.1 Two layered neural network.</h3>
+
+<pre><code><span class="code"><span class="comment">;; コンストラクタ。
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> make-net <span class="paren2">(<span class="code">&amp;key sizes activators <span class="paren3">(<span class="code">weight-init 0.01</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren3">(<span class="code">size . rest</span>)</span> <span class="keyword">:on</span> sizes
+        <span class="keyword">:for</span> activator <span class="keyword">:in</span> activators
+        <span class="keyword">:while</span> rest
+        <span class="keyword">:collect</span> <span class="paren3">(<span class="code">make-layer
+                   <span class="paren4">(<span class="code">numcl:* weight-init
+                            <span class="paren5">(<span class="code">numcl:asarray
+                              <span class="paren6">(<span class="code">numcl:normal 0.0d0 1.0d0 <span class="paren1">(<span class="code">list size <span class="paren2">(<span class="code">car rest</span>)</span></span>)</span>
+                                            'single-float</span>)</span></span>)</span></span>)</span>
+                   <span class="paren4">(<span class="code">numcl:zeros <span class="paren5">(<span class="code">car rest</span>)</span></span>)</span>
+                   activator</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> accuracy <span class="paren2">(<span class="code">net input teach</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">y <span class="paren5">(<span class="code">numcl:asarray <span class="paren6">(<span class="code">argmax <span class="paren1">(<span class="code">predict net input</span>)</span> <span class="keyword">:axes</span> 1</span>)</span></span>)</span></span>)</span>
+         <span class="paren4">(<span class="code">teach <span class="paren5">(<span class="code">numcl:asarray <span class="paren6">(<span class="code">argmax teach <span class="keyword">:axes</span> 1</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">numcl:/ <span class="paren4">(<span class="code">numcl:= y teach</span>)</span>
+             <span class="paren4">(<span class="code">float <span class="paren5">(<span class="code">nth 0 <span class="paren6">(<span class="code">numcl:shape input</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> update-params <span class="paren2">(<span class="code">net input teach &amp;optional <span class="paren3">(<span class="code">rate 1</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">f <span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren6">(<span class="code">weight</span>)</span>
+             <span class="paren6">(<span class="code">declare <span class="paren1">(<span class="code">ignore weight</span>)</span></span>)</span>
+             <span class="paren6">(<span class="code">loss net input teach</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">dolist <span class="paren4">(<span class="code">layer net net</span>)</span>
+      <span class="paren4">(<span class="code">setf <span class="paren5">(<span class="code">weight layer</span>)</span>
+            <span class="paren5">(<span class="code">numcl:- <span class="paren6">(<span class="code">weight layer</span>)</span>
+                     <span class="paren6">(<span class="code">numcl:* rate <span class="paren1">(<span class="code">numerical-gradient f <span class="paren2">(<span class="code">weight layer</span>)</span></span>)</span></span>)</span></span>)</span>
+            <span class="paren5">(<span class="code">bias layer</span>)</span>
+            <span class="paren5">(<span class="code">numcl:- <span class="paren6">(<span class="code">bias layer</span>)</span>
+                     <span class="paren6">(<span class="code">numcl:* rate <span class="paren1">(<span class="code">numerical-gradient f <span class="paren2">(<span class="code">bias layer</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>4.5.2 Implementation of mini batch learning.</h3>
+
+<p>Slurperが返す配列はnumcl配列でない点要注意。</p>
+
+<p>また、2020年７月現在、numclのバックエンドはCommon Lispのみです。
+これは配列の演算が逐次的に行われることを意味します。
+よって<code>NUMERICAL-GRADIENT</code>は恐ろしく遅くなります。
+筆者は以下のコードを最後まで走らせることを諦めました。
+効率的な実装が次章ででます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">net <span class="paren4">(<span class="code">make-net <span class="keyword">:sizes</span> '<span class="paren5">(<span class="code">784 50 10</span>)</span> <span class="keyword">:activators</span> '<span class="paren5">(<span class="code">sigmoid softmax</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:repeat</span> 1
+          <span class="keyword">:for</span> index <span class="keyword">:=</span> <span class="paren3">(<span class="code">random <span class="paren4">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-images-count</span></span>)</span></span>)</span>
+          <span class="keyword">:for</span> image <span class="keyword">:=</span> <span class="paren3">(<span class="code">numcl:asarray
+                          <span class="paren4">(<span class="code">funcall <span class="paren5">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-images</span></span>)</span>
+                                   <span class="paren5">(<span class="code">+ <span class="paren6">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-images-offset</span></span>)</span>
+                                      <span class="paren6">(<span class="code">* <span class="paren1">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-images-size</span></span>)</span>
+                                         index</span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="keyword">:for</span> label <span class="keyword">:=</span> <span class="paren3">(<span class="code">numcl:asarray
+                          <span class="paren4">(<span class="code">funcall <span class="paren5">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-labels</span></span>)</span>
+                                 <span class="paren5">(<span class="code">+ <span class="paren6">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-labels-offset</span></span>)</span>
+                                    <span class="paren6">(<span class="code">* <span class="paren1">(<span class="code">getf <span class="special">*mnist*</span> <span class="keyword">:train-labels-size</span></span>)</span>
+                                       index</span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="keyword">:do</span> <span class="paren3">(<span class="code">update-params <span class="special">*net*</span> image label 0.1</span>)</span>
+          <span class="keyword">:collect</span> <span class="paren3">(<span class="code">loss <span class="special">*net*</span> image label</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>4.5.3 Evaluate by test data.</h3>
+
+<h2>4.6 Summary.</h2>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
