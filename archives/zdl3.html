@@ -293,13 +293,16 @@
 
 <h3>3.5.1 Identity function and softmax function.</h3>
 
+<p>numclの<code>MAX</code>はnumpyの<code>MAXIMIZE</code>に相当します。
+numpyの<code>MAX</code>が欲しい場合は<code>AMAX</code>を使います。</p>
+
 <pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">0.3 2.9 4.0</span>)</span></span>)</span></span>)</span>
          <span class="paren3">(<span class="code">exp <span class="paren4">(<span class="code">numcl:exp a</span>)</span></span>)</span></span>)</span>
     <span class="paren2">(<span class="code">numcl:/ exp <span class="paren3">(<span class="code">numcl:sum exp</span>)</span></span>)</span></span>)</span>
 #<span class="paren1">(<span class="code">0.018211273 0.24519183 0.7365969</span>)</span>
 
 <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> softmax <span class="paren2">(<span class="code">a</span>)</span>
-  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">max <span class="paren5">(<span class="code">reduce #'max a</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">max <span class="paren5">(<span class="code">numcl:amax a</span>)</span></span>)</span>
          <span class="paren4">(<span class="code">exp <span class="paren5">(<span class="code">numcl:exp <span class="paren6">(<span class="code">numcl:- a max</span>)</span></span>)</span></span>)</span></span>)</span> <span class="comment">; to prevent overflow.
 </span>    <span class="paren3">(<span class="code">numcl:/ exp <span class="paren4">(<span class="code">numcl:sum exp</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
@@ -418,7 +421,7 @@ FUNCTION</span></code></pre>
 これはバッチが渡されても逐次処理が行われることを意味します。
 将来的には<code>*FEATURES*</code>などによりバックエンドを（たとえばGPUなどに）切り替えられるようになるようです。</p>
 
-<p>現時点ではネットワークにバッチを渡すメリットは無いのでネットワークは原著より一階層少ないものとなります。</p>
+<p>現時点ではネットワークにバッチを渡すメリットはありません。</p>
 
 <h2>3.7 Summary</h2>
 

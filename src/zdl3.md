@@ -301,6 +301,8 @@ numclは開発途上のライブラリです。
 
 ## 3.5 Design of output layer.
 ### 3.5.1 Identity function and softmax function.
+numclの`MAX`はnumpyの`MAXIMIZE`に相当します。
+numpyの`MAX`が欲しい場合は`AMAX`を使います。
 
 ```lisp
 * (let* ((a (numcl:asarray '(0.3 2.9 4.0)))
@@ -309,7 +311,7 @@ numclは開発途上のライブラリです。
 #(0.018211273 0.24519183 0.7365969)
 
 (defun softmax (a)
-  (let* ((max (reduce #'max a))
+  (let* ((max (numcl:amax a))
          (exp (numcl:exp (numcl:- a max)))) ; to prevent overflow.
     (numcl:/ exp (numcl:sum exp))))
 ```
@@ -436,7 +438,7 @@ numclは2020年現在einsumのバックエンドはCommon Lispのみです。
 これはバッチが渡されても逐次処理が行われることを意味します。
 将来的には`*FEATURES*`などによりバックエンドを（たとえばGPUなどに）切り替えられるようになるようです。
 
-現時点ではネットワークにバッチを渡すメリットは無いのでネットワークは原著より一階層少ないものとなります。
+現時点ではネットワークにバッチを渡すメリットはありません。
 
 ## 3.7 Summary
 
