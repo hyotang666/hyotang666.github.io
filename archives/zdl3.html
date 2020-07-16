@@ -136,15 +136,64 @@
 <h3>3.3.2 Dot function.</h3>
 
 <p>numclは開発途上のライブラリです。
-2020年7月現在未だdot関数は持ちません。
-状況に応じて必要な下層関数を呼び分ける必要があります。
-Matrix同士の積では<code>MATMUL</code>関数を使います。</p>
+2020年7月現在未だdot関数は持ちません。</p>
+
+<p>無いと不便なので書きました。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> dot <span class="paren2">(<span class="code">a b</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i>
+    <span class="comment">;; If either a or b is 0-D (scalar),
+</span>    <span class="comment">;; it is equivalent to multiply and using numpy.multiply(a, b) or a * b is preferred.
+</span>    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">or <span class="paren5">(<span class="code">not <span class="paren6">(<span class="code">numcl:numcl-array-p a</span>)</span></span>)</span>
+         <span class="paren5">(<span class="code">not <span class="paren6">(<span class="code">numcl:numcl-array-p b</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">numcl:* a b</span>)</span></span>)</span>
+    <span class="comment">;; If both a and b are 1-D arrays, it is inner product of vectors (without complex conjugation).
+</span>    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">and <span class="paren5">(<span class="code">= 1 <span class="paren6">(<span class="code">array-rank a</span>)</span></span>)</span> <span class="paren5">(<span class="code">= 1 <span class="paren6">(<span class="code">array-rank b</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">numcl:inner a b</span>)</span></span>)</span>
+    <span class="comment">;; If both a and b are 2-D arrays, it is matrix multiplication, but using matmul or a @ b is preferred.
+</span>    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">and <span class="paren5">(<span class="code">= 2 <span class="paren6">(<span class="code">array-rank a</span>)</span></span>)</span> <span class="paren5">(<span class="code">= 2 <span class="paren6">(<span class="code">array-rank b</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">numcl:matmul a b</span>)</span></span>)</span>
+    <span class="comment">;; If a is an N-D array and b is a 1-D array, it is a sum product over the last axis of a and b.
+</span>    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">and <span class="paren5">(<span class="code">&lt;= 2 <span class="paren6">(<span class="code">array-rank a</span>)</span></span>)</span> <span class="paren5">(<span class="code">= 1 <span class="paren6">(<span class="code">array-rank b</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">destructuring-bind <span class="paren5">(<span class="code">last-axis . rest</span>)</span> <span class="paren5">(<span class="code">reverse <span class="paren6">(<span class="code">array-dimensions a</span>)</span></span>)</span>
+       <span class="paren5">(<span class="code">numcl:reshape <span class="paren6">(<span class="code">numcl:einsum '<span class="paren1">(<span class="code">ij j -&gt; i</span>)</span>
+                                    <span class="paren1">(<span class="code">numcl:reshape a <span class="paren2">(<span class="code">list <span class="paren3">(<span class="code">apply '* rest</span>)</span> last-axis</span>)</span></span>)</span>
+                                    b</span>)</span>
+                      <span class="paren6">(<span class="code">reverse rest</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="comment">;; If a is an N-D array and b is an M-D array (where M&gt;=2),
+</span>    <span class="comment">;; it is a sum product over the last axis of a and the second-to-last axis of b:
+</span>    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">&lt;= 2 <span class="paren5">(<span class="code">array-rank b</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">destructuring-bind <span class="paren5">(<span class="code">last-axis-a . rest-a</span>)</span> <span class="paren5">(<span class="code">reverse <span class="paren6">(<span class="code">array-dimensions a</span>)</span></span>)</span>
+       <span class="paren5">(<span class="code">destructuring-bind <span class="paren6">(<span class="code">last-axis-b last2-axis-b . rest-b</span>)</span> <span class="paren6">(<span class="code">reverse <span class="paren1">(<span class="code">array-dimensions b</span>)</span></span>)</span>
+         <span class="paren6">(<span class="code"><i><span class="symbol">cond</span></i>
+           <span class="comment">;; Tensor * Tensor.
+</span>           <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">and rest-a rest-b</span>)</span>
+            <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:einsum '<span class="paren4">(<span class="code">ij kjl -&gt; ikl</span>)</span>
+                                         <span class="paren4">(<span class="code">numcl:reshape a <span class="paren5">(<span class="code">list <span class="paren6">(<span class="code">apply #'* rest-a</span>)</span> last-axis-a</span>)</span></span>)</span>
+                                         <span class="paren4">(<span class="code">numcl:reshape b <span class="paren5">(<span class="code">list <span class="paren6">(<span class="code">apply #'* rest-b</span>)</span> last2-axis-b last-axis-b</span>)</span></span>)</span></span>)</span>
+                           <span class="paren3">(<span class="code">append <span class="paren4">(<span class="code">reverse rest-a</span>)</span> <span class="paren4">(<span class="code">reverse rest-b</span>)</span> <span class="paren4">(<span class="code">list last-axis-b</span>)</span></span>)</span></span>)</span></span>)</span>
+           <span class="comment">;; Vector * Matrix.
+</span>           <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">and <span class="paren3">(<span class="code">null rest-a</span>)</span> <span class="paren3">(<span class="code">null rest-b</span>)</span></span>)</span>
+            <span class="paren2">(<span class="code">numcl:einsum '<span class="paren3">(<span class="code">i ij -&gt; j</span>)</span> a b</span>)</span></span>)</span>
+           <span class="comment">;; Vector * Tensor.
+</span>           <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">and <span class="paren3">(<span class="code">null rest-a</span>)</span> rest-b</span>)</span>
+            <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:einsum '<span class="paren4">(<span class="code">i jik -&gt; jk</span>)</span>
+                                         a
+                                         <span class="paren4">(<span class="code">numcl:reshape b <span class="paren5">(<span class="code">list <span class="paren6">(<span class="code">apply #'* rest-b</span>)</span>
+                                                                last2-axis-b last-axis-b</span>)</span></span>)</span></span>)</span>
+                           <span class="paren3">(<span class="code">reverse <span class="paren4">(<span class="code">cons last-axis-b rest-b</span>)</span></span>)</span></span>)</span></span>)</span>
+           <span class="comment">;; Tensor * Matrix.
+</span>           <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">and rest-a <span class="paren3">(<span class="code">null rest-b</span>)</span></span>)</span>
+            <span class="paren2">(<span class="code">numcl:reshape <span class="paren3">(<span class="code">numcl:matmul <span class="paren4">(<span class="code">numcl:reshape a <span class="paren5">(<span class="code">list <span class="paren6">(<span class="code">apply #'* rest-a</span>)</span> last-axis-a</span>)</span></span>)</span>
+                                         b</span>)</span>
+                           <span class="paren3">(<span class="code">reverse <span class="paren4">(<span class="code">cons last-axis-a rest-a</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">t <span class="paren4">(<span class="code">error <span class="string">"NIY"</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
 <pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 2</span>)</span> <span class="paren6">(<span class="code">3 4</span>)</span></span>)</span></span>)</span></span>)</span>
         <span class="paren3">(<span class="code">b <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">5 6</span>)</span> <span class="paren6">(<span class="code">7 8</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
     <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">numcl:shape a</span>)</span>
             <span class="paren3">(<span class="code">numcl:shape b</span>)</span>
-            <span class="paren3">(<span class="code">numcl:matmul a b</span>)</span></span>)</span></span>)</span>
+            <span class="paren3">(<span class="code">dot a b</span>)</span></span>)</span></span>)</span>
 <span class="paren1">(<span class="code">2 2</span>)</span>
 <span class="paren1">(<span class="code">2 2</span>)</span>
 #2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">19 22</span>)</span> <span class="paren2">(<span class="code">43 50</span>)</span></span>)</span></span></code></pre>
@@ -153,7 +202,7 @@ Matrix同士の積では<code>MATMUL</code>関数を使います。</p>
         <span class="paren3">(<span class="code">b <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 2</span>)</span> <span class="paren6">(<span class="code">3 4</span>)</span> <span class="paren6">(<span class="code">5 6</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
     <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">numcl:shape a</span>)</span>
             <span class="paren3">(<span class="code">numcl:shape b</span>)</span>
-            <span class="paren3">(<span class="code">numcl:matmul a b</span>)</span></span>)</span></span>)</span>
+            <span class="paren3">(<span class="code">dot a b</span>)</span></span>)</span></span>)</span>
 <span class="paren1">(<span class="code">2 3</span>)</span>
 <span class="paren1">(<span class="code">3 2</span>)</span>
 #2A<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">22 28</span>)</span> <span class="paren2">(<span class="code">49 64</span>)</span></span>)</span></span></code></pre>
@@ -164,17 +213,14 @@ Matrix同士の積では<code>MATMUL</code>関数を使います。</p>
         <span class="paren3">(<span class="code">c <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 2</span>)</span> <span class="paren6">(<span class="code">3 4</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
     <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">numcl:shape a</span>)</span>
             <span class="paren3">(<span class="code">numcl:shape c</span>)</span>
-            <span class="paren3">(<span class="code">numcl:matmul a c</span>)</span></span>)</span></span>)</span>
+            <span class="paren3">(<span class="code">dot a c</span>)</span></span>)</span></span>)</span>
 =&gt; Error</span></code></pre>
-
-<p>MatrixとVectorとのドット積を求める場合は<code>EINSUM</code>関数を使います。
-<code>EINSUM</code>関数に関しては<a href="https://hyotang666.github.io/archives/einsum" >こちらのチラ裏チートシート</a>が役立つかもしれません。</p>
 
 <pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 2</span>)</span> <span class="paren6">(<span class="code">3 4</span>)</span> <span class="paren6">(<span class="code">5 6</span>)</span></span>)</span></span>)</span></span>)</span>
         <span class="paren3">(<span class="code">b <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">7 8</span>)</span></span>)</span></span>)</span></span>)</span>
     <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">numcl:shape a</span>)</span>
             <span class="paren3">(<span class="code">numcl:shape b</span>)</span>
-            <span class="paren3">(<span class="code">numcl:einsum '<span class="paren4">(<span class="code">ij j -&gt; i</span>)</span> a b</span>)</span></span>)</span></span>)</span>
+            <span class="paren3">(<span class="code">dot a b</span>)</span></span>)</span></span>)</span>
 <span class="paren1">(<span class="code">3 2</span>)</span>
 <span class="paren1">(<span class="code">2</span>)</span>
 #<span class="paren1">(<span class="code">23 53 83</span>)</span></span></code></pre>
@@ -185,7 +231,7 @@ Matrix同士の積では<code>MATMUL</code>関数を使います。</p>
         <span class="paren3">(<span class="code">w <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">1 3 5</span>)</span> <span class="paren6">(<span class="code">2 4 6</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
     <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">numcl:shape x</span>)</span>
             <span class="paren3">(<span class="code">numcl:shape w</span>)</span>
-            <span class="paren3">(<span class="code">numcl:einsum '<span class="paren4">(<span class="code">i ij -&gt; j</span>)</span> x w</span>)</span></span>)</span></span>)</span>
+            <span class="paren3">(<span class="code">dot x w</span>)</span></span>)</span></span>)</span>
 <span class="paren1">(<span class="code">2</span>)</span>
 <span class="paren1">(<span class="code">2 3</span>)</span>
 #<span class="paren1">(<span class="code">5 11 17</span>)</span></span></code></pre>
@@ -199,8 +245,7 @@ Matrix同士の積では<code>MATMUL</code>関数を使います。</p>
 <pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">x <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">1.0 0.5</span>)</span></span>)</span></span>)</span>
          <span class="paren3">(<span class="code">w1 <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">0.1 0.3 0.5</span>)</span> <span class="paren6">(<span class="code">0.2 0.4 0.6</span>)</span></span>)</span></span>)</span></span>)</span>
          <span class="paren3">(<span class="code">b1 <span class="paren4">(<span class="code">numcl:asarray '<span class="paren5">(<span class="code">0.1 0.2 0.3</span>)</span></span>)</span></span>)</span>
-         <span class="paren3">(<span class="code">a1 <span class="paren4">(<span class="code">numcl:+ <span class="paren5">(<span class="code">numcl:einsum '<span class="paren6">(<span class="code">i ij -&gt; j</span>)</span> x w1</span>)</span>
-                      b1</span>)</span></span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">a1 <span class="paren4">(<span class="code">numcl:+ <span class="paren5">(<span class="code">dot x w1</span>)</span> b1</span>)</span></span>)</span></span>)</span>
     <span class="paren2">(<span class="code">sigmoid <span class="paren3">(<span class="code">print a1</span>)</span></span>)</span></span>)</span>
 #<span class="paren1">(<span class="code">0.3 0.7 1 1</span>)</span>
 #<span class="paren1">(<span class="code">0.5744425 0.66818774 0.7502601</span>)</span></span></code></pre>
@@ -218,7 +263,7 @@ Matrix同士の積では<code>MATMUL</code>関数を使います。</p>
 
 <pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> make-layer <span class="paren2">(<span class="code">weight bias activator</span>)</span>
   <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren3">(<span class="code">vector</span>)</span>
-    <span class="paren3">(<span class="code">funcall activator <span class="paren4">(<span class="code">numcl:+ <span class="paren5">(<span class="code">numcl:einsum '<span class="paren6">(<span class="code">i ij -&gt; j</span>)</span> vector weight</span>)</span>
+    <span class="paren3">(<span class="code">funcall activator <span class="paren4">(<span class="code">numcl:+ <span class="paren5">(<span class="code">dot vector weight</span>)</span>
                                 bias</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
 <p>各レイヤーをリストにくくって返すネットワークのコンストラクタを定義します。</p>
@@ -332,7 +377,7 @@ FUNCTION</span></code></pre>
     o
     <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren4">(<span class="code">vector</span>)</span>
       <span class="paren4">(<span class="code">funcall <span class="paren5">(<span class="code">activator o</span>)</span>
-               <span class="paren5">(<span class="code">numcl:+ <span class="paren6">(<span class="code">numcl:einsum '<span class="paren1">(<span class="code">i ij -&gt; j</span>)</span> vector <span class="paren1">(<span class="code">weight o</span>)</span></span>)</span>
+               <span class="paren5">(<span class="code">numcl:+ <span class="paren6">(<span class="code">dot vector <span class="paren1">(<span class="code">weight o</span>)</span></span>)</span>
                         <span class="paren6">(<span class="code">bias o</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
 
 <span class="comment">;; Closureを返すのではなくLAYERオブジェクトを返すように変更。

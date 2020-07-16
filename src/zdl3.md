@@ -133,15 +133,66 @@ numclの配列は通常のCommon Lisp配列でもありますので標準の配�
 ### 3.3.2 Dot function.
 numclは開発途上のライブラリです。
 2020年7月現在未だdot関数は持ちません。
-状況に応じて必要な下層関数を呼び分ける必要があります。
-Matrix同士の積では`MATMUL`関数を使います。
+
+無いと不便なので書きました。
+
+```lisp
+(defun dot (a b)
+  (cond
+    ;; If either a or b is 0-D (scalar),
+    ;; it is equivalent to multiply and using numpy.multiply(a, b) or a * b is preferred.
+    ((or (not (numcl:numcl-array-p a))
+         (not (numcl:numcl-array-p b)))
+     (numcl:* a b))
+    ;; If both a and b are 1-D arrays, it is inner product of vectors (without complex conjugation).
+    ((and (= 1 (array-rank a)) (= 1 (array-rank b)))
+     (numcl:inner a b))
+    ;; If both a and b are 2-D arrays, it is matrix multiplication, but using matmul or a @ b is preferred.
+    ((and (= 2 (array-rank a)) (= 2 (array-rank b)))
+     (numcl:matmul a b))
+    ;; If a is an N-D array and b is a 1-D array, it is a sum product over the last axis of a and b.
+    ((and (<= 2 (array-rank a)) (= 1 (array-rank b)))
+     (destructuring-bind (last-axis . rest) (reverse (array-dimensions a))
+       (numcl:reshape (numcl:einsum '(ij j -> i)
+                                    (numcl:reshape a (list (apply '* rest) last-axis))
+                                    b)
+                      (reverse rest))))
+    ;; If a is an N-D array and b is an M-D array (where M>=2),
+    ;; it is a sum product over the last axis of a and the second-to-last axis of b:
+    ((<= 2 (array-rank b))
+     (destructuring-bind (last-axis-a . rest-a) (reverse (array-dimensions a))
+       (destructuring-bind (last-axis-b last2-axis-b . rest-b) (reverse (array-dimensions b))
+         (cond
+           ;; Tensor * Tensor.
+           ((and rest-a rest-b)
+            (numcl:reshape (numcl:einsum '(ij kjl -> ikl)
+                                         (numcl:reshape a (list (apply #'* rest-a) last-axis-a))
+                                         (numcl:reshape b (list (apply #'* rest-b) last2-axis-b last-axis-b)))
+                           (append (reverse rest-a) (reverse rest-b) (list last-axis-b))))
+           ;; Vector * Matrix.
+           ((and (null rest-a) (null rest-b))
+            (numcl:einsum '(i ij -> j) a b))
+           ;; Vector * Tensor.
+           ((and (null rest-a) rest-b)
+            (numcl:reshape (numcl:einsum '(i jik -> jk)
+                                         a
+                                         (numcl:reshape b (list (apply #'* rest-b)
+                                                                last2-axis-b last-axis-b)))
+                           (reverse (cons last-axis-b rest-b))))
+           ;; Tensor * Matrix.
+           ((and rest-a (null rest-b))
+            (numcl:reshape (numcl:matmul (numcl:reshape a (list (apply #'* rest-a) last-axis-a))
+                                         b)
+                           (reverse (cons last-axis-a rest-a))))))))
+    (t (error "NIY"))))
+```
 
 ```lisp
 * (let ((a (numcl:asarray '((1 2) (3 4))))
         (b (numcl:asarray '((5 6) (7 8)))))
     (values (numcl:shape a)
             (numcl:shape b)
-            (numcl:matmul a b)))
+            (dot a b)))
 (2 2)
 (2 2)
 #2A((19 22) (43 50))
@@ -152,7 +203,7 @@ Matrix同士の積では`MATMUL`関数を使います。
         (b (numcl:asarray '((1 2) (3 4) (5 6)))))
     (values (numcl:shape a)
             (numcl:shape b)
-            (numcl:matmul a b)))
+            (dot a b)))
 (2 3)
 (3 2)
 #2A((22 28) (49 64))
@@ -164,18 +215,16 @@ Matrix同士の積では`MATMUL`関数を使います。
         (c (numcl:asarray '((1 2) (3 4)))))
     (values (numcl:shape a)
             (numcl:shape c)
-            (numcl:matmul a c)))
+            (dot a c)))
 => Error
 ```
-MatrixとVectorとのドット積を求める場合は`EINSUM`関数を使います。
-`EINSUM`関数に関しては[こちらのチラ裏チートシート](https://hyotang666.github.io/archives/einsum)が役立つかもしれません。
 
 ```lisp
 * (let ((a (numcl:asarray '((1 2) (3 4) (5 6))))
         (b (numcl:asarray '(7 8))))
     (values (numcl:shape a)
             (numcl:shape b)
-            (numcl:einsum '(ij j -> i) a b)))
+            (dot a b)))
 (3 2)
 (2)
 #(23 53 83)
@@ -188,7 +237,7 @@ MatrixとVectorとのドット積を求める場合は`EINSUM`関数を使いま
         (w (numcl:asarray '((1 3 5) (2 4 6)))))
     (values (numcl:shape x)
             (numcl:shape w)
-            (numcl:einsum '(i ij -> j) x w)))
+            (dot x w)))
 (2)
 (2 3)
 #(5 11 17)
@@ -202,8 +251,7 @@ MatrixとVectorとのドット積を求める場合は`EINSUM`関数を使いま
 * (let* ((x (numcl:asarray '(1.0 0.5)))
          (w1 (numcl:asarray '((0.1 0.3 0.5) (0.2 0.4 0.6))))
          (b1 (numcl:asarray '(0.1 0.2 0.3)))
-         (a1 (numcl:+ (numcl:einsum '(i ij -> j) x w1)
-                      b1)))
+         (a1 (numcl:+ (dot x w1) b1)))
     (sigmoid (print a1)))
 #(0.3 0.7 1 1)
 #(0.5744425 0.66818774 0.7502601)
@@ -222,7 +270,7 @@ MatrixとVectorとのドット積を求める場合は`EINSUM`関数を使いま
 ```lisp
 (defun make-layer (weight bias activator)
   (lambda (vector)
-    (funcall activator (numcl:+ (numcl:einsum '(i ij -> j) vector weight)
+    (funcall activator (numcl:+ (dot vector weight)
                                 bias))))
 ```
 各レイヤーをリストにくくって返すネットワークのコンストラクタを定義します。
@@ -346,7 +394,7 @@ FUNCTION
     o
     (lambda (vector)
       (funcall (activator o)
-               (numcl:+ (numcl:einsum '(i ij -> j) vector (weight o))
+               (numcl:+ (dot vector (weight o))
                         (bias o))))))
 
 ;; Closureを返すのではなくLAYERオブジェクトを返すように変更。
