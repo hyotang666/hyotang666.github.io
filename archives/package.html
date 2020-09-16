@@ -1,0 +1,80 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>package</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Why common lisp package is difficult.</h1>
+
+<h2>Meta note.</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Common Lispのpackageシステムわかりづらい初心者CLer</li>
+</ul>
+
+<h2>Reason.</h2>
+
+<p>Common LispのPackageシステム（名前空間管理システム）は他言語の同機能とは設計が異なります。
+ですので他言語の名前空間管理システムへのメンタルモデルのままCommon LispのPackageシステムを解釈しようとすると歪みが生じます。
+これが初学者をしてCommon LispのPackageシステムを難解なものとしている理由となります。</p>
+
+<h2>Namespace model.</h2>
+
+<p>多くの言語が採用している名前空間管理モデルは一番外側にグローバルな名前空間があり、その内側に名前空間を区切るというものです。</p>
+
+<p><img src="../img/packages/namespace1.svg" alt="&ldquo;Namespace example1.&rdquo;" /></p>
+
+<p>グローバルな名前空間には言語により予約されたキーワードがあります。</p>
+
+<p><img src="../img/packages/namespace2.svg" alt="&ldquo;Namespace example2.&rdquo;" /></p>
+
+<p>名前空間から予約語は見えます。</p>
+
+<p><img src="../img/packages/namespace3.svg" alt="&ldquo;Namespace example3.&rdquo;" /></p>
+
+<p>他の名前空間は見えません。</p>
+
+<p><img src="../img/packages/namespace4.svg" alt="&ldquo;Namespace example4.&rdquo;" /></p>
+
+<h2>Package system model.</h2>
+
+<p>他言語の名前空間モデルがウィンドウの分割に相当するなら、Common LispのPackageシステムはタブウィンドウに相当します。
+Package（名前空間）は全て並列に存在します。</p>
+
+<p><img src="../img/packages/package1.svg" alt="&ldquo;Package example1.&rdquo;" /></p>
+
+<p><code>IN-PACKAGE</code>でタブを切り替えると見えるシンボルが変わります。</p>
+
+<p><img src="../img/packages/package2.svg" alt="&ldquo;Package example2.&rdquo;" /></p>
+
+<p>上に見てきたようにCommon Lispにはグローバルな名前空間というものが存在しません。
+よって予約語というものも存在しません。</p>
+
+<p>Common Lispという言語が提供するシンボルは全て<code>COMMON-LISP</code>パッケージに所属しています。</p>
+
+<p><img src="../img/packages/package3.svg" alt="&ldquo;Package example3.&rdquo;" /></p>
+
+<p>言語仕様によりLisp Runtimeを立ち上げたときに最初に入っている名前空間（package）は<code>CL-USER</code>であると決まっています。
+そして<code>CL-USER</code>パッケージは<code>COMMON-LISP</code>パッケージを使用（USE）してあるものと定められています。</p>
+
+<p>これはすなわち<code>COMMON-LISP</code>パッケージを使用（USE）しなければ<code>CAR</code>も<code>CDR</code>もできないパッケージを作ることが可能であることを意味します。
+これを他言語で例えるなら、<code>if</code>による条件分岐も<code>for</code>によるループもできない名前空間を作るに相当します。</p>
+
+<p>その場合でも、もちろん、明示的にパッケージ名をプリフィックスとして指定すれば参照は可能ですが。</p>
+
+<h2>Conclusion.</h2>
+
+<p>ハマりどころは他にもあるのですがそもそものモデルの違いを解説している記事は見たことがなかったので書いてみました。
+初学者の方の一助となれば幸い。</p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>

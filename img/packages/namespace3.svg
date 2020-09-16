@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="8.5in"
+   height="11in"
+   viewBox="0 0 8.5 11"
+   version="1.1"
+   id="SVGRoot"
+   inkscape:version="0.92.3 (2405546, 2018-03-11)"
+   sodipodi:docname="namespace3.svg">
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="0.7"
+     inkscape:cx="595.32931"
+     inkscape:cy="534.10379"
+     inkscape:document-units="in"
+     inkscape:current-layer="layer1"
+     showgrid="false"
+     inkscape:window-width="1904"
+     inkscape:window-height="1043"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1" />
+  <defs
+     id="defs2185">
+    <marker
+       inkscape:stockid="Arrow1Lend"
+       orient="auto"
+       refY="0.0"
+       refX="0.0"
+       id="Arrow1Lend"
+       style="overflow:visible;"
+       inkscape:isstock="true">
+      <path
+         id="path2825"
+         d="M 0.0,0.0 L 5.0,-5.0 L -12.5,0.0 L 5.0,5.0 L 0.0,0.0 z "
+         style="fill-rule:evenodd;stroke:#000000;stroke-width:1pt;stroke-opacity:1;fill:#000000;fill-opacity:1"
+         transform="scale(0.8) rotate(180) translate(12.5,0)" />
+    </marker>
+    <marker
+       inkscape:stockid="Arrow1Lstart"
+       orient="auto"
+       refY="0.0"
+       refX="0.0"
+       id="marker3148"
+       style="overflow:visible"
+       inkscape:isstock="true">
+      <path
+         id="path3146"
+         d="M 0.0,0.0 L 5.0,-5.0 L -12.5,0.0 L 5.0,5.0 L 0.0,0.0 z "
+         style="fill-rule:evenodd;stroke:#000000;stroke-width:1pt;stroke-opacity:1;fill:#000000;fill-opacity:1"
+         transform="scale(0.8) translate(12.5,0)" />
+    </marker>
+    <marker
+       inkscape:stockid="Arrow1Lstart"
+       orient="auto"
+       refY="0.0"
+       refX="0.0"
+       id="marker3126"
+       style="overflow:visible"
+       inkscape:isstock="true">
+      <path
+         id="path3124"
+         d="M 0.0,0.0 L 5.0,-5.0 L -12.5,0.0 L 5.0,5.0 L 0.0,0.0 z "
+         style="fill-rule:evenodd;stroke:#000000;stroke-width:1pt;stroke-opacity:1;fill:#000000;fill-opacity:1"
+         transform="scale(0.8) translate(12.5,0)" />
+    </marker>
+    <marker
+       inkscape:stockid="Arrow1Lstart"
+       orient="auto"
+       refY="0.0"
+       refX="0.0"
+       id="marker3100"
+       style="overflow:visible"
+       inkscape:isstock="true">
+      <path
+         id="path3098"
+         d="M 0.0,0.0 L 5.0,-5.0 L -12.5,0.0 L 5.0,5.0 L 0.0,0.0 z "
+         style="fill-rule:evenodd;stroke:#000000;stroke-width:1pt;stroke-opacity:1;fill:#000000;fill-opacity:1"
+         transform="scale(0.8) translate(12.5,0)" />
+    </marker>
+    <marker
+       inkscape:stockid="Arrow1Lstart"
+       orient="auto"
+       refY="0.0"
+       refX="0.0"
+       id="Arrow1Lstart"
+       style="overflow:visible"
+       inkscape:isstock="true">
+      <path
+         id="path2822"
+         d="M 0.0,0.0 L 5.0,-5.0 L -12.5,0.0 L 5.0,5.0 L 0.0,0.0 z "
+         style="fill-rule:evenodd;stroke:#000000;stroke-width:1pt;stroke-opacity:1;fill:#000000;fill-opacity:1"
+         transform="scale(0.8) translate(12.5,0)" />
+    </marker>
+  </defs>
+  <metadata
+     id="metadata2188">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title />
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     id="layer1"
+     inkscape:groupmode="layer"
+     inkscape:label="Layer 1">
+    <rect
+       style="opacity:1;fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.01840733;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:7.89921331;stroke-opacity:0.98979594;paint-order:stroke fill markers"
+       id="rect2746"
+       width="4.9815927"
+       height="4.9815927"
+       x="1.7092037"
+       y="3.5092037"
+       rx="0.00060878403" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:0.41666681px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.01041667"
+       x="2.3660748"
+       y="3.3031766"
+       id="text926"><tspan
+         sodipodi:role="line"
+         x="2.3660748"
+         y="3.3031766"
+         id="tspan924"
+         style="stroke-width:0.01041667"><tspan
+           x="2.3660748"
+           y="3.3031766"
+           id="tspan920"
+           style="stroke-width:0.01041667">Global namespace</tspan><tspan
+           dx="0"
+           x="6.2332635"
+           y="3.3031766"
+           id="tspan922"
+           style="stroke-width:0.01041667" /></tspan></text>
+    <ellipse
+       style="opacity:1;fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.01968505;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:7.89921331;stroke-opacity:0.98979594;paint-order:stroke fill markers"
+       id="path2758"
+       cx="5.1860137"
+       cy="7.1086335"
+       rx="1.2574409"
+       ry="1.1532742" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:0.41666681px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.01041667"
+       x="3.8988166"
+       y="5.9222169"
+       id="text944"><tspan
+         sodipodi:role="line"
+         x="3.8988166"
+         y="5.9222169"
+         id="tspan942"
+         style="stroke-width:0.01041667"><tspan
+           x="3.8988166"
+           y="5.9222169"
+           id="tspan940"
+           style="stroke-width:0.01041667">namespace1</tspan></tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:0.41666681px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.01041667"
+       x="1.9940395"
+       y="4.3502903"
+       id="text938"><tspan
+         sodipodi:role="line"
+         x="1.9940395"
+         y="4.3502903"
+         id="tspan932"
+         style="stroke-width:0.01041667"><tspan
+           x="1.9940395"
+           y="4.3502903"
+           id="tspan928"
+           style="stroke-width:0.01041667">予約語１</tspan><tspan
+           dx="0"
+           x="3.6607068"
+           y="4.3502903"
+           id="tspan930"
+           style="stroke-width:0.01041667" /></tspan><tspan
+         sodipodi:role="line"
+         x="1.9940395"
+         y="4.9212217"
+         id="tspan936"
+         style="stroke-width:0.01041667"><tspan
+           x="1.9940395"
+           y="4.9212217"
+           id="tspan934"
+           style="stroke-width:0.01041667">予約語２</tspan></tspan></text>
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.01043307;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Arrow1Lend)"
+       d="M 4.2559538,7.011907 C 3.7343706,6.9459923 3.2916755,7.0973217 2.8571437,5.1964302"
+       id="path2820"
+       inkscape:connector-curvature="0"
+       sodipodi:nodetypes="cc" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:0.41666681px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.01041667"
+       x="2.6488047"
+       y="7.3116155"
+       id="text952"><tspan
+         sodipodi:role="line"
+         x="3.0654714"
+         y="0"
+         id="tspan950"
+         style="stroke-width:0.01041667"><tspan
+           x="2.6488047"
+           y="7.3116155"
+           id="tspan946"
+           style="stroke-width:0.01041667">見</tspan><tspan
+           x="3.0654714"
+           y="7.3116155"
+           id="tspan948"
+           style="stroke-width:0.01041667">える</tspan></tspan></text>
+  </g>
+</svg>
