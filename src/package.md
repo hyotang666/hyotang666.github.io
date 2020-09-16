@@ -53,3 +53,7 @@ Common Lispという言語が提供するシンボルは全て`COMMON-LISP`パ�
 ## Conclusion.
 ハマりどころは他にもあるのですがそもそものモデルの違いを解説している記事は見たことがなかったので書いてみました。
 初学者の方の一助となれば幸い。
+
+## References.
+
+[あわせて読むならこちらの記事もどぞ。](https://qiita.com/MYAO/items/874aafcc531862c5f7c7)
