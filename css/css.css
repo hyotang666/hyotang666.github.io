@@ -1,7 +1,7 @@
 h1 { padding-bottom: 1%; border-bottom: solid; font-family: gothic; }
 h2 { padding-bottom: 0.5%; padding-top: 0.5%; background-color: ghostwhite; font-family: gothic; margin-top: 2%; }
 h3 { background-color: ghostwhite; display: table; font-family: gothic; }
-body { padding-left: 7%; padding-right: 7%; font-family: "Noto Sans CJK jp", "Liberation Mono", monospace; font-size: 1rem; font-weight: lighter; max-width: 64rem; margin: auto; background-image: url('../img/lisplogo_alien.svg'); background-repeat: no-repeat; background-position: 256rem; }
+body { padding-left: 7%; padding-right: 7%; font-family: "Noto Sans CJK jp", "Liberation Mono", monospace; font-size: 1rem; font-weight: normal; max-width: 64rem; margin: auto; background-image: url('../img/lisplogo_alien.svg'); background-repeat: no-repeat; background-position: 256rem; }
 pre { padding: 10px; background-color: whitesmoke; overflow: auto; }
 code { color: rebeccapurple; }
 table { background-color: azure; }
