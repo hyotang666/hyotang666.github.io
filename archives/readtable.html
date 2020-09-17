@@ -1,0 +1,386 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>readtable</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Practical case study of common lisp readtable.</h1>
+
+<h2>Meta note</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Common Lispのリードテーブルに興味のある方。</li>
+</ul>
+
+<h2>Introduction.</h2>
+
+<p>Common Lispという言語の特徴的な機能の一つにリードテーブルがあります。
+リードテーブルを拡張ないしカスタマイズすることにより、Common Lispプログラマはより大胆に言語そのものを拡張できます。</p>
+
+<p>ですがリードテーブルを実践的に拡張するドキュメントはあまり見ないのでここに書き記そうと思います。</p>
+
+<p>本稿ではjsonをリードしCommon Lispオブジェクトを構築するリードテーブルを開発します。</p>
+
+<h3>Disadvantage of readtable.</h3>
+
+<p>リードテーブルはストリームから一文字読み込み読み込んだ文字に応じて対応する関数を呼び出すという振る舞いをします。
+すなわちストリーム（標準入力）志向であると言えます。
+そのため速度面ではどうしても文字列志向のパースと比べて劣ります。</p>
+
+<h3>Advantage of readtable.</h3>
+
+<p>上記のストリーム志向であることはそのままリードテーブルの有利な点ともなります。</p>
+
+<p>Common Lispという言語には<a href="http://www.lispworks.com/documentation/HyperSpec/Body/v_ar_tot.htm" ><code>ARRAY-TOTAL-SIZE-LIMIT</code></a>という定数があります。
+これは処理系依存の値で、その処理系がアロケートできる配列の最大サイズを示します。
+すなわちLisp処理系が作れる文字列には限界があるということです。
+ファイルがこのサイズを超える場合、ファイルの文字列を読み込んでからパースするという作戦は取れなくなります。</p>
+
+<p>ストリーム志向であるリードテーブルの場合、これは問題となりません。</p>
+
+<h2>Definitions</h2>
+
+<p>本稿でサポートするjsonオブジェクトとLispオブジェクトの対応は以下のようになります。</p>
+<table >
+<thead>
+<tr><th>
+json</th><th>
+LISP</th></tr>
+</thead>
+<tbody>
+<tr><td>
+null</td><td>
+symbol NULL</td></tr>
+<tr><td>
+boolean</td><td>
+BOOLEAN i.e. T and NIL.</td></tr>
+<tr><td>
+object</td><td>
+HASH-TABLE</td></tr>
+<tr><td>
+array</td><td>
+VECTOR</td></tr>
+<tr><td>
+number</td><td>
+NUMBER</td></tr>
+<tr><td>
+string</td><td>
+STRING</td></tr>
+</tbody>
+</table>
+
+<h2>About macro char function.</h2>
+
+<p>リードテーブルに登録する関数は第一引数にストリームを、第二引数に対応した文字を受け取るAPI設計になっていなくてはなりません。</p>
+
+<h2>|&quot;-reader|</h2>
+
+<p>まずはもっともシンプルなオブジェクトを読み込むリーダを定義しましょう。
+ここでは<code>null</code>、<code>boolean</code>、<code>string</code>を読み込む関数を定義します。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">reader <span class="paren4">(<span class="code">get-macro-character <span class="character">#\"</span> <span class="paren5">(<span class="code">copy-readtable nil</span>)</span></span>)</span></span>)</span></span>)</span>
+2   <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> |"-reader| <span class="paren3">(<span class="code">stream character</span>)</span>
+3     <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">contents <span class="paren6">(<span class="code">funcall reader stream character</span>)</span></span>)</span></span>)</span>
+4       <span class="paren4">(<span class="code"><i><span class="symbol">cond</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">string= <span class="string">"null"</span> contents</span>)</span> ''null</span>)</span>
+5             <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">string= <span class="string">"true"</span> contents</span>)</span> t</span>)</span>
+6             <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">string= <span class="string">"false"</span> contents</span>)</span> nil</span>)</span>
+7             <span class="paren5">(<span class="code">t contents</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>処理系規定の<code>#\&quot;</code>に紐付けられた関数を取り出し束縛しておきます（１）。
+関数定義の外側に束縛を置くこと（クロージャを作ること）により関数呼び出しのたびにリードテーブルへクエリ発行するのを避けられます。</p>
+
+<p><code>COPY-READTABLE</code>はリードテーブルの複製を返す関数ですが、引数が<code>NIL</code>の場合処理系の既定リードテーブルを返すという振る舞いをします。</p>
+
+<p>関数の中では、まず束縛しておいた規定READERを使い文字列を読み込みます（３）。</p>
+
+<p>その後読み込んだ文字列の値に対応して任意の値を返します（４）。</p>
+
+<p><code>&quot;null&quot;</code>が来た時の返り値が<code>''null</code>となっている点要注目。
+リーダはS式を返す関数です。
+Lispは<code>READ</code>したものを<code>EVAL</code>します。
+<code>QUOTE</code>が一つなら<code>READ</code>した結果は<code>NULL</code>となり<code>EVAL</code>されると（おそらくは）エラーとなります。
+通常シンボル<code>NULL</code>に値（SYMBOL-VALUE）は設定されていないからです。
+ここで生成すべきは<code>'null</code>というS式です。</p>
+
+<h2>array reader.</h2>
+
+<p>次に配列のリーダを定義します。</p>
+
+<h3>|,-reader|</h3>
+
+<p>ですがその前に配列のデリミタを処理するリーダを定義してしまいましょう。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |,-reader| <span class="paren2">(<span class="code">stream character</span>)</span>
+2   <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignore character</span>)</span></span>)</span>
+3   <span class="paren2">(<span class="code">case <span class="paren3">(<span class="code">peek-char t stream</span>)</span>
+4     <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="character">#\]</span> <span class="character">#\}</span></span>)</span> <span class="paren4">(<span class="code">values</span>)</span></span>)</span>
+5     <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="character">#\,</span></span>)</span> nil</span>)</span>
+6     <span class="paren3">(<span class="code">otherwise <span class="paren4">(<span class="code">read stream t t t</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>閉じカッコが来れば値を返さず終了（４）、<code>#\,</code>が続くなら<code>NIL</code>を（５）、さもなくば再帰的に<code>READ</code>を呼びます（６）。</p>
+
+<p>何も難しくはないですね。</p>
+
+<h3>|[-reader|</h3>
+
+<p>次に配列を読み込むリーダです。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |[-reader| <span class="paren2">(<span class="code">stream character</span>)</span>
+2   <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignore character</span>)</span></span>)</span>
+3   `<span class="paren2">(<span class="code">vector ,@<span class="paren3">(<span class="code">read-delimited-list <span class="character">#\]</span> stream t</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>開き括弧である<code>#\[</code>は使わないので無視します（２）。</p>
+
+<p><code>READ-DELIMITED-LIST</code>で閉じ括弧までの要素をリストにくくって取り出し<code>VECTOR</code>にスプライスして渡します（３）。</p>
+
+<p>上で定義した<code>|,-reader|</code>を使っていない点要注目。
+<code>READ-DELIMITED-LIST</code>は再帰的に<code>READ</code>を呼び出します。
+その時の動的な<code>*READTABLE*</code>に<code>|,-reader|</code>が登録されていれば良いのです。</p>
+
+<h2>object reader.</h2>
+
+<p>最後にjsonオブジェクトを読み込むリーダを定義します。</p>
+
+<h3>|:-reader|</h3>
+
+<p>ですがその前にプロパティと値とを区切るデリミタを処理するリーダを定義してしまいましょう。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |:-reader| <span class="paren2">(<span class="code">stream character</span>)</span>
+2   <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignore stream character</span>)</span></span>)</span>
+3   <span class="paren2">(<span class="code">values</span>)</span></span>)</span></span></code></pre>
+
+<p>本デリミタは人間が読みやすくするためだけのシンタックスシュガーでしかないので単に値を返さず終了する関数として定義します（３）。</p>
+
+<h3>|{-reader|</h3>
+
+<p>jsonオブジェクトのリーダは少々大きくなります。
+ひと処理づつ見ていきましょう。</p>
+
+<pre><code><span class="code">1  <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |{-reader| <span class="paren2">(<span class="code">stream character</span>)</span>
+2    <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignore character</span>)</span></span>)</span>
+3    <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">contents <span class="paren5">(<span class="code">read-delimited-list <span class="character">#\}</span> stream t</span>)</span></span>)</span>
+4          <span class="paren4">(<span class="code"><span class="special">*package*</span> <span class="paren5">(<span class="code">find-package <span class="keyword">:keyword</span></span>)</span></span>)</span>
+5          <span class="paren4">(<span class="code">var <span class="paren5">(<span class="code">gensym <span class="string">"HASH-TABLE"</span></span>)</span></span>)</span></span>)</span>
+6      `<span class="paren3">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,var <span class="paren6">(<span class="code">make-hash-table <span class="keyword">:test</span> #'eq</span>)</span></span>)</span></span>)</span>
+7         ,@<span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren5">(<span class="code">k v</span>)</span> <span class="keyword">:on</span> contents <span class="keyword">:by</span> #'cddr
+8                 <span class="keyword">:collect</span> `<span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">gethash
+9                                  ,<span class="paren1">(<span class="code">read-from-string
+10                                     <span class="paren2">(<span class="code">symbol-munger:camel-case-&gt;lisp-name k</span>)</span></span>)</span>
+11                                 ,var</span>)</span>
+12                                ,v</span>)</span></span>)</span>
+13        ,var</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>まず<code>READ-DELIMITED-LIST</code>でオブジェクトの中身をリストにくくって取り出します（３）。
+ここで取り出したリストはプロパティキーと値が交互に現れる属性リストとなります。</p>
+
+<p>配列の時と同様にデリミタを処理する関数が既に<code>*READTABLE*</code>にあることを前提としています。</p>
+
+<p>jsonオブジェクトは<code>HASH-TABLE</code>で表されます（６）。
+jsonの仕様によりプロパティキーが現れる順番に意味がないこと、また、同一のキーが存在してはいけないこととを満たすためです。</p>
+
+<p>属性リストを<code>LOOP</code>していき（７）、<code>HASH-TABLE</code>にキーバリューペアを登録するS式を生成します（８）。</p>
+
+<p>この時、キャメルケースで書かれているであろうプロパティキーをLispyなケバブケースに変換します（１０）。
+変換には<a href="https://github.com/AccelerationNet/symbol-munger" ><code>symbol-munger</code></a>を使用します。
+（もちろん同じことができるなら他のライブラリでも構いません。）</p>
+
+<p>また、プロパティキーは<code>KEYWORD</code>シンボルに変換しておきます（４）（９）。
+<code>LOOP</code>の外側で<code>*PACKAGE*</code>を束縛している（４）のは、繰り返しのたびにキーワードパッケージを探すのを避けるためです。</p>
+
+<p>プロパティキーをキーワードシンボルに変換する理由は比較処理を高速に行うためです。
+シンボル同士の比較は<code>EQ</code>（ポインタイコール）で比較できますが、文字列の比較は<code>EQUAL</code>（要素ごとの比較）で比較しなければならないからです。</p>
+
+<h2>number</h2>
+
+<p>必要なリーダ関数は以上です。</p>
+
+<p><code>number</code>の読み込みにはCommon Lispの規定リーダを流用します。</p>
+
+<h2>named-readtables.</h2>
+
+<p>グローバルな<code>*READTABLE*</code>の値を破壊的に変更するのはあまりよい作法ではありません。
+影響範囲が広すぎるためです。</p>
+
+<p>リードテーブルを拡張する場合は<a href="https://github.com/melisgl/named-readtables" ><code>named-readtables</code></a>を使用するのが一般的です。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">named-readtables:defreadtable</span></i> json
+2   <span class="paren2">(<span class="code"><span class="keyword">:macro-char</span> <span class="character">#\:</span> '|:-reader| t</span>)</span>
+3   <span class="paren2">(<span class="code"><span class="keyword">:macro-char</span> <span class="character">#\,</span> '|,-reader|</span>)</span>
+4   <span class="paren2">(<span class="code"><span class="keyword">:macro-char</span> <span class="character">#\[</span> '|[-reader|</span>)</span>
+5   <span class="paren2">(<span class="code"><span class="keyword">:macro-char</span> <span class="character">#\]</span> <span class="paren3">(<span class="code">get-macro-character <span class="character">#\)</span> <span class="paren4">(<span class="code">copy-readtable nil</span>)</span></span>)</span></span>)</span>
+6   <span class="paren2">(<span class="code"><span class="keyword">:macro-char</span> <span class="character">#\{</span> '|{-reader|</span>)</span>
+7   <span class="paren2">(<span class="code"><span class="keyword">:macro-char</span> <span class="character">#\}</span> <span class="paren3">(<span class="code">get-macro-character <span class="character">#\)</span> <span class="paren4">(<span class="code">copy-readtable nil</span>)</span></span>)</span></span>)</span>
+8   <span class="paren2">(<span class="code"><span class="keyword">:macro-char</span> <span class="character">#\"</span> '|"-reader|</span>)</span></span>)</span></span></code></pre>
+
+<p><code>array</code>と<code>object</code>の閉じカッコには処理系規定のリーダ関数を流用します（５）（７）。</p>
+
+<h2>READ-JSON</h2>
+
+<p>簡便のために<code>READ-JSON</code>関数を定義しておきましょう。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> read-json <span class="paren2">(<span class="code">&amp;optional stream errorp return</span>)</span>
+2   <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*readtable*</span> <span class="paren5">(<span class="code">named-readtables:find-readtable 'json</span>)</span></span>)</span></span>)</span>
+3     <span class="paren3">(<span class="code">read stream errorp return</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>*READTABLE*</code>の値を動的に束縛し（２）、<code>READ</code>を呼ぶだけ（３）の簡単な関数です。</p>
+
+<h2>Usage.</h2>
+
+<p><code>READ-JSON</code>関数を使うとストリームからjsonコードを読み込み、相当するS式を生成できます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">read-json</span>)</span>
+ {
+        "Image": {
+            "Width":  800,
+            "Height": 600,
+            "Title":  "View from 15th Floor",
+            "Thumbnail": {
+                "Url":    "http://www.example.com/image/481989943",
+                "Height": 125,
+                "Width":  100
+            },
+            "Animated" : false,
+            "IDs": [116, 943, 234, 38793]
+          }
+      }
+<span class="paren1">(<span class="code"><i><span class="symbol">LET</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="keyword">#:HASH-TABLE1472</span> <span class="paren4">(<span class="code">MAKE-HASH-TABLE <span class="keyword">:TEST</span> #'EQ</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">SETF <span class="paren3">(<span class="code">GETHASH <span class="keyword">:IMAGE</span> <span class="keyword">#:HASH-TABLE1472</span></span>)</span>
+          <span class="paren3">(<span class="code"><i><span class="symbol">LET</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code"><span class="keyword">#:HASH-TABLE1471</span> <span class="paren6">(<span class="code">MAKE-HASH-TABLE <span class="keyword">:TEST</span> #'EQ</span>)</span></span>)</span></span>)</span>
+            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:WIDTH</span> <span class="keyword">#:HASH-TABLE1471</span></span>)</span> 800</span>)</span>
+            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:HEIGHT</span> <span class="keyword">#:HASH-TABLE1471</span></span>)</span> 600</span>)</span>
+            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:TITLE</span> <span class="keyword">#:HASH-TABLE1471</span></span>)</span> <span class="string">"View from 15th Floor"</span></span>)</span>
+            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:THUMBNAIL</span> <span class="keyword">#:HASH-TABLE1471</span></span>)</span>
+                    <span class="paren5">(<span class="code"><i><span class="symbol">LET</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="keyword">#:HASH-TABLE1470</span> <span class="paren2">(<span class="code">MAKE-HASH-TABLE <span class="keyword">:TEST</span> #'EQ</span>)</span></span>)</span></span>)</span>
+                      <span class="paren6">(<span class="code">SETF <span class="paren1">(<span class="code">GETHASH <span class="keyword">:URL</span> <span class="keyword">#:HASH-TABLE1470</span></span>)</span>
+                              <span class="string">"http://www.example.com/image/481989943"</span></span>)</span>
+                      <span class="paren6">(<span class="code">SETF <span class="paren1">(<span class="code">GETHASH <span class="keyword">:HEIGHT</span> <span class="keyword">#:HASH-TABLE1470</span></span>)</span> 125</span>)</span>
+                      <span class="paren6">(<span class="code">SETF <span class="paren1">(<span class="code">GETHASH <span class="keyword">:WIDTH</span> <span class="keyword">#:HASH-TABLE1470</span></span>)</span> 100</span>)</span>
+                      <span class="keyword">#:HASH-TABLE1470</span></span>)</span></span>)</span>
+            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:ANIMATED</span> <span class="keyword">#:HASH-TABLE1471</span></span>)</span> FALSE</span>)</span>
+            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:I-DS</span> <span class="keyword">#:HASH-TABLE1471</span></span>)</span> <span class="paren5">(<span class="code">VECTOR 116 943 234 38793</span>)</span></span>)</span>
+            <span class="keyword">#:HASH-TABLE1471</span></span>)</span></span>)</span>
+  <span class="keyword">#:HASH-TABLE1472</span></span>)</span> </span></code></pre>
+
+<p>現在の実装ではリテラルの<code>false</code>はシンボル<code>FALSE</code>になってしまう点は要注意。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">read-json</span>)</span>
+false
+FALSE</span></code></pre>
+
+<p><code>JSON.stringify()</code>でシリアライズされたjsonはちゃんと<code>null</code>、<code>true</code>、<code>false</code>を文字列にしてくれるのでここでは無視します。</p>
+
+<p>同様に、簡便のためデリミタがrequiredになっていない点も要注意。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">read-json</span>)</span>
+[1 2 3]
+<span class="paren1">(<span class="code">VECTOR 1 2 3</span>)</span></span></code></pre>
+
+<h2>Mix with Common Lisp.</h2>
+
+<p>上で定義したリードテーブルは純粋にjsonをリードするためだけのテーブルです。
+どういう事かというとCommon Lispのコードと共存させることのできないテーブルだということです。</p>
+
+<p>Common Lispコードの中にjsonをリテラルに書きたいという需要に対応するためには少々の変更が必要です。
+具体的にはCommon Lispで規定で持っているMACRO-CHARACTERである<code>#\,</code>、<code>#\&quot;</code>、MACRO-CHARACTERではないもののそのシンタックス上で重要な意味を持つ<code>#\:</code>をテーブルから取り除く必要があります。</p>
+
+<h3>Fixed array reader.</h3>
+
+<p>上では動的な<code>*READTABLE*</code>に<code>|,-reader|</code>が設定されていることを前提としていましたが、明示的に使いましょう（４）。
+同様に<code>|&quot;-reader|</code>も設定します（５）。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |[-reader| <span class="paren2">(<span class="code">stream character</span>)</span>
+2   <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignore character</span>)</span></span>)</span>
+3   <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*readtable*</span> <span class="paren5">(<span class="code">copy-readtable</span>)</span></span>)</span></span>)</span>
+4     <span class="paren3">(<span class="code">set-macro-character <span class="character">#\,</span> '|,-reader|</span>)</span>
+5     <span class="paren3">(<span class="code">set-macro-character <span class="character">#\"</span> '|"-reader|</span>)</span>
+6     `<span class="paren3">(<span class="code">vector ,@<span class="paren4">(<span class="code">read-delimited-list <span class="character">#\]</span> stream t</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Fixed object reader.</h3>
+
+<p>同様に<code>object</code>のリーダも暗黙の前提を明示的に設定します。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |{-reader| <span class="paren2">(<span class="code">stream character</span>)</span>
+2   <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignore character</span>)</span></span>)</span>
+3   <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*readtable*</span> <span class="paren5">(<span class="code">copy-readtable</span>)</span></span>)</span></span>)</span>
+4     <span class="paren3">(<span class="code">set-macro-character <span class="character">#\:</span> '|:-reader|</span>)</span>
+5     <span class="paren3">(<span class="code">set-macro-character <span class="character">#\,</span> '|,-reader|</span>)</span>
+6     <span class="paren3">(<span class="code">set-macro-character <span class="character">#\"</span> '|"-reader|</span>)</span>
+7     <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">contents <span class="paren6">(<span class="code">read-delimited-list <span class="character">#\}</span> stream t</span>)</span></span>)</span>
+8           <span class="paren5">(<span class="code"><span class="special">*package*</span> <span class="paren6">(<span class="code">find-package <span class="keyword">:keyword</span></span>)</span></span>)</span>
+9           <span class="paren5">(<span class="code">var <span class="paren6">(<span class="code">gensym <span class="string">"HASH-TABLE"</span></span>)</span></span>)</span></span>)</span>
+10       `<span class="paren4">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">,var <span class="paren1">(<span class="code">make-hash-table <span class="keyword">:test</span> #'eq</span>)</span></span>)</span></span>)</span>
+11         ,@<span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren6">(<span class="code">k v</span>)</span> <span class="keyword">:on</span> contents <span class="keyword">:by</span> #'cddr
+12                 <span class="keyword">:collect</span> `<span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">gethash
+13                                   ,<span class="paren2">(<span class="code">read-from-string
+14                                      <span class="paren3">(<span class="code">symbol-munger:camel-case-&gt;lisp-name k</span>)</span></span>)</span>
+15                                   ,var</span>)</span>
+16                                   ,v</span>)</span></span>)</span>
+17         ,var</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Fixed readtable.</h3>
+
+<p>上の修正によりリードテーブルの定義は以下のように変わります。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">named-readtables:defreadtable</span></i> json
+2   <span class="paren2">(<span class="code"><span class="keyword">:macro-char</span> <span class="character">#\[</span> '|[-reader|</span>)</span>
+3   <span class="paren2">(<span class="code"><span class="keyword">:macro-char</span> <span class="character">#\]</span> <span class="paren3">(<span class="code">get-macro-character <span class="character">#\)</span> <span class="paren4">(<span class="code">copy-readtable nil</span>)</span></span>)</span></span>)</span>
+4   <span class="paren2">(<span class="code"><span class="keyword">:macro-char</span> <span class="character">#\{</span> '|{-reader|</span>)</span>
+5   <span class="paren2">(<span class="code"><span class="keyword">:macro-char</span> <span class="character">#\}</span> <span class="paren3">(<span class="code">get-macro-character <span class="character">#\)</span> <span class="paren4">(<span class="code">copy-readtable nil</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>テーブルの定義が変わったため<code>READ-JSON</code>の振る舞いも変わってしまいます。
+具体的には文字列を読むことができなくなります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">read-json</span>)</span>
+"true"
+|"TRUE"|</span></code></pre>
+
+<p>コードのトップレベルに文字列がゴロンと置かれることは皆無といって過言でないのでここではこの変更を受け入れることとします。</p>
+
+<h3>cl-with-json.</h3>
+
+<p>上の変更によりjsonテーブルが使うMACRO-CHARACTERは<code>#\[</code>のペアと<code>#\{</code>のペアのみとなりました。
+幸いこの二つはCommon Lisp言語仕様によりユーザのために予約されている文字です。
+安心して２つのテーブルを結合させることができます。</p>
+
+<p>Common Lispのコードとjsonとを共存させるためにはそれ用のテーブルを用意する必要があります。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">named-readtables:defreadtable</span></i> cl-with-json
+2   <span class="paren2">(<span class="code"><span class="keyword">:merge</span> <span class="keyword">:standard</span> json</span>)</span></span>)</span></span></code></pre>
+
+<p>上記テーブルはCommon Lispのリードテーブルとjsonのリードテーブルとを共存させたテーブルです（２）。</p>
+
+<p>このテーブルを使うには<code>NAMED-READTABLES:IN-READTABLE</code>します。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">named-readtables:in-readtable cl-with-json</span>)</span>
+#&lt;NAMED-READTABLE CL-WITH-JSON {...}&gt;</span></code></pre>
+
+<p>これによりCommon Lispコードの中にjsonコードをリテラルに書くことが可能となります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">obj { <span class="string">"key1"</span><span class="keyword">:</span> <span class="string">"value"</span>,
+               <span class="string">"key2"</span><span class="keyword">:</span> [1, 2, 3] }</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">gethash <span class="keyword">:key-2</span> obj</span>)</span></span>)</span>
+#<span class="paren1">(<span class="code">1 2 3</span>)</span>
+T</span></code></pre>
+
+<h2>Conclusion</h2>
+
+<p>以上、駆け足ですがCommon Lispにおけるリードテーブルのカスタマイズの実践的ケーススタディでした。</p>
+
+<p>見てきた通り大変簡単にカスタマイズ可能となっています。</p>
+
+<p><a href="https://github.com/y2q-actionman/with-c-syntax" >Common Lispの中にCのシンタックスを混ぜるという荒業も可能です。</a></p>
+
+<p>Dispatch-macro-characterについては触れられませんでしたが似ようなものです。
+興味のある人は<a href="http://clhs.lisp.se/Body/c_reader.htm" >このあたりに目を通すと幸せになれます</a>。</p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
