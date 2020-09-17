@@ -1,0 +1,530 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>pprint</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Practical case study of common lisp pretty printings.</h1>
+
+<h2>Metanote</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Common LispのPRETTY-PRINT機能に興味のある方。</li>
+</ul>
+
+<h2>Introduction.</h2>
+
+<p>Common Lispという言語が持つ特殊な機能の一つにPRETTY-PRINTINGSというものがあります。
+これは（主に）リストを見目麗しく（pretty）表示するためのものです。
+コードがそのままリストでもあるCommon Lispならではの機能と言えるかもしれません。</p>
+
+<p>ですがこの機能はCommon Lisperにとっても馴染みのあるものではありません。
+というのも必要になることが滅多にないからです。</p>
+
+<p>ここでは<a href="readtable.html" >以前作ったjsonリーダ</a>の対になるプリンタを作りながらPRETTY-PRINTINGの各種機能を紹介していきます。</p>
+
+<h2>Definitions.</h2>
+
+<p>念の為本稿でサポートするjsonオブジェクトとLispオブジェクトの対応を再掲します。</p>
+<table >
+<thead>
+<tr><th>
+json</th><th>
+LISP</th></tr>
+</thead>
+<tbody>
+<tr><td>
+null</td><td>
+symbol NULL</td></tr>
+<tr><td>
+boolean</td><td>
+BOOLEAN i.e. T and NIL.</td></tr>
+<tr><td>
+object</td><td>
+HASH-TABLE</td></tr>
+<tr><td>
+array</td><td>
+VECTOR</td></tr>
+<tr><td>
+number</td><td>
+NUMBER</td></tr>
+<tr><td>
+string</td><td>
+STRING</td></tr>
+</tbody>
+</table>
+
+<h2>Pretty printer functions.</h2>
+
+<p>リードテーブルに登録する関数は第一引数にストリームを、第二引数に文字を受け取るAPIでなければなりませんでした。
+同様にPRETTY-PRINTINGを行う関数は第一引数にストリームを、第二引数にリスプオブジェクトを受け取るAPIでなくてはなりません。</p>
+
+<h2>null printer.</h2>
+
+<p>手始めに最もシンプルなPRETTY-PRINTERを定義しましょう。
+シンボル<code>NULL</code>を受け取り<code>&quot;null&quot;</code>を出力する関数です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> jprint-null <span class="paren2">(<span class="code">stream exp</span>)</span> <span class="paren2">(<span class="code">write-string <span class="string">"</span><span class="string">\"</span><span class="string">null</span><span class="string">\"</span><span class="string">"</span> stream</span>)</span> exp</span>)</span></span></code></pre>
+
+<p>Common Lispの<code>PRINT</code>系関数は表示したオブジェクトを返すよう設計されているので、ここではそれにならい第二引数をそのまま返り値とします。</p>
+
+<h2>true and false printer.</h2>
+
+<p>同様に<code>BOOLEAN</code>を出力する関数を定義しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> jprint-true <span class="paren2">(<span class="code">stream exp</span>)</span> <span class="paren2">(<span class="code">write-string <span class="string">"</span><span class="string">\"</span><span class="string">true</span><span class="string">\"</span><span class="string">"</span> stream</span>)</span> exp</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> jprint-false <span class="paren2">(<span class="code">stream exp</span>)</span> <span class="paren2">(<span class="code">write-string <span class="string">"</span><span class="string">\"</span><span class="string">false</span><span class="string">\"</span><span class="string">"</span> stream</span>)</span> exp</span>)</span></span></code></pre>
+
+<h2>keyword printer.</h2>
+
+<p>次にプロパティキーを出力する関数を定義します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> jprint-keyword <span class="paren2">(<span class="code">stream exp</span>)</span>
+  <span class="paren2">(<span class="code">write-char <span class="character">#\"</span> stream</span>)</span>
+  <span class="paren2">(<span class="code">write-string <span class="paren3">(<span class="code">symbol-name exp</span>)</span> stream</span>)</span>
+  <span class="paren2">(<span class="code">write-char <span class="character">#\"</span> stream</span>)</span>
+  exp</span>)</span></span></code></pre>
+
+<h2>array printer.</h2>
+
+<p>これまでは原始的なオブジェクトのプリンタだったためPRETTY-PRINTINGが必要ではありませんでした。
+<code>array</code>のプリンタはそうは行きません。</p>
+
+<p>ひと処理づつ見ていきましょう。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> jprint-vector <span class="paren2">(<span class="code">stream exp</span>)</span>
+2   <span class="paren2">(<span class="code">pprint-logical-block <span class="paren3">(<span class="code">stream nil <span class="keyword">:prefix</span> <span class="string">"["</span> <span class="keyword">:suffix</span> <span class="string">"]"</span></span>)</span>
+3     <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+4           <span class="keyword">:initially</span> <span class="paren4">(<span class="code">write-char <span class="character">#\Space</span> stream</span>)</span>
+5                      <span class="paren4">(<span class="code">pprint-indent <span class="keyword">:block</span> 3 stream</span>)</span>
+6                      <span class="paren4">(<span class="code">pprint-newline <span class="keyword">:linear</span> stream</span>)</span>
+7           <span class="keyword">:if</span> <span class="paren4">(<span class="code">array-in-bounds-p exp i</span>)</span>
+8             <span class="keyword">:do</span> <span class="paren4">(<span class="code">write <span class="paren5">(<span class="code">aref exp i</span>)</span> <span class="keyword">:stream</span> stream</span>)</span>
+9           <span class="keyword">:else</span>
+10             <span class="keyword">:do</span> <span class="paren4">(<span class="code">loop-finish</span>)</span>
+11          <span class="keyword">:if</span> <span class="paren4">(<span class="code">array-in-bounds-p exp <span class="paren5">(<span class="code">1+ i</span>)</span></span>)</span>
+12            <span class="keyword">:do</span> <span class="paren4">(<span class="code">write-char <span class="character">#\,</span> stream</span>)</span>
+13                <span class="paren4">(<span class="code">write-char <span class="character">#\Space</span> stream</span>)</span>
+14                <span class="paren4">(<span class="code">pprint-newline <span class="keyword">:linear</span> stream</span>)</span>
+15          <span class="keyword">:else</span>
+16            <span class="keyword">:do</span> <span class="paren4">(<span class="code">write-char <span class="character">#\Space</span> stream</span>)</span>
+17                <span class="paren4">(<span class="code">pprint-indent <span class="keyword">:block</span> 0 stream</span>)</span>
+18                <span class="paren4">(<span class="code">pprint-newline <span class="keyword">:linear</span> stream</span>)</span></span>)</span></span>)</span>
+19  exp</span>)</span></span></code></pre>
+
+<p>まず全体を論理ブロックでくくります（２）。
+<code>LOOP</code>で<code>VECTOR</code>の中身を走査していきます（３）。
+走査をする前に前処理を行います（４）（５）（６）。</p>
+
+<p>PRETTY-PRINTING処理の典型的なひと塊の処理は</p>
+
+<ol>
+<li>終了テスト。</li>
+<li>空白出力。</li>
+<li>必要ならインデント指定。</li>
+<li>改行指定。</li>
+<li>オブジェクトの出力。</li>
+</ol>
+
+<p>という手順です。</p>
+
+<p>本前処理では、空白出力（４）、インデント指定（５）、改行指定（６）を行っています。</p>
+
+<p>終了テストを行わずに空白出力を行っているので、カラ配列の出力は<code>[ ]</code>となります。
+<code>[]</code>の方が良い場合は終了テストを追加することになります。</p>
+
+<p>インデントの指定はここでは論理ブロックの左端から３スペースと指定しています。
+プリフィックスは論理ブロックに入らない点要注意。
+本指定で改行が起きると以下のようになります。</p>
+
+<pre><code>[
+    hoge ...</code></pre>
+
+<p>改行指定では<code>:LINEAR</code>を指定しています。
+これは通常改行は行わないが、一度論理ブロック内で改行が行われればそれを引き金として改行が起きることを意味します。</p>
+
+<p>上のjsonコードがそうなっているように、改行が起きる場合開きカッコと同じ行にはなりません。</p>
+
+<p>なお、<code>PPRINT-NEWLINE</code>による改行は改行直前の空白文字を取り除いてくれます。
+手続き上では空白文字を出力していますが上記jsonコード例の開きカッコ右側には空白文字は残りません。</p>
+
+<p>さて、<code>LOOP</code>の本処理ですが、まずは終了テストが行われます（７）。
+インデックスが配列の内側であれば要素が出力されます（８）。
+さもなくば（９）<code>LOOP</code>を抜けます（１０）。</p>
+
+<p>次に次要素での終了テストを行います（１１）。
+これは配列の最後にコンマを出力させないための処理です。
+効率を優先するならこの処理はまるっとなくしてもいいです。
+ただしその場合出力は例えば<code>[ 1, 2, 3, ]</code>のように末尾にカンマが残る形となります。</p>
+
+<p>次要素も妥当なインデックスなら、カンマを出力し（１２）、空白文字を出力し（１３）、改行を指定します（１４）。
+さもなくば（１５）空白文字を出力し（１６）、インデントを指定し（１７）、改行を指定します（１８）。</p>
+
+<p>さて、うまく機能するでしょうか。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">jprint-vector nil #<span class="paren2">(<span class="code">1 2 3</span>)</span></span>)</span>
+[ 1, 2, 3 ]     <span class="comment">; &lt;--- Side effect.
+</span>#<span class="paren1">(<span class="code">1 2 3</span>)</span>        <span class="comment">; &lt;--- Return value.</span></span></code></pre>
+
+<p>うまく機能しているように見えますが。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">jprint-vector nil #<span class="paren2">(<span class="code"><span class="string">"foo"</span> <span class="string">"bar"</span> <span class="string">"bazz"</span> <span class="string">"hoge"</span> <span class="string">"fuga"</span> <span class="string">"piyo"</span> <span class="string">"asdf"</span> <span class="string">"uiop"</span> <span class="string">"true"</span> <span class="string">"false"</span> <span class="string">"null"</span></span>)</span></span>)</span>
+[
+    "foo",
+    "bar",
+    "bazz",
+    "hoge",
+    "fuga",
+    "piyo",
+    "asdf",
+    "uiop",
+    "true",
+    "false",
+    "null",
+ ]
+#<span class="paren1">(<span class="code"><span class="string">"foo"</span> <span class="string">"bar"</span> <span class="string">"bazz"</span> <span class="string">"hoge"</span> <span class="string">"fuga"</span> <span class="string">"piyo"</span> <span class="string">"asdf"</span> <span class="string">"uiop"</span> <span class="string">"true"</span> <span class="string">"false"</span> <span class="string">"null"</span></span>)</span></span></code></pre>
+
+<p>おっと。閉じカッコに注目です。空白一つ分インデントされてますね。
+これは論理ブロックがプリフィックスをブロックに含まないからです。
+jsonの流儀に従うために、<code>PPRINT-LOGICAL-BLOCK</code>のAPIを使わずに（２）自前で出力するように（３）（２０）修正しましょう。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> jprint-vector <span class="paren2">(<span class="code">stream exp</span>)</span>
+2   <span class="paren2">(<span class="code">pprint-logical-block <span class="paren3">(<span class="code">stream nil</span>)</span>
+3     <span class="paren3">(<span class="code">write-char <span class="character">#\[</span> stream</span>)</span>
+4     <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+5           <span class="keyword">:initially</span> <span class="paren4">(<span class="code">write-char <span class="character">#\Space</span> stream</span>)</span>
+6                      <span class="paren4">(<span class="code">pprint-indent <span class="keyword">:block</span> 3 stream</span>)</span>
+7                      <span class="paren4">(<span class="code">pprint-newline <span class="keyword">:linear</span> stream</span>)</span>
+8           <span class="keyword">:if</span> <span class="paren4">(<span class="code">array-in-bounds-p exp i</span>)</span>
+9             <span class="keyword">:do</span> <span class="paren4">(<span class="code">write <span class="paren5">(<span class="code">aref exp i</span>)</span> <span class="keyword">:stream</span> stream</span>)</span>
+10          <span class="keyword">:else</span>
+11             <span class="keyword">:do</span> <span class="paren4">(<span class="code">loop-finish</span>)</span>
+12          <span class="keyword">:if</span> <span class="paren4">(<span class="code">array-in-bounds-p exp <span class="paren5">(<span class="code">1+ i</span>)</span></span>)</span>
+13            <span class="keyword">:do</span> <span class="paren4">(<span class="code">write-char <span class="character">#\,</span> stream</span>)</span>
+14                <span class="paren4">(<span class="code">write-char <span class="character">#\Space</span> stream</span>)</span>
+15                <span class="paren4">(<span class="code">pprint-newline <span class="keyword">:linear</span> stream</span>)</span>
+16          <span class="keyword">:else</span>
+17            <span class="keyword">:do</span> <span class="paren4">(<span class="code">write-char <span class="character">#\Space</span> stream</span>)</span>
+18                <span class="paren4">(<span class="code">pprint-indent <span class="keyword">:block</span> 0 stream</span>)</span>
+19                <span class="paren4">(<span class="code">pprint-newline <span class="keyword">:linear</span> stream</span>)</span></span>)</span>
+20    <span class="paren3">(<span class="code">write-char <span class="character">#\]</span> stream</span>)</span></span>)</span>
+21  exp</span>)</span></span></code></pre>
+
+<p>これでうまくいくはずです。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">jprint-vector nil #<span class="paren2">(<span class="code"><span class="string">"foo"</span> <span class="string">"bar"</span> <span class="string">"bazz"</span> <span class="string">"hoge"</span> <span class="string">"fuga"</span> <span class="string">"piyo"</span> <span class="string">"asdf"</span> <span class="string">"uiop"</span> <span class="string">"true"</span> <span class="string">"false"</span> <span class="string">"null"</span></span>)</span></span>)</span>
+[
+    "foo",
+    "bar",
+    "bazz",
+    "hoge",
+    "fuga",
+    "piyo",
+    "asdf",
+    "uiop",
+    "true",
+    "false",
+    "null",
+]
+#<span class="paren1">(<span class="code"><span class="string">"foo"</span> <span class="string">"bar"</span> <span class="string">"bazz"</span> <span class="string">"hoge"</span> <span class="string">"fuga"</span> <span class="string">"piyo"</span> <span class="string">"asdf"</span> <span class="string">"uiop"</span> <span class="string">"true"</span> <span class="string">"false"</span> <span class="string">"null"</span></span>)</span></span></code></pre>
+
+<p>期待通り閉じカッコ前の空白がなくなりましたね。</p>
+
+<p>このままでもいいのですが少々コードが長いので、<code>FORMATTER</code>を使って短くしましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> jprint-vector <span class="paren2">(<span class="code">stream exp</span>)</span>
+  <span class="paren2">(<span class="code">pprint-logical-block <span class="paren3">(<span class="code">stream nil</span>)</span>
+    <span class="paren3">(<span class="code">write-char <span class="character">#\[</span> stream</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+          <span class="keyword">:initially</span> <span class="paren4">(<span class="code">funcall <span class="paren5">(<span class="code">formatter <span class="string">" ~3I~_"</span></span>)</span> stream</span>)</span>
+          <span class="keyword">:if</span> <span class="paren4">(<span class="code">array-in-bounds-p exp i</span>)</span>
+            <span class="keyword">:do</span> <span class="paren4">(<span class="code">write <span class="paren5">(<span class="code">aref exp i</span>)</span> <span class="keyword">:stream</span> stream</span>)</span>
+          <span class="keyword">:else</span>
+            <span class="keyword">:do</span> <span class="paren4">(<span class="code">loop-finish</span>)</span>
+          <span class="keyword">:if</span> <span class="paren4">(<span class="code">array-in-bounds-p exp <span class="paren5">(<span class="code">1+ i</span>)</span></span>)</span>
+            <span class="keyword">:do</span> <span class="paren4">(<span class="code">funcall <span class="paren5">(<span class="code">formatter <span class="string">", ~_"</span></span>)</span> stream</span>)</span>
+          <span class="keyword">:else</span>
+            <span class="keyword">:do</span> <span class="paren4">(<span class="code">funcall <span class="paren5">(<span class="code">formatter <span class="string">" ~0I~_"</span></span>)</span> stream</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">write-char <span class="character">#\]</span> stream</span>)</span></span>)</span>
+  exp</span>)</span></span></code></pre>
+
+<h2>object printer.</h2>
+
+<p>それでは最後に<code>object</code>プリンタの定義です。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> jprint-object <span class="paren2">(<span class="code">stream exp</span>)</span>
+2   <span class="paren2">(<span class="code">pprint-logical-block <span class="paren3">(<span class="code">stream nil</span>)</span>
+3     <span class="paren3">(<span class="code">write-char <span class="character">#\{</span> stream</span>)</span>
+4     <span class="paren3">(<span class="code"><i><span class="symbol">with-hash-table-iterator</span></i> <span class="paren4">(<span class="code">get-it exp</span>)</span>
+5       <span class="paren4">(<span class="code"><i><span class="symbol">labels</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">rec <span class="paren1">(<span class="code">count</span>)</span>
+6                  <span class="paren1">(<span class="code">case count
+7                    <span class="paren2">(<span class="code">0</span>)</span>
+8                    <span class="paren2">(<span class="code">1
+9                     <span class="paren3">(<span class="code"><i><span class="symbol">multiple-value-call</span></i> #'put <span class="paren4">(<span class="code">get-it</span>)</span></span>)</span>
+10                     <span class="paren3">(<span class="code">funcall <span class="paren4">(<span class="code">formatter <span class="string">" ~0I~_"</span></span>)</span> stream</span>)</span></span>)</span>
+11                   <span class="paren2">(<span class="code">otherwise
+12                    <span class="paren3">(<span class="code"><i><span class="symbol">multiple-value-call</span></i> #'put <span class="paren4">(<span class="code">get-it</span>)</span></span>)</span>
+13                    <span class="paren3">(<span class="code">funcall <span class="paren4">(<span class="code">formatter <span class="string">", ~:@_"</span></span>)</span> stream</span>)</span>
+14                    <span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">1- count</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+15               <span class="paren6">(<span class="code">put <span class="paren1">(<span class="code">found? key v</span>)</span>
+16                 <span class="paren1">(<span class="code">declare <span class="paren2">(<span class="code">ignore found?</span>)</span></span>)</span>
+17                 <span class="paren1">(<span class="code">funcall <span class="paren2">(<span class="code">formatter <span class="string">"~W: ~W"</span></span>)</span> stream key v</span>)</span></span>)</span></span>)</span>
+18        <span class="paren5">(<span class="code">funcall <span class="paren6">(<span class="code">formatter <span class="string">" ~3I~_"</span></span>)</span> stream</span>)</span>
+19        <span class="paren5">(<span class="code">rec <span class="paren6">(<span class="code">hash-table-count exp</span>)</span></span>)</span></span>)</span></span>)</span>
+20    <span class="paren3">(<span class="code">write-char <span class="character">#\}</span> stream</span>)</span></span>)</span>
+21  exp</span>)</span></span></code></pre>
+
+<p><code>array</code>プリンタと同様に<code>PPRINT-LOGICAL-BLOCK</code>で論理ブロックを決め（２）最初（３）と最後（２０）にカッコを出力します。
+本体では<code>LOOP</code>に変わり<code>WITH-HASH-TABLE-ITERATOR</code>と<code>LABELS</code>との組み合わせ（４）（５）で繰り返しを行います。</p>
+
+<p>繰り返しは<code>HASH-TABLE-COUNT</code>に対し行われ（１９）、最後の一要素になるまではカンマを出力します（１３）。</p>
+
+<h2>print-json</h2>
+
+<p>簡便のために<code>PRINT-JSON</code>関数を定義しましょう。</p>
+
+<h3><code>*PRINT-JPRINT-DISPATCH*</code></h3>
+
+<p>まずはjsonをプリントするためのPPRINT-DISPATCH-TABLEを作成しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*print-jprint-dispatch*</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*print-pprint-dispatch*</span> <span class="paren5">(<span class="code">copy-pprint-dispatch nil</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">set-pprint-dispatch '<span class="paren4">(<span class="code">eql null</span>)</span> 'jprint-null</span>)</span>
+    <span class="paren3">(<span class="code">set-pprint-dispatch '<span class="paren4">(<span class="code">eql t</span>)</span> 'jprint-true</span>)</span>
+    <span class="paren3">(<span class="code">set-pprint-dispatch '<span class="paren4">(<span class="code">eql nil</span>)</span> 'jprint-false</span>)</span>
+    <span class="paren3">(<span class="code">set-pprint-dispatch 'keyword 'jprint-keyword</span>)</span>
+    <span class="paren3">(<span class="code">set-pprint-dispatch '<span class="paren4">(<span class="code">and vector <span class="paren5">(<span class="code">not string</span>)</span></span>)</span> 'jprint-vector</span>)</span>
+    <span class="paren3">(<span class="code">set-pprint-dispatch 'hash-table 'jprint-object</span>)</span>
+    <span class="special">*print-pprint-dispatch*</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>PRINT-JSON</h3>
+
+<p><code>PRINT-JSON</code>は<code>*PRINT-PPRINT-DISPATCH*</code>を動的に束縛して<code>WRITE</code>を呼び出すだけの簡単な関数です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> print-json <span class="paren2">(<span class="code">exp &amp;optional stream</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*print-pprint-dispatch*</span> <span class="special">*print-jprint-dispatch*</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">write exp <span class="keyword">:stream</span> stream</span>)</span></span>)</span>
+  exp</span>)</span></span></code></pre>
+
+<h2>Behavior.</h2>
+
+<p>それでは振る舞いを見てみましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">print-json <span class="paren2">(<span class="code">eval <span class="paren3">(<span class="code">read-json</span>)</span></span>)</span></span>)</span>
+{
+    "Image": {
+        "Width":  800,
+        "Height": 600,
+        "Title":  "View from 15th Floor",
+        "Thumbnail": {
+            "Url":    "http://www.example.com/image/481989943",
+            "Height": 125,
+            "Width":  100
+        },
+        "Animated" : "null",
+        "IDs": [116, 943, 234, 38793]
+    }
+}
+{
+   "Image": {
+               "Width": 800,
+               "Height": 600,
+               "Title": "View from 15th Floor",
+               "Thumbnail": {
+                               "Url": "http://www.example.com/image/481989943",
+                               "Height": 125,
+                               "Width": 100
+                            },
+               "Animated": "null",
+               "IDs": [ 116, 943, 234, 38793 ]
+            }
+}
+#&lt;HASH-TABLE :TEST EQ :COUNT 1 {...}&gt;</span></code></pre>
+
+<p>おっと。インデントが崩れています。
+このインデントを崩れているというのは大変心苦しい。
+僕自身はこのインデントの方がカッコのスコープが見やすくて良いと思うのですが、残念ながらjson流儀のスタイルはコレとは異なります。</p>
+
+<p>さて、ここでの大きな問題は、論理ブロックより左にインデントすることは不可能であるという点です。</p>
+
+<p>では論理ブロックに変わるインデントブロックを表すために変数を導入しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*indent*</span> 4</span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*nest*</span> 0</span>)</span></span></code></pre>
+
+<p>まずトップレベル関数である<code>PRINT-JSON</code>を、変数を使うように修正します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> print-json <span class="paren2">(<span class="code">exp &amp;optional stream</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*print-pprint-dispatch*</span> <span class="special">*print-jprint-dispatch*</span></span>)</span> <span class="paren4">(<span class="code"><span class="special">*nest*</span> <span class="special">*nest*</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">write exp <span class="keyword">:stream</span> stream</span>)</span></span>)</span>
+  exp</span>)</span></span></code></pre>
+
+<p>次に<code>JPRINT-OBJECT</code>から論理ブロックを取り除いて変数に変更します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> jprint-object <span class="paren2">(<span class="code">stream exp</span>)</span>
+  <span class="paren2">(<span class="code">write-char <span class="character">#\{</span> stream</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*nest*</span> <span class="paren5">(<span class="code">1+ <span class="special">*nest*</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-hash-table-iterator</span></i> <span class="paren4">(<span class="code">get-it exp</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">labels</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">rec <span class="paren1">(<span class="code">count</span>)</span>
+                 <span class="paren1">(<span class="code">case count
+                   <span class="paren2">(<span class="code">0</span>)</span>
+                   <span class="paren2">(<span class="code">1
+                    <span class="paren3">(<span class="code"><i><span class="symbol">multiple-value-call</span></i> #'put <span class="paren4">(<span class="code">get-it</span>)</span></span>)</span>
+                    <span class="paren3">(<span class="code">funcall <span class="paren4">(<span class="code">formatter <span class="string">" ~VI~_"</span></span>)</span> stream
+                             <span class="paren4">(<span class="code">* <span class="special">*indent*</span> <span class="paren5">(<span class="code">1- <span class="special">*nest*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                   <span class="paren2">(<span class="code">otherwise
+                    <span class="paren3">(<span class="code"><i><span class="symbol">multiple-value-call</span></i> #'put <span class="paren4">(<span class="code">get-it</span>)</span></span>)</span>
+                    <span class="paren3">(<span class="code">funcall <span class="paren4">(<span class="code">formatter <span class="string">", ~:@_"</span></span>)</span> stream</span>)</span>
+                    <span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">1- count</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+               <span class="paren6">(<span class="code">put <span class="paren1">(<span class="code">found? key v</span>)</span>
+                 <span class="paren1">(<span class="code">declare <span class="paren2">(<span class="code">ignore found?</span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">funcall <span class="paren2">(<span class="code">formatter <span class="string">"~W: ~W"</span></span>)</span> stream key v</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">funcall <span class="paren6">(<span class="code">formatter <span class="string">" ~VI~_"</span></span>)</span> stream <span class="paren6">(<span class="code">* <span class="special">*nest*</span> <span class="special">*indent*</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">rec <span class="paren6">(<span class="code">hash-table-count exp</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">write-char <span class="character">#\}</span> stream</span>)</span>
+  exp</span>)</span></span></code></pre>
+
+<p>同様に<code>JPRINT-VECTOR</code>からも論理ブロックを取り除いて変数に変更します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> jprint-vector <span class="paren2">(<span class="code">stream exp</span>)</span>
+  <span class="paren2">(<span class="code">write-char <span class="character">#\[</span> stream</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*nest*</span> <span class="paren5">(<span class="code">1+ <span class="special">*nest*</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+          <span class="keyword">:initially</span> <span class="paren4">(<span class="code">funcall <span class="paren5">(<span class="code">formatter <span class="string">" ~VI~_"</span></span>)</span> stream <span class="paren5">(<span class="code">* <span class="special">*indent*</span> <span class="special">*nest*</span></span>)</span></span>)</span>
+          <span class="keyword">:if</span> <span class="paren4">(<span class="code">array-in-bounds-p exp i</span>)</span>
+            <span class="keyword">:do</span> <span class="paren4">(<span class="code">write <span class="paren5">(<span class="code">aref exp i</span>)</span> <span class="keyword">:stream</span> stream</span>)</span>
+          <span class="keyword">:else</span>
+            <span class="keyword">:do</span> <span class="paren4">(<span class="code">loop-finish</span>)</span>
+          <span class="keyword">:if</span> <span class="paren4">(<span class="code">array-in-bounds-p exp <span class="paren5">(<span class="code">1+ i</span>)</span></span>)</span>
+            <span class="keyword">:do</span> <span class="paren4">(<span class="code">funcall <span class="paren5">(<span class="code">formatter <span class="string">", ~_"</span></span>)</span> stream</span>)</span>
+          <span class="keyword">:else</span>
+            <span class="keyword">:do</span> <span class="paren4">(<span class="code">funcall <span class="paren5">(<span class="code">formatter <span class="string">" ~VI~_"</span></span>)</span> stream
+                         <span class="paren5">(<span class="code">* <span class="special">*indent*</span> <span class="paren6">(<span class="code">1- <span class="special">*nest*</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">write-char <span class="character">#\]</span> stream</span>)</span>
+  exp</span>)</span></span></code></pre>
+
+<p>では振る舞いを見てみましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">print-json <span class="paren2">(<span class="code">eval <span class="paren3">(<span class="code">read-json</span>)</span></span>)</span></span>)</span>
+{
+    "Image": {
+        "Width":  800,
+        "Height": 600,
+        "Title":  "View from 15th Floor",
+        "Thumbnail": {
+            "Url":    "http://www.example.com/image/481989943",
+            "Height": 125,
+            "Width":  100
+        },
+        "Animated" : "null",
+        "IDs": [116, 943, 234, 38793]
+    }
+}
+{
+    "Image": {
+        "Width": 800,
+        "Height": 600,
+        "Title": "View from 15th Floor",
+        "Thumbnail": {
+            "Url": "http://www.example.com/image/481989943",
+            "Height": 125,
+            "Width": 100
+        },
+        "Animated": "null",
+        "IDs": [
+            116,
+            943,
+            234,
+            38793
+        ]
+    }
+}
+#&lt;HASH-TABLE :TEST EQ :COUNT 1 {...}&gt;</span></code></pre>
+
+<p>おっと。配列のインデントがおかしいですね。
+これは論理ブロックが一つしかないからです。
+<code>JPRINT-OBJECT</code>に論理ブロックを追加しましょう（１８）。</p>
+
+<pre><code><span class="code">1 <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> jprint-object <span class="paren2">(<span class="code">stream exp</span>)</span>
+2   <span class="paren2">(<span class="code">write-char <span class="character">#\{</span> stream</span>)</span>
+3   <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*nest*</span> <span class="paren5">(<span class="code">1+ <span class="special">*nest*</span></span>)</span></span>)</span></span>)</span>
+4     <span class="paren3">(<span class="code"><i><span class="symbol">with-hash-table-iterator</span></i> <span class="paren4">(<span class="code">get-it exp</span>)</span>
+5       <span class="paren4">(<span class="code"><i><span class="symbol">labels</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">rec <span class="paren1">(<span class="code">count</span>)</span>
+6                  <span class="paren1">(<span class="code">case count
+7                    <span class="paren2">(<span class="code">0</span>)</span>
+8                    <span class="paren2">(<span class="code">1
+9                     <span class="paren3">(<span class="code"><i><span class="symbol">multiple-value-call</span></i> #'put <span class="paren4">(<span class="code">get-it</span>)</span></span>)</span>
+10                     <span class="paren3">(<span class="code">funcall <span class="paren4">(<span class="code">formatter <span class="string">" ~VI~_"</span></span>)</span> stream
+11                             <span class="paren4">(<span class="code">* <span class="special">*indent*</span> <span class="paren5">(<span class="code">1- <span class="special">*nest*</span></span>)</span></span>)</span></span>)</span></span>)</span>
+12                   <span class="paren2">(<span class="code">otherwise
+13                    <span class="paren3">(<span class="code"><i><span class="symbol">multiple-value-call</span></i> #'put <span class="paren4">(<span class="code">get-it</span>)</span></span>)</span>
+14                    <span class="paren3">(<span class="code">funcall <span class="paren4">(<span class="code">formatter <span class="string">", ~:@_"</span></span>)</span> stream</span>)</span>
+15                    <span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">1- count</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+16               <span class="paren6">(<span class="code">put <span class="paren1">(<span class="code">found? key v</span>)</span>
+17                 <span class="paren1">(<span class="code">declare <span class="paren2">(<span class="code">ignore found?</span>)</span></span>)</span>
+18                 <span class="paren1">(<span class="code">pprint-logical-block <span class="paren2">(<span class="code">stream nil</span>)</span>
+19                   <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*nest*</span> 0</span>)</span></span>)</span>
+10                     <span class="paren3">(<span class="code">funcall <span class="paren4">(<span class="code">formatter <span class="string">"~W: ~W"</span></span>)</span> stream key v</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+21        <span class="paren5">(<span class="code">funcall <span class="paren6">(<span class="code">formatter <span class="string">" ~VI~_"</span></span>)</span> stream <span class="paren6">(<span class="code">* <span class="special">*nest*</span> <span class="special">*indent*</span></span>)</span></span>)</span>
+22        <span class="paren5">(<span class="code">rec <span class="paren6">(<span class="code">hash-table-count exp</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+23  <span class="paren2">(<span class="code">write-char <span class="character">#\}</span> stream</span>)</span>
+24  exp</span>)</span></span></code></pre>
+
+<p>うまく動くでしょうか。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">print-json <span class="paren2">(<span class="code">eval <span class="paren3">(<span class="code">read-json</span>)</span></span>)</span></span>)</span>
+{
+    "Image": {
+        "Width":  800,
+        "Height": 600,
+        "Title":  "View from 15th Floor",
+        "Thumbnail": {
+            "Url":    "http://www.example.com/image/481989943",
+            "Height": 125,
+            "Width":  100
+        },
+        "Animated" : "null",
+        "IDs": [116, 943, 234, 38793]
+    }
+}
+{
+    "Image": {
+        "Width": 800,
+        "Height": 600,
+        "Title": "View from 15th Floor",
+        "Thumbnail": {
+            "Url": "http://www.example.com/image/481989943",
+            "Height": 125,
+            "Width": 100
+        },
+        "Animated": "null",
+        "IDs": [ 116, 943, 234, 38793 ]
+    }
+}
+#&lt;HASH-TABLE :TEST EQ :COUNT 1 {...}&gt;</span></code></pre>
+
+<p>うまく動いているようです。</p>
+
+<h2>Conclusion.</h2>
+
+<p>以上、駆け足ですがPRETTY-PRINTINGSについて見てきました。
+結局ここで作ったのはjsonのCode-formatterに相当するものです。</p>
+
+<p>それが７０行そこそこで完成しました。</p>
+
+<p>PRETTY-PRINTINGSが必要になるケースは稀ですが大変強力なものでもあります。
+興味がある人は<a href="http://clhs.lisp.se/Body/22_bb.htm" >CLHSのこのあたりを読んで幸せになりましょう</a>。</p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
