@@ -166,16 +166,12 @@ Lispは<code>READ</code>したものを<code>EVAL</code>します。
 <pre><code><span class="code">1  <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> |{-reader| <span class="paren2">(<span class="code">stream character</span>)</span>
 2    <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">ignore character</span>)</span></span>)</span>
 3    <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">contents <span class="paren5">(<span class="code">read-delimited-list <span class="character">#\}</span> stream t</span>)</span></span>)</span>
-4          <span class="paren4">(<span class="code"><span class="special">*package*</span> <span class="paren5">(<span class="code">find-package <span class="keyword">:keyword</span></span>)</span></span>)</span>
+4          <span class="paren4">(<span class="code">package <span class="paren5">(<span class="code">find-package <span class="keyword">:keyword</span></span>)</span></span>)</span>
 5          <span class="paren4">(<span class="code">var <span class="paren5">(<span class="code">gensym <span class="string">"HASH-TABLE"</span></span>)</span></span>)</span></span>)</span>
 6      `<span class="paren3">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,var <span class="paren6">(<span class="code">make-hash-table <span class="keyword">:test</span> #'eq</span>)</span></span>)</span></span>)</span>
 7         ,@<span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren5">(<span class="code">k v</span>)</span> <span class="keyword">:on</span> contents <span class="keyword">:by</span> #'cddr
-8                 <span class="keyword">:collect</span> `<span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">gethash
-9                                  ,<span class="paren1">(<span class="code">read-from-string
-10                                     <span class="paren2">(<span class="code">symbol-munger:camel-case-&gt;lisp-name k</span>)</span></span>)</span>
-11                                 ,var</span>)</span>
-12                                ,v</span>)</span></span>)</span>
-13        ,var</span>)</span></span>)</span></span>)</span></span></code></pre>
+8                 <span class="keyword">:collect</span> `<span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">gethash ,<span class="paren1">(<span class="code">intern k package</span>)</span></span>)</span> ,var</span>)</span> ,v</span>)</span></span>)</span>
+9         ,var</span>)</span></span>)</span>)</span></code></pre>
 
 <p>まず<code>READ-DELIMITED-LIST</code>でオブジェクトの中身をリストにくくって取り出します（３）。
 ここで取り出したリストはプロパティキーと値が交互に現れる属性リストとなります。</p>
@@ -187,12 +183,8 @@ jsonの仕様によりプロパティキーが現れる順番に意味がない�
 
 <p>属性リストを<code>LOOP</code>していき（７）、<code>HASH-TABLE</code>にキーバリューペアを登録するS式を生成します（８）。</p>
 
-<p>この時、キャメルケースで書かれているであろうプロパティキーをLispyなケバブケースに変換します（１０）。
-変換には<a href="https://github.com/AccelerationNet/symbol-munger" ><code>symbol-munger</code></a>を使用します。
-（もちろん同じことができるなら他のライブラリでも構いません。）</p>
-
-<p>また、プロパティキーは<code>KEYWORD</code>シンボルに変換しておきます（４）（９）。
-<code>LOOP</code>の外側で<code>*PACKAGE*</code>を束縛している（４）のは、繰り返しのたびにキーワードパッケージを探すのを避けるためです。</p>
+<p>この時、プロパティキーは<code>KEYWORD</code>シンボルに変換しておきます（４）（８）。
+<code>LOOP</code>の外側で<code>PACKAGE</code>を束縛している（４）のは、繰り返しのたびにキーワードパッケージを探すのを避けるためです。</p>
 
 <p>プロパティキーをキーワードシンボルに変換する理由は比較処理を高速に行うためです。
 シンボル同士の比較は<code>EQ</code>（ポインタイコール）で比較できますが、文字列の比較は<code>EQUAL</code>（要素ごとの比較）で比較しなければならないからです。</p>
@@ -250,23 +242,23 @@ jsonの仕様によりプロパティキーが現れる順番に意味がない�
             "IDs": [116, 943, 234, 38793]
           }
       }
-<span class="paren1">(<span class="code"><i><span class="symbol">LET</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="keyword">#:HASH-TABLE1472</span> <span class="paren4">(<span class="code">MAKE-HASH-TABLE <span class="keyword">:TEST</span> #'EQ</span>)</span></span>)</span></span>)</span>
-  <span class="paren2">(<span class="code">SETF <span class="paren3">(<span class="code">GETHASH <span class="keyword">:IMAGE</span> <span class="keyword">#:HASH-TABLE1472</span></span>)</span>
-          <span class="paren3">(<span class="code"><i><span class="symbol">LET</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code"><span class="keyword">#:HASH-TABLE1471</span> <span class="paren6">(<span class="code">MAKE-HASH-TABLE <span class="keyword">:TEST</span> #'EQ</span>)</span></span>)</span></span>)</span>
-            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:WIDTH</span> <span class="keyword">#:HASH-TABLE1471</span></span>)</span> 800</span>)</span>
-            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:HEIGHT</span> <span class="keyword">#:HASH-TABLE1471</span></span>)</span> 600</span>)</span>
-            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:TITLE</span> <span class="keyword">#:HASH-TABLE1471</span></span>)</span> <span class="string">"View from 15th Floor"</span></span>)</span>
-            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:THUMBNAIL</span> <span class="keyword">#:HASH-TABLE1471</span></span>)</span>
-                    <span class="paren5">(<span class="code"><i><span class="symbol">LET</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="keyword">#:HASH-TABLE1470</span> <span class="paren2">(<span class="code">MAKE-HASH-TABLE <span class="keyword">:TEST</span> #'EQ</span>)</span></span>)</span></span>)</span>
-                      <span class="paren6">(<span class="code">SETF <span class="paren1">(<span class="code">GETHASH <span class="keyword">:URL</span> <span class="keyword">#:HASH-TABLE1470</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">LET</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="keyword">#:HASH-TABLE1635</span> <span class="paren4">(<span class="code">MAKE-HASH-TABLE <span class="keyword">:TEST</span> #'EQ</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">SETF <span class="paren3">(<span class="code">GETHASH <span class="keyword">:|Image|</span> <span class="keyword">#:HASH-TABLE1635</span></span>)</span>
+          <span class="paren3">(<span class="code"><i><span class="symbol">LET</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code"><span class="keyword">#:HASH-TABLE1634</span> <span class="paren6">(<span class="code">MAKE-HASH-TABLE <span class="keyword">:TEST</span> #'EQ</span>)</span></span>)</span></span>)</span>
+            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:|Width|</span> <span class="keyword">#:HASH-TABLE1634</span></span>)</span> 800</span>)</span>
+            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:|Height|</span> <span class="keyword">#:HASH-TABLE1634</span></span>)</span> 600</span>)</span>
+            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:|Title|</span> <span class="keyword">#:HASH-TABLE1634</span></span>)</span> <span class="string">"View from 15th Floor"</span></span>)</span>
+            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:|Thumbnail|</span> <span class="keyword">#:HASH-TABLE1634</span></span>)</span>
+                    <span class="paren5">(<span class="code"><i><span class="symbol">LET</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="keyword">#:HASH-TABLE1633</span> <span class="paren2">(<span class="code">MAKE-HASH-TABLE <span class="keyword">:TEST</span> #'EQ</span>)</span></span>)</span></span>)</span>
+                      <span class="paren6">(<span class="code">SETF <span class="paren1">(<span class="code">GETHASH <span class="keyword">:|Url|</span> <span class="keyword">#:HASH-TABLE1633</span></span>)</span>
                               <span class="string">"http://www.example.com/image/481989943"</span></span>)</span>
-                      <span class="paren6">(<span class="code">SETF <span class="paren1">(<span class="code">GETHASH <span class="keyword">:HEIGHT</span> <span class="keyword">#:HASH-TABLE1470</span></span>)</span> 125</span>)</span>
-                      <span class="paren6">(<span class="code">SETF <span class="paren1">(<span class="code">GETHASH <span class="keyword">:WIDTH</span> <span class="keyword">#:HASH-TABLE1470</span></span>)</span> 100</span>)</span>
-                      <span class="keyword">#:HASH-TABLE1470</span></span>)</span></span>)</span>
-            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:ANIMATED</span> <span class="keyword">#:HASH-TABLE1471</span></span>)</span> FALSE</span>)</span>
-            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:I-DS</span> <span class="keyword">#:HASH-TABLE1471</span></span>)</span> <span class="paren5">(<span class="code">VECTOR 116 943 234 38793</span>)</span></span>)</span>
-            <span class="keyword">#:HASH-TABLE1471</span></span>)</span></span>)</span>
-  <span class="keyword">#:HASH-TABLE1472</span></span>)</span> </span></code></pre>
+                      <span class="paren6">(<span class="code">SETF <span class="paren1">(<span class="code">GETHASH <span class="keyword">:|Height|</span> <span class="keyword">#:HASH-TABLE1633</span></span>)</span> 125</span>)</span>
+                      <span class="paren6">(<span class="code">SETF <span class="paren1">(<span class="code">GETHASH <span class="keyword">:|Width|</span> <span class="keyword">#:HASH-TABLE1633</span></span>)</span> 100</span>)</span>
+                      <span class="keyword">#:HASH-TABLE1633</span></span>)</span></span>)</span>
+            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:|Animated|</span> <span class="keyword">#:HASH-TABLE1634</span></span>)</span> FALSE</span>)</span>
+            <span class="paren4">(<span class="code">SETF <span class="paren5">(<span class="code">GETHASH <span class="keyword">:|IDs|</span> <span class="keyword">#:HASH-TABLE1634</span></span>)</span> <span class="paren5">(<span class="code">VECTOR 116 943 234 38793</span>)</span></span>)</span>
+            <span class="keyword">#:HASH-TABLE1634</span></span>)</span></span>)</span>
+  <span class="keyword">#:HASH-TABLE1635</span></span>)</span> </span></code></pre>
 
 <p>現在の実装ではリテラルの<code>false</code>はシンボル<code>FALSE</code>になってしまう点は要注意。</p>
 
@@ -313,16 +305,12 @@ FALSE</span></code></pre>
 5     <span class="paren3">(<span class="code">set-macro-character <span class="character">#\,</span> '|,-reader|</span>)</span>
 6     <span class="paren3">(<span class="code">set-macro-character <span class="character">#\"</span> '|"-reader|</span>)</span>
 7     <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">contents <span class="paren6">(<span class="code">read-delimited-list <span class="character">#\}</span> stream t</span>)</span></span>)</span>
-8           <span class="paren5">(<span class="code"><span class="special">*package*</span> <span class="paren6">(<span class="code">find-package <span class="keyword">:keyword</span></span>)</span></span>)</span>
-9           <span class="paren5">(<span class="code">var <span class="paren6">(<span class="code">gensym <span class="string">"HASH-TABLE"</span></span>)</span></span>)</span></span>)</span>
+8           <span class="paren5">(<span class="code">var <span class="paren6">(<span class="code">gensym <span class="string">"HASH-TABLE"</span></span>)</span></span>)</span>
+9           <span class="paren5">(<span class="code">package <span class="paren6">(<span class="code">find-package <span class="keyword">:keyword</span></span>)</span></span>)</span></span>)</span>
 10       `<span class="paren4">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">,var <span class="paren1">(<span class="code">make-hash-table <span class="keyword">:test</span> #'eq</span>)</span></span>)</span></span>)</span>
 11         ,@<span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren6">(<span class="code">k v</span>)</span> <span class="keyword">:on</span> contents <span class="keyword">:by</span> #'cddr
-12                 <span class="keyword">:collect</span> `<span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">gethash
-13                                   ,<span class="paren2">(<span class="code">read-from-string
-14                                      <span class="paren3">(<span class="code">symbol-munger:camel-case-&gt;lisp-name k</span>)</span></span>)</span>
-15                                   ,var</span>)</span>
-16                                   ,v</span>)</span></span>)</span>
-17         ,var</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+12                 <span class="keyword">:collect</span> `<span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">gethash ,<span class="paren2">(<span class="code">intern k package</span>)</span> ,var</span>)</span> ,v</span>)</span></span>)</span>
+13         ,var</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
 <h3>Fixed readtable.</h3>
 

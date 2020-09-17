@@ -127,16 +127,12 @@ jsonオブジェクトのリーダは少々大きくなります。
 1  (defun |{-reader| (stream character)
 2    (declare (ignore character))
 3    (let ((contents (read-delimited-list #\} stream t))
-4          (*package* (find-package :keyword))
+4          (package (find-package :keyword))
 5          (var (gensym "HASH-TABLE")))
 6      `(let ((,var (make-hash-table :test #'eq)))
 7         ,@(loop :for (k v) :on contents :by #'cddr
-8                 :collect `(setf (gethash
-9                                  ,(read-from-string
-10                                     (symbol-munger:camel-case->lisp-name k))
-11                                 ,var)
-12                                ,v))
-13        ,var)))
+8                 :collect `(setf (gethash ,(intern k package)) ,var) ,v))
+9         ,var)))
 ```
 
 まず`READ-DELIMITED-LIST`でオブジェクトの中身をリストにくくって取り出します（３）。
@@ -149,12 +145,8 @@ jsonの仕様によりプロパティキーが現れる順番に意味がない�
 
 属性リストを`LOOP`していき（７）、`HASH-TABLE`にキーバリューペアを登録するS式を生成します（８）。
 
-この時、キャメルケースで書かれているであろうプロパティキーをLispyなケバブケースに変換します（１０）。
-変換には[`symbol-munger`](https://github.com/AccelerationNet/symbol-munger)を使用します。
-（もちろん同じことができるなら他のライブラリでも構いません。）
-
-また、プロパティキーは`KEYWORD`シンボルに変換しておきます（４）（９）。
-`LOOP`の外側で`*PACKAGE*`を束縛している（４）のは、繰り返しのたびにキーワードパッケージを探すのを避けるためです。
+この時、プロパティキーは`KEYWORD`シンボルに変換しておきます（４）（８）。
+`LOOP`の外側で`PACKAGE`を束縛している（４）のは、繰り返しのたびにキーワードパッケージを探すのを避けるためです。
 
 プロパティキーをキーワードシンボルに変換する理由は比較処理を高速に行うためです。
 シンボル同士の比較は`EQ`（ポインタイコール）で比較できますが、文字列の比較は`EQUAL`（要素ごとの比較）で比較しなければならないからです。
@@ -211,23 +203,23 @@ jsonの仕様によりプロパティキーが現れる順番に意味がない�
             "IDs": [116, 943, 234, 38793]
           }
       }
-(LET ((#:HASH-TABLE1472 (MAKE-HASH-TABLE :TEST #'EQ)))
-  (SETF (GETHASH :IMAGE #:HASH-TABLE1472)
-          (LET ((#:HASH-TABLE1471 (MAKE-HASH-TABLE :TEST #'EQ)))
-            (SETF (GETHASH :WIDTH #:HASH-TABLE1471) 800)
-            (SETF (GETHASH :HEIGHT #:HASH-TABLE1471) 600)
-            (SETF (GETHASH :TITLE #:HASH-TABLE1471) "View from 15th Floor")
-            (SETF (GETHASH :THUMBNAIL #:HASH-TABLE1471)
-                    (LET ((#:HASH-TABLE1470 (MAKE-HASH-TABLE :TEST #'EQ)))
-                      (SETF (GETHASH :URL #:HASH-TABLE1470)
+(LET ((#:HASH-TABLE1635 (MAKE-HASH-TABLE :TEST #'EQ)))
+  (SETF (GETHASH :|Image| #:HASH-TABLE1635)
+          (LET ((#:HASH-TABLE1634 (MAKE-HASH-TABLE :TEST #'EQ)))
+            (SETF (GETHASH :|Width| #:HASH-TABLE1634) 800)
+            (SETF (GETHASH :|Height| #:HASH-TABLE1634) 600)
+            (SETF (GETHASH :|Title| #:HASH-TABLE1634) "View from 15th Floor")
+            (SETF (GETHASH :|Thumbnail| #:HASH-TABLE1634)
+                    (LET ((#:HASH-TABLE1633 (MAKE-HASH-TABLE :TEST #'EQ)))
+                      (SETF (GETHASH :|Url| #:HASH-TABLE1633)
                               "http://www.example.com/image/481989943")
-                      (SETF (GETHASH :HEIGHT #:HASH-TABLE1470) 125)
-                      (SETF (GETHASH :WIDTH #:HASH-TABLE1470) 100)
-                      #:HASH-TABLE1470))
-            (SETF (GETHASH :ANIMATED #:HASH-TABLE1471) FALSE)
-            (SETF (GETHASH :I-DS #:HASH-TABLE1471) (VECTOR 116 943 234 38793))
-            #:HASH-TABLE1471))
-  #:HASH-TABLE1472) 
+                      (SETF (GETHASH :|Height| #:HASH-TABLE1633) 125)
+                      (SETF (GETHASH :|Width| #:HASH-TABLE1633) 100)
+                      #:HASH-TABLE1633))
+            (SETF (GETHASH :|Animated| #:HASH-TABLE1634) FALSE)
+            (SETF (GETHASH :|IDs| #:HASH-TABLE1634) (VECTOR 116 943 234 38793))
+            #:HASH-TABLE1634))
+  #:HASH-TABLE1635) 
 ```
 
 現在の実装ではリテラルの`false`はシンボル`FALSE`になってしまう点は要注意。
@@ -279,16 +271,12 @@ Common Lispコードの中にjsonをリテラルに書きたいという需要�
 5     (set-macro-character #\, '|,-reader|)
 6     (set-macro-character #\" '|"-reader|)
 7     (let ((contents (read-delimited-list #\} stream t))
-8           (*package* (find-package :keyword))
-9           (var (gensym "HASH-TABLE")))
+8           (var (gensym "HASH-TABLE"))
+9           (package (find-package :keyword)))
 10       `(let ((,var (make-hash-table :test #'eq)))
 11         ,@(loop :for (k v) :on contents :by #'cddr
-12                 :collect `(setf (gethash
-13                                   ,(read-from-string
-14                                      (symbol-munger:camel-case->lisp-name k))
-15                                   ,var)
-16                                   ,v))
-17         ,var))))
+12                 :collect `(setf (gethash ,(intern k package) ,var) ,v))
+13         ,var))))
 ```
 
 ### Fixed readtable.
