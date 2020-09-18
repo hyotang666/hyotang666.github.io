@@ -507,3 +507,13 @@ jsonの流儀に従うために、`PPRINT-LOGICAL-BLOCK`のAPIを使わずに（
 
 PRETTY-PRINTINGSが必要になるケースは稀ですが大変強力なものでもあります。
 興味がある人は[CLHSのこのあたりを読んで幸せになりましょう](http://clhs.lisp.se/Body/22_bb.htm)。
+
+## References.
+PRETTY-PRINTTERをがっつり改造するライブラリとして拙作ですがご紹介を。
+
+具体例として参考になれば幸い。
+
+### [trivial-formatter](https://github.com/hyotang666/trivial-formatter)
+
+Common Lispのコードフォーマッタです。
+Emacs以外のエディタをお使いの方へ。
