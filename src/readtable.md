@@ -340,3 +340,23 @@ T
 
 Dispatch-macro-characterについては触れられませんでしたが似ようなものです。
 興味のある人は[このあたりに目を通すと幸せになれます](http://clhs.lisp.se/Body/c_reader.htm)。
+
+## References.
+リードテーブルをがっつり改造してできているライブラリとして、拙作ですが幾つかご紹介を。
+
+具体例として参考になれば幸い。
+
+### [read-as-string](https://github.com/hyotang666/read-as-string)
+
+S式を文字列としてリードするものです。
+
+### [null-package](https://github.com/hyotang666/null-package)
+
+信頼できないストリームからS式をリードするもの。
+シンボルがインターンされるかどうか制御できます。
+Common Lispコードの静的解析に。
+
+### [trivial-formatter](https://github.com/hyotang666/trivial-formatter)
+
+Common Lispのコードフォーマッタです。
+Emacs以外のエディタをお使いの方へ。
