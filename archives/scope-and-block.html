@@ -1,0 +1,229 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>scope-and-block</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Scope, block and extent in Common Lisp.</h1>
+
+<h2>Meta note</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>ブロック、スコープという言葉に関心のある人。</li>
+</ul>
+
+<h2>Introduction.</h2>
+
+<p>Common Lispという言語でもスコープという言葉は使われます。
+ですがブロックという言葉はCommon Lispでは異なる意味を持ちます。
+Common Lispという言語で<code>BLOCK</code>は特殊形式というオペレータです。
+他言語でいうブロックとは少々趣が異なるかと思われます。</p>
+
+<p>代わりといってはなんですがCommon Lispではextentという言葉がscopeと絡めて語られます。
+本稿では自分の言葉でこれらを解説してみたいと思います。</p>
+
+<h2>PROGN</h2>
+
+<p><code>PROGN</code>はS式を複数受け取り、左から順に評価していき、最後のS式の評価結果を<code>PROGN</code>全体の評価結果として返します。
+他言語でいうブロックはCommon Lispでは<code>PROGN</code>になるかと思われます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren2">(<span class="code">print <span class="keyword">:a</span></span>)</span> <span class="paren2">(<span class="code">print <span class="keyword">:b</span></span>)</span> <span class="paren2">(<span class="code">print <span class="keyword">:c</span></span>)</span></span>)</span>
+
+:A      <span class="comment">; &lt;--- Side effect.
+</span>:B      <span class="comment">; &lt;--- Side effect.
+</span>:C      <span class="comment">; &lt;--- Side effect.
+</span>:C      <span class="comment">; &lt;--- Return value of PROGN.</span></span></code></pre>
+
+<p><code>PROGN</code>には暗黙理のものがあります。
+代表が<code>LET</code>の本体です。</p>
+
+<h2>Scope.</h2>
+
+<p>スコープとは見える範囲を指す言葉です。</p>
+
+<p>例えば<code>LET</code>は局所変数を定義しますが、そのスコープ（見える範囲）はそのボディに限られます。
+<code>LET</code>のボディは暗黙理の<code>PROGN</code>となります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a 0</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">print a</span>)</span>
+    <span class="paren2">(<span class="code">1+ a</span>)</span></span>)</span>
+
+0       <span class="comment">; &lt;--- Side effect.
+</span>1       <span class="comment">; &lt;--- Return value of LET.
+</span>
+* a
+<span class="comment">; Error</span></span></code></pre>
+
+<h3>Type of scopes.</h3>
+
+<p>スコープには二種類あります。
+レキシカルなスコープとダイナミックなスコープです。</p>
+
+<h4>Lexical scope.</h4>
+
+<p><code>LET</code>は通常レキシカルなスコープを持ちます。
+レキシカルとはこの場合「文字列上の」くらいの意味です。</p>
+
+<p>以下の図では<code>LET</code>のボディで<code>A</code>を参照する<code>BOTTOM</code>を呼び出していますが、<code>BOTTOM</code>からは変数<code>A</code>が見えないのを表しています。
+なぜなら文字列としては<code>(LET ((A 0)) (BOTTOM))</code>で閉じているからです。
+変数<code>A</code>はその文字列としての範囲内でのみ有効です。</p>
+
+<p><img src="../img/lexical.svg" alt="image of lexical scope." /></p>
+
+<h4>Dynamic scope.</h4>
+
+<p>動的なスコープを持つ変数は通常<code>DEFVAR</code>ないし<code>DEFPARAMETER</code>で定義します。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*a*</span> 0</span>)</span>
+*A*</span></code></pre>
+
+<p>動的スコープの場合、スコープの解決（＝変数の参照）を実行時に動的に行います。</p>
+
+<p>上の図における<code>BOTTOM</code>は<code>A</code>に対する参照の解決がコンパイル時に確定できないので、多くの処理系でコンパイルエラーとなります。（コンディションは処理系に依存します。）</p>
+
+<p>参照すべき変数が動的な変数だと分かっている場合はコンパイルエラーとなることなく、変数参照を実行時に行います。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> bottom2 <span class="paren2">(<span class="code"></span>)</span>
+    <span class="special">*a*</span></span>)</span>
+BOTTOM2
+
+* <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> bottom3 <span class="paren2">(<span class="code"></span>)</span>
+    <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">special a</span>)</span></span>)</span>
+    a</span>)</span>
+BOTTOM3</span></code></pre>
+
+<p>上の例では<code>BOTTOM2</code>は事前に動的であると<code>DEFVAR</code>により宣言されている変数への参照なのでエラーとなりません。</p>
+
+<p>また、<code>BOTTOM3</code>では変数<code>A</code>は動的な参照であることを<code>DECLARE</code>により宣言してあるので、これもエラーとはなりません。
+ただしこの場合も以下のコードはエラーとなります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a 0</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">bottom3</span>)</span></span>)</span>
+<span class="comment">; Error</span></span></code></pre>
+
+<p>なぜなら<code>LET</code>が作る変数<code>A</code>はあくまでレキシカルなスコープを持つ変数だからです。
+<code>BOTTOM3</code>が実行時に参照する変数<code>A</code>はあくまで動的なものです。
+<code>LET</code>の変数<code>A</code>はレキシカルなのでそのスコープはもう閉じてあるので<code>BOTTOM3</code>からは見えません。</p>
+
+<p>見えるようにするためには<code>LET</code>の側にも宣言が必要となります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a 0</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">special a</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">bottom3</span>)</span></span>)</span>
+0</span></code></pre>
+
+<h2>Extent</h2>
+
+<p>エクステントとは値が生きている時間軸的な長さを表す言葉です。</p>
+
+<p>エクステントには２種類あります。
+おのおの、動的なエクステントと無限のエクステントとになります。</p>
+
+<h3>indefinite extent.</h3>
+
+<p>Common Lispのオブジェクトは通常無限エクステントを持ちます。</p>
+
+<p>そのためレキシカルなスコープを抜けた後も変数への参照が残り続けるということが起こります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a 0</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren3">(<span class="code"></span>)</span> a</span>)</span></span>)</span>
+#&lt;FUNCTION <span class="paren1">(<span class="code"><i><span class="symbol">LAMBDA</span></i> <span class="paren2">(<span class="code"></span>)</span></span>)</span> {...}&gt;
+
+* <span class="paren1">(<span class="code">funcall *</span>)</span>
+0</span></code></pre>
+
+<p>上のコード例ではまず<code>LET</code>が変数<code>A</code>を作り無名関数を返します。
+無名関数の中では<code>A</code>への参照が保持されます。</p>
+
+<p>変数<code>A</code>のレキシカルなスコープはもう閉じています。
+ですが返り値である<code>LAMBDA</code>は<code>LET</code>のレキシカルな（文字列としての）スコープ内で作られたものでレキシカルなスコープ内で変数<code>A</code>への参照を保持しています。
+この参照はレキシカルなスコープが閉じた後にも残り続けるので、関数呼び出しを行うと正しく<code>0</code>を返します。</p>
+
+<p>このレキシカルな変数への参照を閉じ込めた関数のことをクロージャといいます。</p>
+
+<h3>Dynamic extent.</h3>
+
+<p>動的なエクステントとはいうなれば一時的なエクステントです。</p>
+
+<p><code>WITH-OPEN-FILE</code>で開いたストリームは<code>WITH-OPEN-FILE</code>のレキシカルなスコープ内でのみOPENな状態であり、スコープを抜けると同時にストリームは閉じられます。
+ストリームに束縛される変数は、クロージャで包めばスコープを抜けた後でも参照はできます。
+ですがそのストリームは閉じられた後のストリームになります。</p>
+
+<p>また変数に宣言をすることで変数を動的エクステントであると宣言することができます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a 0</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">declare <span class="paren3">(<span class="code">dynamic-extent a</span>)</span></span>)</span>
+    <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren3">(<span class="code"></span>)</span> a</span>)</span></span>)</span>
+#&lt;FUNCTION <span class="paren1">(<span class="code"><i><span class="symbol">LAMBDA</span></i> <span class="paren2">(<span class="code"></span>)</span></span>)</span> {...}&gt;</span></code></pre>
+
+<p>上の例では<code>LET</code>が作る変数<code>A</code>に動的エクステントであるという宣言がされています。
+返された無名関数は変数<code>A</code>への参照を保持し続けますが、その変数<code>A</code>が実行時に有効であるかどうかはわかりません。
+動的エクステントであると宣言されているので、GCが値を回収し、実行されるその瞬間には全く関係ない値がそのアドレスに置かれているかもしれません。</p>
+
+<h2>BLOCK</h2>
+
+<p>Common Lispという言語で<code>BLOCK</code>は特殊形式です。
+<code>BLOCK</code>の中からは<code>RETURN-FROM</code>で値を返すことができます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">block</span></i> <span class="keyword">:a</span>
+    <span class="paren2">(<span class="code"><i><span class="symbol">return-from</span></i> <span class="keyword">:a</span> 3</span>)</span></span>)</span>
+3</span></code></pre>
+
+<p><code>BLOCK</code>はレキシカルなスコープを持ちます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> test <span class="paren2">(<span class="code"></span>)</span> <span class="paren2">(<span class="code"><i><span class="symbol">return-from</span></i> <span class="keyword">:a</span> 0</span>)</span></span>)</span>
+<span class="comment">; Error</span></span></code></pre>
+
+<p>上記コードはコンパイル時のレキシカルな環境下に<code>:A</code>という名前の<code>BLOCK</code>がないので多くの処理系でエラーとなります。</p>
+
+<p>レキシカルな環境はクロージャで包むことで渡すことが可能となります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> bottom4 <span class="paren2">(<span class="code">returner</span>)</span>
+    <span class="paren2">(<span class="code">funcall returner</span>)</span></span>)</span>
+BOTTOM4
+
+* <span class="paren1">(<span class="code"><i><span class="symbol">block</span></i> <span class="keyword">:a</span>
+    <span class="paren2">(<span class="code">bottom4 <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren4">(<span class="code"></span>)</span> <span class="paren4">(<span class="code"><i><span class="symbol">return-from</span></i> <span class="keyword">:a</span> 0</span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">print <span class="keyword">:never</span></span>)</span></span>)</span>
+0</span></code></pre>
+
+<p>上記コードでは<code>BLOCK</code>名<code>:A</code>を無名関数にクロージャとして包んで<code>BOTTOM4</code>に渡しています。
+<code>BOTTOM4</code>は無名関数を呼び出すだけのものなので、<code>PRINT</code>にはけしてたどり着くことはありません。</p>
+
+<h3>Implicit BLOCK.</h3>
+
+<p><code>BLOCK</code>には暗黙理に作られるものもあります。</p>
+
+<h4>defun</h4>
+
+<p>関数を定義すると、暗黙理に関数名と同じ名前を持つ<code>BLOCK</code>が作られます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> test <span class="paren2">(<span class="code"></span>)</span> <span class="paren2">(<span class="code"><i><span class="symbol">return-from</span></i> test 0</span>)</span> <span class="paren2">(<span class="code">print 0</span>)</span></span>)</span>
+TEST
+
+* <span class="paren1">(<span class="code">test</span>)</span>
+0</span></code></pre>
+
+<h4>DO family and LOOP.</h4>
+
+<p><code>DO</code>のファミリーと<code>LOOP</code>マクロは暗黙理に<code>NIL</code>という名前の<code>BLOCK</code>を形成します。</p>
+
+<p><code>NIL</code>を名前に持つブロックからは<code>RETURN</code>で帰れます。
+<code>RETURN</code>は単に<code>(return-from nil ...)</code>へ展開されるマクロでしかありません。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">dotimes <span class="paren2">(<span class="code">x 5</span>)</span> <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren3">(<span class="code">oddp x</span>)</span> <span class="paren3">(<span class="code">return <span class="keyword">:return</span></span>)</span> <span class="paren3">(<span class="code">print x</span>)</span></span>)</span></span>)</span>
+
+0
+:RETURN</span></code></pre>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
