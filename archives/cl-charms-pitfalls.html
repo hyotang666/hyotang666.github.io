@@ -31,24 +31,15 @@
 
 <h2>How to initialize.</h2>
 
-<p><a href="https://github.com/cxxxr/lem/tree/master/lib/setlocale" >lem-setlocale/cffi</a>を使います。
-これは<a href="https://github.com/cxxxr/lem" >lem</a>のサブシステムです。</p>
+<p><a href="https://github.com/shamazmazum/cl-setlocale" >cl-setlocale</a>を使います。</p>
 
-<p>lem自体はquicklispに登録されていないので、<a href="https://github.com/roswell/roswell" >roswell</a>を使ってインストールしておきましょう。</p>
-
-<pre><code><span class="code">* <span class="paren1">(<span class="code">lem-setlocale/cffi:setlocale lem-setlocale:+lc-all+ <span class="string">"en_US.UTF-8"</span></span>)</span></span></code></pre>
+<pre><code><span class="code">* <span class="paren1">(<span class="code">cl:set-all-to-native</span>)</span></span></code></pre>
 
 <p>上記コードでlocaleの初期化が可能です。</p>
 
 <p>システムのlocaleを取り出したい場合は<a href="https://github.com/Shinmera/system-locale" >system-locale</a>が便利です。</p>
 
 <h2>Pitfalls.</h2>
-
-<h3>Missing cffi.</h3>
-
-<p>2020/09/29現時点でlem-setlocale/cffiのasdファイルにはcffiが<code>:depends-on</code>に存在しません。
-よって<code>lem-setlocale/cffi</code>のみをロードしようとするとエラーとなります。
-事前に<code>cffi</code>のロードが必要です。</p>
 
 <h3>Must setlocale before compile cl-charms.</h3>
 
@@ -59,24 +50,17 @@
 <pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defsystem</span></i> <span class="string">"your-app"</span>
   <span class="keyword">:depends-on</span>
   <span class="paren2">(<span class="code">
-   <span class="string">"cffi"</span>
-   <span class="string">"lem-setlocale/cffi"</span>
+   <span class="string">"cl-setlocale"</span>
    </span>)</span>
   ...</span>)</span>
 
-<span class="comment">;; lem-setlocale/cffiをロード語にSETLOCALEを呼ぶ。
-</span><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> perform <span class="keyword">:after</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o load-op</span>)</span> <span class="paren3">(<span class="code">c <span class="paren4">(<span class="code">eql <span class="paren5">(<span class="code">find-system <span class="string">"lem-setlocale/cffi"</span></span>)</span></span>)</span></span>)</span></span>)</span>
-  <span class="paren2">(<span class="code">symbol-call <span class="string">"LEM-SETLOCALE/CFFI"</span> <span class="string">"SETLOCALE"</span>
-               <span class="paren3">(<span class="code">symbol-value <span class="paren4">(<span class="code">find-symbol* <span class="string">"+LC-ALL+"</span> <span class="string">"LEM-SETLOCALE/CFFI"</span></span>)</span></span>)</span>
-               <span class="string">"en_US.UTF-8"</span></span>)</span></span>)</span>
+<span class="comment">;; cl-setlocaleをロード語にSET-ALL-TO-NATIVEを呼ぶ。
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> perform <span class="keyword">:after</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o load-op</span>)</span> <span class="paren3">(<span class="code">c <span class="paren4">(<span class="code">eql <span class="paren5">(<span class="code">find-system <span class="string">"cl-setlocale"</span></span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">symbol-call <span class="string">"CL-SETLOCALE"</span> <span class="string">"SET-ALL-TO-NATIVE"</span></span>)</span></span>)</span>
 
-<span class="comment">;; lem-setlocale/cffiのロード後にcl-charmsがロードされるように指定。
-</span><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> component-depends-on <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o load-op</span>)</span> <span class="paren3">(<span class="code">c <span class="paren4">(<span class="code">eql <span class="paren5">(<span class="code">find-system <span class="string">"lem-setlocale/cffi"</span></span>)</span></span>)</span></span>)</span></span>)</span>
+<span class="comment">;; cl-setlocaleのロード後にcl-charmsがロードされるように指定。
+</span><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> component-depends-on <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o load-op</span>)</span> <span class="paren3">(<span class="code">c <span class="paren4">(<span class="code">eql <span class="paren5">(<span class="code">find-system <span class="string">"cl-setlocale"</span></span>)</span></span>)</span></span>)</span></span>)</span>
   <span class="paren2">(<span class="code">append <span class="paren3">(<span class="code">call-next-method</span>)</span> '<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">load-op <span class="string">"cl-charms"</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
-
-<h2>最後に。</h2>
-
-<p>lem-setlocale/cffiが独立したライブラリになってくれると嬉しい。</p>
 
     </MAIN>
     <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
