@@ -15,7 +15,7 @@
 [cl-setlocale](https://github.com/shamazmazum/cl-setlocale)を使います。
 
 ```lisp
-* (cl:set-all-to-native)
+* (cl-setlocale:set-all-to-native)
 ```
 
 上記コードでlocaleの初期化が可能です。
