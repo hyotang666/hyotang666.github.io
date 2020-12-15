@@ -803,12 +803,13 @@ var efficient = function () {
                         acc.map(s=>s.sort())
                         .reduce(function(acc,next)
                                 {
-                                        if (acc.length === 0 || acc[0].some((x,i) => x !== next[i]))
+                                        if (acc.length === 0 || !acc.some(s=>s.every((e,i)=>e===next[i])))
                                         {
                                                 acc.unshift(next);
                                         }
                                         return acc;
-                                },[]))
+                                }
+                                ,[]))
                         ,'efficient-set'
                 );
         }
