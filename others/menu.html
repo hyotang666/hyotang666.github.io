@@ -759,7 +759,7 @@ var digest = function ()
 };
 
 //// EFFICIENT () []
-// DEFTYPE set [menu, menu, menu]
+// DEFTYPE set [menu]
 var efficient = function () {
         let times = read_form_int('times'); // integer
         let matched = match(read_menu(),read_current_params(),read_form_int('next')); // [menu]
@@ -767,13 +767,13 @@ var efficient = function () {
         let d = diff(read_form_int('next'),read_current_params()); // [integer]
         let t_status = d.reduce((x,y) => x+y); // integer
         let rec = function(t,sets) {
-                if (t === times)
+                if (!(0 < t))
                 { body(sets.slice()); }
                 else
                 {
                         matched.forEach(function(menu){
-                                sets[t] = menu;
-                                rec(1+t, sets);
+                                sets[t-1] = menu;
+                                rec(t-1, sets);
                         });
                 }
         };
@@ -796,7 +796,9 @@ var efficient = function () {
                         }
                 }
         };
-        rec(0,new Array(times));
+        for(let i = times; (0 < i && acc.length === 0); i--){
+                rec(i,new Array(i));
+        }
         if (0 < acc.length)
         {
                 print(JSON.stringify(
