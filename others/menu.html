@@ -545,6 +545,9 @@
                 <div class='menu'>
                                 <input type='button' value='eat' onclick='add(161)'>
                                 <span class='name'> 失敗料理 </span> <span class='param'>[5, 5, 5, 5, 5, 5, 5, 5, 100]</span>  </div>
+                <div class='menu'>
+                                <input type='button' value='eat' onclick='add(162)'>
+                                <span class='name'> null </span> <span class='param'>[0, 0, 0, 0, 0, 0, 0, 0, 0]</span>  </div>
                 </div>
                 <script>
 
@@ -646,6 +649,21 @@ var match = function (menu,current_params,next) {
         let acc = []; // [menu]
         menu.forEach(m => eatablep(m,current_params,next)?acc.push(m):null);
         return acc;
+};
+
+// DEFTYPE set [menu]
+//// unique_set ([set]) [set]
+unique_set = function (a) {
+        return a.map(set=>set.sort())
+                .reduce(function(acc,next)
+                        {
+                                if (acc.length === 0 || !acc.some(s=>s.every((e,i)=>e===next[i])))
+                                {
+                                        acc.push(next);
+                                }
+                                return acc;
+                        }
+                        ,[]);
 };
 
 /*
@@ -759,7 +777,6 @@ var digest = function ()
 };
 
 //// EFFICIENT () []
-// DEFTYPE set [menu]
 var efficient = function () {
         let times = read_form_int('times'); // integer
         let matched = match(read_menu(),read_current_params(),read_form_int('next')); // [menu]
@@ -767,13 +784,13 @@ var efficient = function () {
         let d = diff(read_form_int('next'),read_current_params()); // [integer]
         let t_status = d.reduce((x,y) => x+y); // integer
         let rec = function(t,sets) {
-                if (!(0 < t))
+                if (t === times)
                 { body(sets.slice()); }
                 else
                 {
                         matched.forEach(function(menu){
-                                sets[t-1] = menu;
-                                rec(t-1, sets);
+                                sets[t] = menu;
+                                rec(t+1, sets);
                         });
                 }
         };
@@ -796,24 +813,10 @@ var efficient = function () {
                         }
                 }
         };
-        for(let i = times; (0 < i && acc.length === 0); i--){
-                rec(i,new Array(i));
-        }
+        rec(0,new Array(times));
         if (0 < acc.length)
         {
-                print(JSON.stringify(
-                        acc.map(s=>s.sort())
-                        .reduce(function(acc,next)
-                                {
-                                        if (acc.length === 0 || !acc.some(s=>s.every((e,i)=>e===next[i])))
-                                        {
-                                                acc.unshift(next);
-                                        }
-                                        return acc;
-                                }
-                                ,[]))
-                        ,'efficient-set'
-                );
+                print(JSON.stringify(unique_set(acc)) ,'efficient-set');
         }
         else
         {
