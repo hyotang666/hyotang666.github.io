@@ -547,7 +547,7 @@
                                 <span class='name'> 失敗料理 </span> <span class='param'>[5, 5, 5, 5, 5, 5, 5, 5, 100]</span>  </div>
                 <div class='menu'>
                                 <input type='button' value='eat' onclick='add(162)'>
-                                <span class='name'> null </span> <span class='param'>[0, 0, 0, 0, 0, 0, 0, 0, 0]</span>  </div>
+                                <span class='name'>null</span> <span class='param'>[0, 0, 0, 0, 0, 0, 0, 0, 0]</span>  </div>
                 </div>
                 <script>
 
@@ -805,7 +805,12 @@ var efficient = function () {
                         if (t_status < s)
                         { }
                         else if (t_status === s)
-                        { acc.push(sets.map(m=>m.name)); }
+                        {
+                                if (!sets.every(m=>m.name==='null'))
+                                {
+                                        acc.push(sets.map(m=>m.name));
+                                }
+                        }
                         else
                         {
                                 t_status = s;
@@ -820,9 +825,66 @@ var efficient = function () {
         }
         else
         {
-                print("[]",'efficient-set');
+                let e = enough();
+                if (0 < e.length)
+                {
+                        print (JSON.stringify(e), 'efficient-set');
+                }
+                else {
+                        print("[]",'efficient-set');
+                }
         }
         return acc;
+};
+
+//// ENOUGH () set
+var enough = function () {
+        let m = read_menu(); // [m]
+        let p = diff(read_form_int('next'),read_current_params()); // [integer]
+        let z = 0; // integer
+        s = p.reduce((x,y)=>x+y); // integer
+        acc = []; // [set]
+        let rec = function(i,set) {
+                if (i < 3) {
+                        m.forEach(function (m) {
+                                set[i] = m;
+                                rec(i+1, set);
+                        })
+                }
+                else
+                { body(set); }
+        };
+        let body = function (set) {
+                let rp = set.reduce((acc,m)=>acc.map((s,i)=>s-m.param[i]) ,p);
+                let ms = rp.reduce((acc,p)=>acc<=0?acc+1:acc,0);
+                let ts = rp.reduce((x,y)=>x+y);
+                if (ms < z)
+                {
+                        // Do nothing.
+                }
+                else if (ms === z)
+                {
+                        if (ts < s)
+                        {
+                                s = ts;
+                                acc = [set.map(m=>m.name)];
+                        }
+                        else if (ts === s)
+                        {
+                                acc.push(set.map(m=>m.name));
+                        }
+                        else
+                        {} // Do nothing.
+                }
+                else
+                {
+                        z = ms;
+                        s = ts;
+                        acc = [set.map(m=>m.name)];
+                }
+        };
+        rec(0, new Array (3));
+        return unique_set(acc);
 };
 
 //// Setup event listener.
