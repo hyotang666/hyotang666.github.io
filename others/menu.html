@@ -699,7 +699,7 @@ var print = function (string,id) {
 var update = function () {
         const menu = read_menu();
         var list = []; // [menu]
-        var over = []; // [menu]
+        var over = []; // [[menu,integer]]
         const order = ensure_read_id('order').selectedIndex;
         menu.forEach(function(m){
                 if (eatablep(m, read_current_params(),read_form_int('next')))
