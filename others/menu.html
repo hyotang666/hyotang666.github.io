@@ -811,18 +811,21 @@ var efficient = function () {
                         }
                 }
         };
-        rec(0,new Array(times));
-        if (0 < acc.length) {
-                print(JSON.stringify(unique_set(acc)) ,'efficient-set');
-        } else {
-                let e = enough();
-                if (0 < e.length) {
-                        print (JSON.stringify(e), 'efficient-set');
+        print("NOTE: This may take some minutes.",'efficient-set');
+        setTimeout(function(){
+                rec(0,new Array(times));
+                if (0 < acc.length) {
+                        print(JSON.stringify(unique_set(acc)) ,'efficient-set');
                 } else {
-                        print("[]",'efficient-set');
+                        const e = enough();
+                        if (0 < e.length) {
+                                print (JSON.stringify(e), 'efficient-set');
+                        } else {
+                                print("[]",'efficient-set');
+                        }
                 }
         }
-        return acc;
+                ,50);
 };
 
 //// ENOUGH () [set]
