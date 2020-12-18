@@ -1228,7 +1228,7 @@ var enough = function () {
         };
         let body = function (set) {
                 const rp = set.reduce((acc,m)=>acc.map((s,i)=>s-m.param[i]) ,p);
-                const ms = rp.reduce((acc,p)=>acc<=0?acc+1:acc,0);
+                const ms = rp.reduce((acc,p)=>p<=0?acc+1:acc,0);
                 const ts = rp.reduce((x,y)=>x+y);
                 if (ms < z) { // Do nothing.
                 } else if (ms === z) {
