@@ -1183,7 +1183,7 @@ var efficient = function () {
                         const s = diff_params.reduce((x,y) => x+y);
                         if (t_status < s) {
                         } else if (t_status === s) {
-                                if (!sets.every(m=>m.name==='null')) {
+                                if (!sets.every(m=>m.name==='NULL')) {
                                         acc.push(sets.map(m=>m.name));
                                 }
                         } else {
