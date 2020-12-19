@@ -50,7 +50,6 @@
                 </table>
                 <div>
                         <input id='efficient' type='button' value='Compute efficient set.' onclick='efficient()'>
-                        <input id='times' type='number' value='3'>
                         <span id='efficient-set'>NOTE: This may take some minutes.</span>
                 </div>
                 <div id='stomack'>
@@ -1159,13 +1158,12 @@ var digest = function ()
 
 //// EFFICIENT () [set]
 var efficient = function () {
-        const times = read_form_int('times'); // integer
         const matched = match(read_menu(),read_current_params(),read_form_int('next')); // [menu]
         let acc = []; // [set]
         const d = diff(read_form_int('next'),read_current_params());
         let t_status = d.reduce((x,y) => x+y); // integer
         let rec = function(t,sets) {
-                if (t === times) {
+                if (t === 3) {
                         body(sets.slice());
                 } else {
                         matched.forEach(function(menu){
@@ -1194,7 +1192,7 @@ var efficient = function () {
         };
         print("NOTE: This may take some minutes.",'efficient-set');
         setTimeout(function(){
-                rec(0,new Array(times));
+                rec(0,new Array(3));
                 if (0 < acc.length) {
                         print(JSON.stringify(unique_set(acc)) ,'efficient-set');
                 } else {
