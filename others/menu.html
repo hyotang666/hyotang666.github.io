@@ -9,6 +9,25 @@
 .name { min-width: 20em; }
 </style>
         </head>
+        <div>
+                <input id='how-to-use-switch' type='button' value='' onclick='how_to_use()'>
+                <div id='how-to-use'>
+                        <p><code>Next</code>には次のレベルまでに必要な経験値を入力します。<br>
+                        <code>Life</code> ~ <code>Luck</code>には各パラメタの現在のexpを入力します。<br>
+                        <code>Order</code>で料理リストをどのパラメタでソートするかを指定します。<br>
+                        <code>Exp</code>には次の冒険で得られるであろうexpを入力します。
+                        （少なめに見積もるのがコツです。）<br>
+                        リストから<code>eat</code>ボタンで料理を胃に追加すると各パラメタが更新されます。<br>
+                        <code>vomit</code>で吐き出すとundoできます。<br>
+                        <code>digest</code>で消化できます。<br>
+                        <code>Compute efficient set</code>ボタンを押すと、<code>Exp</code>の値に従って最も多くのexpを得られる料理セットでレベルを上げずにすむセットを計算します。<br>
+                        （これは最大で176^3つまり500万を超える組み合わせを走査するので膨大な時間がかかるおそれがあります。）<br>
+                        何を食べてもレベルが上がってしまう状態になると最も多くのパラメタを一度に上昇させられるセットを計算します。<br>
+                        黒文字のリストは食べてもレベルが上がらない料理で<code>Order</code>で指定されたパラメタにexpが入るものです。<br>
+                        オレンジ文字のリストは食べてもレベルが上がらない料理で<code>Order</code>で指定されたパラメタにexpが入らないものです。<br>
+                        赤文字のリストは食べるとレベルが上がってしまう料理です。
+                </div>
+        </div>
         <body>
                 <table>
                         <tr>
@@ -1289,9 +1308,21 @@ for(let i = 0; i < input.length; i++){
         input[i].addEventListener("change", update, false);
 };
 
+//// HOW_TO_USE () undefined.
+var how_to_use = function () {
+        let toggler = ensure_read_id('how-to-use-switch');
+        if (toggler.value === "Show how to use") {
+                toggler.value = "Hide";
+                show('how-to-use');
+        } else {
+                toggler.value = "Show how to use";
+                hide('how-to-use');
+        }
+};
+
 //// Initial setup.
 update();
-
+how_to_use();
                 </script>
         </body>
 </html>
