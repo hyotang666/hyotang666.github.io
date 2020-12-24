@@ -1088,6 +1088,16 @@ var sort_menu = function (menu,expected_exp) {
                 .sort((x,y)=>x[0]<y[0]);
 };
 
+//// RESULT_SET_STRING ([[menu]]) string
+var result_set_string = function (acc,current_param) {
+        return JSON.stringify(acc.map(function (a) {
+                let result = a.map(m=>m.name);
+                result.push(a.reduce((param,set)=>param.map((p,i)=>p+set.param[i])
+                        ,current_param));
+                return result;
+        }));
+};
+
 /*
  * PRINT layer.
  *
@@ -1208,32 +1218,25 @@ var efficient = function () {
         let acc = [];
         let memo = {};
         let rec = function (i,sorted,set,total) { // (integer,[[integer,menu]],[menu],integer)
-                if (i===0){
+                if (i===0)
                         return body(set.slice().sort((x,y)=>x.name<y.name), total);
-                } else {
-                        for(let index = 0; index<sorted.length; index++) {
-                                set[i-1] = sorted[index][1];
-                                if (rec(i-1,sorted,set,total+sorted[index][0])) {
-                                        break;
-                                }
-                        }
+                for(let index = 0; index<sorted.length; index++) {
+                        set[i-1] = sorted[index][1];
+                        if (rec(i-1,sorted,set,total+sorted[index][0]))
+                                break;
                 }
         };
         let body = function (set,total) { // ([menu],integer)
-                if (set.reduce(function(m,n){return {param:m.param.map((p,i)=>p+n.param[i])};})
-                        .param
-                        .slice(0,8)
-                        .every((p,i)=>current_param[i]+p<next)
-                        &&
-                        !memo[set.map(m=>m.name).toString()]
-                ) // as eatablep.
+                if (eatablep(set.reduce((m,n)=>{return{param:m.param.map((p,i)=>p+n.param[i])};}),current_param,next)
+                        && !memo[set.map(m=>m.name).toString()]
+                )
                         {
                                 memo[set.map(m=>m.name).toString()] = true;
-                                if (total<status){
+                                if (total<status)
                                         return true;
-                                } else if (total===status){
+                                if (total===status)
                                         acc.push(set);
-                                } else {
+                                else {
                                         status = total;
                                         acc = [set];
                                 }
@@ -1245,20 +1248,12 @@ var efficient = function () {
                 for(let i = 1; i <= 3; i++) {
                         rec(i,sort_menu(matched,expected_exp/i),new Array(i),0)
                 };
-                if (0 < acc.length) {
-                        print(JSON.stringify(
-                                acc.map(a=>[a.map(m=>m.name)
-                                        ,a.reduce((param,set)=>param.map((p,i)=>p+set.param[i])
-                                        ,read_current_params())]))
-                        ,'efficient-set');
-                } else {
-                        const e = enough();
-                        if (0 < e.length) {
-                                print (JSON.stringify(e), 'efficient-set');
-                        } else {
-                                print("[]",'efficient-set');
-                        }
-                }
+                (0 < acc.length)
+                        ?print(result_set_string(acc,current_param) ,'efficient-set')
+                        :((e => (0 < e.length)
+                                ?print(JSON.stringify(e), 'efficient-set')
+                                :print("[]",'efficient-set'))
+                          (enough()))
         }
                 ,50);
 };
