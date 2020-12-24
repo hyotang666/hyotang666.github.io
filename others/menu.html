@@ -964,9 +964,8 @@
 //// ensure_read_id (string) dom
 var ensure_read_id = function (id) {
         const dom = document.getElementById(id);
-        if (dom === null) {
+        if (dom === null)
                 throw new Error('Missing DOM id ' + id);
-        };
         return dom;
 };
 
@@ -985,9 +984,7 @@ const g_names = ['life','awake','breath','strength','arm','tech','magic','luck']
 var read_form_int = function (name) {
         const integer = parseInt(ensure_read_id(name)['value']);
         if (isNaN(integer))
-        {
                 throw new Error(name + " is not integer.");
-        };
         return integer;
 };
 
@@ -1008,8 +1005,7 @@ var make_menu = function (dom) {
 var read_menu = function () {
         const menu = document.getElementsByClassName('menu');
         let acc = []; // [menu]
-        for(let i = 0; i < menu.length; i++)
-        {
+        for(let i = 0; i < menu.length; i++) {
                 acc.push(make_menu(menu[i]));
         };
         return acc;
@@ -1061,12 +1057,9 @@ var match = function (menu,current_params,next) {
 //// unique_set ([set]) [set]
 unique_set = function (a) {
         return a.map(set=>set.sort())
-                .reduce(function(acc,next)
-                        {
+                .reduce(function(acc,next) {
                                 if (acc.length === 0 || !acc.some(s=>s.every((e,i)=>e===next[i])))
-                                {
                                         acc.push(next);
-                                }
                                 return acc;
                         }
                         ,[]);
@@ -1134,20 +1127,13 @@ var update = function () {
         var over = []; // [[menu,integer]]
         const order = ensure_read_id('order').selectedIndex;
         menu.forEach(function(m){
-                if (eatablep(m, read_current_params(),read_form_int('next')))
-                {
+                if (eatablep(m, read_current_params(),read_form_int('next'))) {
                         list.push(m);
                         if (nonsensep(m, order))
-                        {
                                 m.dom.style.color = 'orange';
-                        }
                         else
-                        {
                                 m.dom.style.color = '';
-                        }
-                }
-                else
-                {
+                } else {
                         over.push([m,count_digestable(m, read_current_params(), read_form_int('next'))]);
                         m.dom.style.color = 'red';
                 }
@@ -1156,14 +1142,11 @@ var update = function () {
         list.forEach((m, i) => m.dom.style.order = i);
         over.sort((a,b) => (a[1] < b[1]));
         over.forEach((cons,i) => cons[0].dom.style.order = i+list.length);
-        if (g_eaten.length === 0)
-        {
+        if (g_eaten.length === 0) {
                 hide('vomit');
                 hide('digest');
                 print("[]",'status');
-        }
-        else
-        {
+        } else {
                 show('vomit');
                 show('digest');
                 print(JSON.stringify(g_eaten.map(index => menu[index].name)),'status');
@@ -1284,10 +1267,9 @@ var enough = function () {
                         if (ts < s) {
                                 s = ts;
                                 acc = [set.map(m=>m.name)];
-                        } else if (ts === s) {
+                        } else if (ts === s)
                                 acc.push(set.map(m=>m.name));
-                        } else {
-                        } // Do nothing.
+                        else { } // Do nothing.
                 } else {
                         z = ms;
                         s = ts;
@@ -1321,9 +1303,8 @@ var levelup = function () {
         const next = read_form_int('next');
         let may_update = function (name) {
                 const value = read_form_int(name);
-                if (next<=value) {
+                if (next<=value)
                         ensure_read_id(name).value = value-next;
-                }
         };
         ['life','awake','breath','strength','arm','tech','magic','luck']
         .forEach(may_update);
