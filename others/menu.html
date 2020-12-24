@@ -1246,7 +1246,11 @@ var efficient = function () {
                         rec(i,sort_menu(matched,expected_exp/i),new Array(i),0)
                 };
                 if (0 < acc.length) {
-                        print(JSON.stringify(acc.map(a=>a.map(m=>m.name))) ,'efficient-set');
+                        print(JSON.stringify(
+                                acc.map(a=>[a.map(m=>m.name)
+                                        ,a.reduce((param,set)=>param.map((p,i)=>p+set.param[i])
+                                        ,read_current_params())]))
+                        ,'efficient-set');
                 } else {
                         const e = enough();
                         if (0 < e.length) {
