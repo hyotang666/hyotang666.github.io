@@ -68,6 +68,7 @@
                         </tr>
                 </table>
                 <div>
+                        <input id='levelup' type='button' value='Level Up' onclick='levelup()'>
                         <input id='efficient' type='button' value='Compute efficient set.' onclick='efficient()'>
                         <span id='efficient-set'>NOTE: This may take some minutes.</span>
                 </div>
@@ -1313,6 +1314,19 @@ var how_to_use = function () {
                 toggler.value = "Show how to use";
                 hide('how-to-use');
         }
+};
+
+//// LEVELUP
+var levelup = function () {
+        const next = read_form_int('next');
+        let may_update = function (name) {
+                const value = read_form_int(name);
+                if (next<=value) {
+                        ensure_read_id(name).value = value-next;
+                }
+        };
+        ['life','awake','breath','strength','arm','tech','magic','luck']
+        .forEach(may_update);
 };
 
 //// Initial setup.
