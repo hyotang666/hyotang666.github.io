@@ -1223,7 +1223,7 @@ var efficient = function () {
                 if (set.reduce(function(m,n){return {param:m.param.map((p,i)=>p+n.param[i])};})
                         .param
                         .slice(0,8)
-                        .every((p,i)=>current_param[i]+p<=next)
+                        .every((p,i)=>current_param[i]+p<next)
                         &&
                         !memo[set.map(m=>m.name).toString()]
                 ) // as eatablep.
