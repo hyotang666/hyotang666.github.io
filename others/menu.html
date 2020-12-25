@@ -1301,13 +1301,11 @@ var how_to_use = function () {
 //// LEVELUP
 var levelup = function () {
         const next = read_form_int('next');
-        let may_update = function (name) {
+        g_names.forEach((m)=>{
                 const value = read_form_int(name);
                 if (next<=value)
                         ensure_read_id(name).value = value-next;
-        };
-        ['life','awake','breath','strength','arm','tech','magic','luck']
-        .forEach(may_update);
+        });
 };
 
 //// Initial setup.
