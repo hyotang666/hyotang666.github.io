@@ -1301,7 +1301,7 @@ var how_to_use = function () {
 //// LEVELUP
 var levelup = function () {
         const next = read_form_int('next');
-        g_names.forEach((m)=>{
+        g_names.forEach(name=>{
                 const value = read_form_int(name);
                 if (next<=value)
                         ensure_read_id(name).value = value-next;
