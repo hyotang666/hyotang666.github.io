@@ -1128,8 +1128,15 @@ var create_set = function (set,param) {
         const names = document.createElement('span');
         names.textContent = JSON.stringify(set.map(m=>m.name));
         names.className = 'names';
+        const eat = document.createElement('input');
+        eat.type = 'button';
+        eat.value = 'eat';
+        eat.addEventListener("click", ()=>{
+                set.forEach(m=>m.dom.getElementsByTagName('input')[0].onclick());
+        }, false);
         const dom = document.createElement('div');
         dom.className = 'set';
+        dom.appendChild(eat);
         dom.appendChild(p);
         dom.appendChild(names);
         return dom;
