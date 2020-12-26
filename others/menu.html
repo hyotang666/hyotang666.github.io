@@ -5,6 +5,7 @@
                 <title> 竜の翼亭食事計算 </title>
 <style>
 #list { display: grid; }
+#efficient-set { display: grid; }
 .menu { display: flex; }
 .name { min-width: 20em; }
 </style>
@@ -969,6 +970,16 @@ var ensure_read_id = function (id) {
         return dom;
 };
 
+//// ensure_read_class (string,integer) dom
+var ensure_read_class = function (name,length,root) {
+        if (!root)
+                root = document;
+        const collection = root.getElementsByClassName(name);
+        if (collection.length !== length)
+                throw new Error('Class ' + name + ' has length ' + collection.length + ', not ' + length + " " + root);
+        return collection;
+};
+
 /* 
  * READ layer 
  *
@@ -1015,6 +1026,16 @@ var read_menu = function () {
 var read_nth_menu = function (index) {
         return make_menu(document.getElementsByClassName('menu')[index]);
 };
+
+//// READ_EFFICIENT_SET () [dom]
+var read_efficient_set = function () {
+        const efficient_set = document.getElementsByClassName('set');
+        let acc = [];
+        for (let i=0; i<efficient_set.length; i++){
+                acc.push(make_efficient_set(efficient_set[i]));
+        }
+        return acc;
+}
 
 /*
  * EVAL layer
@@ -1091,6 +1112,29 @@ var result_set_string = function (acc,current_param) {
         }));
 };
 
+//// DEFTYPE efficient_set { names: [name], param: [integer], dom: dom }
+//// MAKE_EFFICIENT_SET (dom) efficient_set
+var make_efficient_set = function (dom) {
+        return { names: ensure_read_class('names',1,dom)[0].textContent
+               , param: JSON.parse(ensure_read_class('param',1,dom)[0].textContent)
+               , dom: dom };
+};
+
+//// CREATE_SET ([menu],[integer]) dom
+var create_set = function (set,param) {
+        const p = document.createElement('span');
+        p.textContent = JSON.stringify(param);
+        p.className = 'param';
+        const names = document.createElement('span');
+        names.textContent = JSON.stringify(set.map(m=>m.name));
+        names.className = 'names';
+        const dom = document.createElement('div');
+        dom.className = 'set';
+        dom.appendChild(p);
+        dom.appendChild(names);
+        return dom;
+}
+
 /*
  * PRINT layer.
  *
@@ -1111,6 +1155,11 @@ var show = function (id) {
 //// PRINT (string,string) undefined
 var print = function (string,id) {
         ensure_read_id(id).textContent = string;
+};
+
+//// PUT (dom,string) undefined
+var put = function (dom,string) {
+        ensure_read_id(string).appendChild(dom);
 };
 
 /*
@@ -1142,6 +1191,8 @@ var update = function () {
         list.forEach((m, i) => m.dom.style.order = i);
         over.sort((a,b) => (a[1] < b[1]));
         over.forEach((cons,i) => cons[0].dom.style.order = i+list.length);
+        const efficient_set = read_efficient_set().sort((x,y)=>x.param[order]<y.param[order]);
+        efficient_set.forEach((s,i)=>s.dom.style.order = i);
         if (g_eaten.length === 0) {
                 hide('vomit');
                 hide('digest');
@@ -1231,8 +1282,13 @@ var efficient = function () {
                 for(let i = 1; i <= 3; i++) {
                         rec(i,sort_menu(matched,expected_exp/i),new Array(i),0)
                 };
+                const order = ensure_read_id('order').selectedIndex;
                 (0 < acc.length)
-                        ?print(result_set_string(acc,current_param) ,'efficient-set')
+                        ?acc
+                        .map(s=>[s,s.reduce((param,set)=>param.map((p,i)=>p+set.param[i])
+                                ,current_param)])
+                        .sort((m,n)=>m[1][order]<n[1][order])
+                        .forEach(c=>put(create_set(c[0],c[1]),'efficient-set'))
                         :((e => (0 < e.length)
                                 ?print(JSON.stringify(e), 'efficient-set')
                                 :print("[]",'efficient-set'))
