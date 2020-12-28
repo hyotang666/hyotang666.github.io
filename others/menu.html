@@ -1004,13 +1004,6 @@ var read_current_params = function () {
         return g_names.map(name => read_form_int(name));
 };
 
-//// CLASS Menu { name:string, param:[integer], dom:dom }
-var Menu = function (dom) {
-        this.name = ensure_read_class('name',1,dom)[0].textContent;
-        this.param = JSON.parse(ensure_read_class('param',1,dom)[0].textContent);
-        this.dom = dom;
-};
-
 //// read_menu () [menu]
 var read_menu = function () {
         const menu = document.getElementsByClassName('menu');
@@ -1044,21 +1037,45 @@ var read_efficient_set = function () {
  *
  * */
 
+//// CLASS Menu { name:string, param:[integer], dom:dom }
+var Menu = function (dom) {
+        this.name = ensure_read_class('name',1,dom)[0].textContent;
+        this.param = JSON.parse(ensure_read_class('param',1,dom)[0].textContent);
+        this.dom = dom;
+        this.add = dom.getElementsByTagName('input')[0].onclick;
+};
+
+// METHODS
+Menu.prototype = {
+        // NONSENSEP (integer) boolean
+        nonsensep: function (order) { return 0===this.param[order]; }
+
+        // EATABLEP ([integer], integer) boolean
+        , eatablep: function (current_params,next) {
+                return current_params.every((p,i) => 0 < next-p-this.param[i]);
+        }
+
+        // COUNT_DIGESTABLE ([integer],integer) integer
+        , count_digestable: function (current_params, next) {
+                return current_params
+                        .map((s,i) => next - s - this.param[i])
+                        .reduce((acc,s) => s<=0?1+acc:acc,0);
+        }
+
+        // SUM_PARAM () integer
+        , sum_param: function () {
+                return this.param.slice(0,8).reduce((x,y)=>x+y);
+        }
+
+        // TURN_TO_DIGEST (menu, integer) integer
+        , turn_to_digest: function (expected_exp) {
+                return Math.ceil(this.param[8]/expected_exp);
+        }
+};
+
 //// EATABLEP (menu, [integer], integer) boolean
 var eatablep = function (menu,current_params,next){
         return current_params.every((p,i) => 0 < next-p-menu.param[i]);
-};
-
-//// NONSENSEP (menu, integer) boolean
-var nonsensep = function (menu, order_index) {
-        return (0 === menu.param[order_index]);
-};
-
-//// COUNT_DIGESTABLE (dom, [integer], integer) integer
-var count_digestable = function (menu, current_params, next) {
-        return current_params
-                .map((s,i) => next - s - menu.param[i])
-                .reduce((acc,s) => s<=0?1+acc:acc,0);
 };
 
 //// DIFF (integer, [integer]) [integer]
@@ -1069,7 +1086,7 @@ var diff = function (next, current_params) {
 //// MATCH ([menu], [integer], integer) [menu]
 var match = function (menu,current_params,next) {
         let acc = []; // [menu]
-        menu.forEach(m => eatablep(m,current_params,next)?acc.push(m):null);
+        menu.forEach(m => m.eatablep(current_params,next)?acc.push(m):null);
         return acc;
 };
 
@@ -1085,19 +1102,9 @@ unique_set = function (a) {
                         ,[]);
 };
 
-//// SUM_PARAM (menu) integer
-var sum_param = function (menu) {
-        return menu.param.slice(0,8).reduce((x,y)=>x+y);
-};
-
-//// TURN_TO_DIGEST (menu, integer) integer
-var turn_to_digest = function (menu, expected_exp) {
-        return Math.ceil(menu.param[8]/expected_exp);
-};
-
 //// SORT_MENU ([menu],integer) [[integer,menu]]
 var sort_menu = function (menu,expected_exp) {
-        return menu.map(m=>[sum_param(m)/turn_to_digest(m,expected_exp),m])
+        return menu.map(m=>[m.sum_param()/m.turn_to_digest(expected_exp),m])
                 .sort((x,y)=>x[0]<y[0]);
 };
 
@@ -1131,7 +1138,7 @@ var create_set = function (set,param) {
         eat.type = 'button';
         eat.value = 'eat';
         eat.addEventListener("click", ()=>{
-                set.forEach(m=>m.dom.getElementsByTagName('input')[0].onclick());
+                set.forEach(m=>m.add());
         }, false);
         const dom = document.createElement('div');
         dom.className = 'set';
@@ -1182,14 +1189,14 @@ var update = function () {
         var over = []; // [[menu,integer]]
         const order = ensure_read_id('order').selectedIndex;
         menu.forEach(function(m){
-                if (eatablep(m, read_current_params(),read_form_int('next'))) {
+                if (m.eatablep(read_current_params(),read_form_int('next'))) {
                         list.push(m);
-                        if (nonsensep(m, order))
+                        if (m.nonsensep(order))
                                 m.dom.style.color = 'orange';
                         else
                                 m.dom.style.color = '';
                 } else {
-                        over.push([m,count_digestable(m, read_current_params(), read_form_int('next'))]);
+                        over.push([m,m.count_digestable(read_current_params(), read_form_int('next'))]);
                         m.dom.style.color = 'red';
                 }
         });
