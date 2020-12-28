@@ -1050,11 +1050,6 @@ Menu.prototype = {
         // NONSENSEP (integer) boolean
         nonsensep: function (order) { return 0===this.param[order]; }
 
-        // EATABLEP ([integer], integer) boolean
-        , eatablep: function (current_params,next) {
-                return current_params.every((p,i) => 0 < next-p-this.param[i]);
-        }
-
         // COUNT_DIGESTABLE ([integer],integer) integer
         , count_digestable: function (current_params, next) {
                 return current_params
@@ -1073,9 +1068,9 @@ Menu.prototype = {
         }
 };
 
-//// EATABLEP (menu, [integer], integer) boolean
-var eatablep = function (menu,current_params,next){
-        return current_params.every((p,i) => 0 < next-p-menu.param[i]);
+//// EATABLEP ([integer], [integer], integer) boolean
+var eatablep = function (menu_param,current_params,next){
+        return current_params.every((p,i) => 0 < next-p-menu_param[i]);
 };
 
 //// DIFF (integer, [integer]) [integer]
@@ -1086,7 +1081,7 @@ var diff = function (next, current_params) {
 //// MATCH ([menu], [integer], integer) [menu]
 var match = function (menu,current_params,next) {
         let acc = []; // [menu]
-        menu.forEach(m => m.eatablep(current_params,next)?acc.push(m):null);
+        menu.forEach(m => eatablep(m.param,current_params,next)?acc.push(m):null);
         return acc;
 };
 
@@ -1193,7 +1188,7 @@ var update = function () {
         read_efficient_set().sort((x,y)=>x.param[order]<y.param[order])
                 .forEach((s,i)=>s.dom.style.order = i);
         menu.forEach(function(m){
-                if (m.eatablep(current_param,next)) {
+                if (eatablep(m.param,current_param,next)) {
                         list.push(m);
                         if (m.nonsensep(order))
                                 m.dom.style.color = 'orange';
@@ -1276,20 +1271,26 @@ var efficient = function () {
                 }
         };
         let body = function (set,total) { // ([menu],integer)
-                if (eatablep(set.reduce((m,n)=>{return{param:m.param.map((p,i)=>p+n.param[i])};}),current_param,next)
+                if (
+                        eatablep(
+                                set.reduce(
+                                        (p,n)=>p.map((p,i)=>p+n.param[i])
+                                        ,[0,0,0,0,0,0,0,0]
+                                )
+                                ,current_param,next
+                        )
                         && !memo[set.map(m=>m.name).toString()]
-                )
-                        {
-                                memo[set.map(m=>m.name).toString()] = true;
-                                if (total<status)
-                                        return true;
-                                if (total===status)
-                                        acc.push(set);
-                                else {
-                                        status = total;
-                                        acc = [set];
-                                }
+                ) {
+                        memo[set.map(m=>m.name).toString()] = true;
+                        if (total<status)
+                                return true;
+                        if (total===status)
+                                acc.push(set);
+                        else {
+                                status = total;
+                                acc = [set];
                         }
+                }
                 return false;
         };
         print("NOTE: This may take some minutes.",'efficient-set');
