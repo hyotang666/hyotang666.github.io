@@ -1004,12 +1004,11 @@ var read_current_params = function () {
         return g_names.map(name => read_form_int(name));
 };
 
-//// DEFTYPE menu { name:string, param:[integer], dom:dom }
-//// make_menu (dom) menu
-var make_menu = function (dom) {
-        return { name: dom.getElementsByClassName('name')[0].textContent
-               , param: JSON.parse(dom.getElementsByClassName('param')[0].textContent)
-               , dom: dom };
+//// CLASS Menu { name:string, param:[integer], dom:dom }
+var Menu = function (dom) {
+        this.name = ensure_read_class('name',1,dom)[0].textContent;
+        this.param = JSON.parse(ensure_read_class('param',1,dom)[0].textContent);
+        this.dom = dom;
 };
 
 //// read_menu () [menu]
@@ -1017,14 +1016,14 @@ var read_menu = function () {
         const menu = document.getElementsByClassName('menu');
         let acc = []; // [menu]
         for(let i = 0; i < menu.length; i++) {
-                acc.push(make_menu(menu[i]));
+                acc.push(new Menu (menu[i]));
         };
         return acc;
 };
 
 //// read_nth_menu (integer) menu
 var read_nth_menu = function (index) {
-        return make_menu(document.getElementsByClassName('menu')[index]);
+        return new Menu(document.getElementsByClassName('menu')[index]);
 };
 
 //// READ_EFFICIENT_SET () [dom]
