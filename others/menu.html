@@ -1185,27 +1185,29 @@ var put = function (dom,string) {
 //// UPDATE () undefined
 var update = function () {
         const menu = read_menu();
+        const order = ensure_read_id('order').selectedIndex;
+        const current_param = read_current_params();
+        const next = read_form_int('next');
         var list = []; // [menu]
         var over = []; // [[menu,integer]]
-        const order = ensure_read_id('order').selectedIndex;
+        read_efficient_set().sort((x,y)=>x.param[order]<y.param[order])
+                .forEach((s,i)=>s.dom.style.order = i);
         menu.forEach(function(m){
-                if (m.eatablep(read_current_params(),read_form_int('next'))) {
+                if (m.eatablep(current_param,next)) {
                         list.push(m);
                         if (m.nonsensep(order))
                                 m.dom.style.color = 'orange';
                         else
                                 m.dom.style.color = '';
                 } else {
-                        over.push([m,m.count_digestable(read_current_params(), read_form_int('next'))]);
+                        over.push([m,m.count_digestable(current_param,next)]);
                         m.dom.style.color = 'red';
                 }
         });
-        list.sort((a,b) => a.param[order] < b.param[order]);
-        list.forEach((m, i) => m.dom.style.order = i);
-        over.sort((a,b) => (a[1] < b[1]));
-        over.forEach((cons,i) => cons[0].dom.style.order = i+list.length);
-        const efficient_set = read_efficient_set().sort((x,y)=>x.param[order]<y.param[order]);
-        efficient_set.forEach((s,i)=>s.dom.style.order = i);
+        list.sort((a,b) => a.param[order] < b.param[order])
+                .forEach((m, i) => m.dom.style.order = i);
+        over.sort((a,b) => (a[1] < b[1]))
+                .forEach((cons,i) => cons[0].dom.style.order = i+list.length);
         if (g_eaten.length === 0) {
                 hide('vomit');
                 hide('digest');
