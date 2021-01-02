@@ -1037,6 +1037,26 @@ var read_efficient_set = function () {
  *
  * */
 
+//// DOM (string,object/*,(or string object)*/) dom
+var dom = function (tag,attributes/*,children*/) {
+        const dom = document.createElement(tag);
+        if (attributes) {
+                for (let p in attributes) {
+                        if (p==='class')
+                                dom.className = attributes[p];
+                        else
+                                dom[p] = attributes[p];
+                }
+        }
+        for (let i=2; i<arguments.length; i++) {
+                if (typeof(arguments[i])==='string')
+                        dom.appendChild(document.createTextNode(arguments[i]));
+                else
+                        dom.appendChild(arguments[i]);
+        }
+        return dom;
+}
+
 //// CLASS Menu { name:string, param:[integer], dom:dom }
 var Menu = function (dom) {
         this.name = ensure_read_class('name',1,dom)[0].textContent;
@@ -1123,24 +1143,13 @@ var make_efficient_set = function (dom) {
 
 //// CREATE_SET ([menu],[integer]) dom
 var create_set = function (set,param) {
-        const p = document.createElement('span');
-        p.textContent = JSON.stringify(param);
-        p.className = 'param';
-        const names = document.createElement('span');
-        names.textContent = JSON.stringify(set.map(m=>m.name));
-        names.className = 'names';
-        const eat = document.createElement('input');
-        eat.type = 'button';
-        eat.value = 'eat';
-        eat.addEventListener("click", ()=>{
-                set.forEach(m=>m.add());
-        }, false);
-        const dom = document.createElement('div');
-        dom.className = 'set';
-        dom.appendChild(eat);
-        dom.appendChild(p);
-        dom.appendChild(names);
-        return dom;
+        return dom('div',{class:'set'}
+                ,dom('input',{type:'button',value:'eat',onclick:()=>{set.forEach(m=>m.add());}})
+                ,dom('span',{class:'param'}
+                        ,JSON.stringify(param))
+                ,dom('span',{class:'names'}
+                        ,JSON.stringify(set.map(m=>m.name)))
+        );
 }
 
 /*
