@@ -1,0 +1,105 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl4</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 4.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl3.html" >前回</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前回はバッファを抽象化しました。
+今回はシェーダーを抽象化します。</p>
+
+<h2>Shaders</h2>
+
+<p>OpenGLではシェーダー周りの処理が６段階あります。
+そのうちの３つにユーザーは手を入れられます。
+各々vertex-shader、geometry-shader、fragment-shaderです。</p>
+
+<p>vertexおよびfragmentシェーダーは必須（required）です。</p>
+
+<h2>GLSL</h2>
+
+<p>シェーダープログラムはそれ用のDSLであるGLSLで書く必要があります。</p>
+
+<p>ここでは簡便のため文字列で持つとします。</p>
+
+<h3><a href="https://github.com/cbaggers/varjo" >VARJO</a></h3>
+
+<p>S式でGLSLを書くコンパイラもあります。</p>
+
+<p>ここで採用しない理由は筆者がGLSLを把握できていないからです。
+何かしらエラーが起きたとき調べるヶ所は少ない方が良いとの判断です。</p>
+
+<p>将来的には導入するかもしれません。
+メモだけしておきます。</p>
+
+<h2>Workflow</h2>
+
+<p>シェーダーを作る一連の典型的な手順は以下になります。</p>
+
+<ol>
+<li>OpenGLにシェーダーの作成を依頼。</li>
+<li>シェーダーにGLSLソースコードを流し込む。</li>
+<li>シェーダーをコンパイル。</li>
+<li>OpenGLにプログラムの作成を依頼。</li>
+<li>プログラムに各シェーダーを順次アタッチ。</li>
+<li>プログラムをリンクさせる。</li>
+<li>シェーダーの削除を依頼。</li>
+<li>これから使うプログラムを指定。</li>
+<li>本体処理。</li>
+<li>プログラムの削除を依頼。</li>
+</ol>
+
+<p>シェーダー、プログラムともに削除が必要なのでやはりWITH系マクロの出番です。</p>
+
+<h2>WITH-PROG</h2>
+
+<p>ここでは必須の２シェーダーのみ使うものとします。
+<a href="https://ja.wikipedia.org/wiki/YAGNI" >YAGNI</a>の精神です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-prog</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">var vertex-shader fragment-shader</span>)</span> &amp;body body</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">vs <span class="paren5">(<span class="code">gensym <span class="string">"VERTEX-SHADER"</span></span>)</span></span>)</span> <span class="paren4">(<span class="code">fs <span class="paren5">(<span class="code">gensym <span class="string">"FRAGMENT-SHADER"</span></span>)</span></span>)</span></span>)</span>
+    `<span class="paren3">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,var <span class="paren6">(<span class="code">gl:create-program</span>)</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code"><i><span class="symbol">labels</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">s-compile <span class="paren1">(<span class="code">id source</span>)</span>
+                  <span class="paren1">(<span class="code">gl:shader-source id source</span>)</span>
+                  <span class="paren1">(<span class="code">gl:compile-shader id</span>)</span>
+                  <span class="paren1">(<span class="code">may-warn <span class="paren2">(<span class="code">gl:get-shader-info-log id</span>)</span></span>)</span>
+                  <span class="paren1">(<span class="code">gl:attach-shader ,var id</span>)</span></span>)</span>
+                <span class="paren6">(<span class="code">may-warn <span class="paren1">(<span class="code">log</span>)</span>
+                  <span class="paren1">(<span class="code">unless <span class="paren2">(<span class="code">equal <span class="string">""</span> log</span>)</span>
+                    <span class="paren2">(<span class="code">warn log</span>)</span></span>)</span></span>)</span></span>)</span>
+         <span class="paren5">(<span class="code"><i><span class="symbol">unwind-protect</span></i>
+             <span class="paren6">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">,vs <span class="paren3">(<span class="code">gl:create-shader <span class="keyword">:vertex-shader</span></span>)</span></span>)</span>
+                   <span class="paren2">(<span class="code">,fs <span class="paren3">(<span class="code">gl:create-shader <span class="keyword">:fragment-shader</span></span>)</span></span>)</span></span>)</span>
+               <span class="paren1">(<span class="code"><i><span class="symbol">unwind-protect</span></i>
+                   <span class="paren2">(<span class="code"><i><span class="symbol">progn</span></i>
+                    <span class="paren3">(<span class="code">s-compile ,vs ,vertex-shader</span>)</span>
+                    <span class="paren3">(<span class="code">s-compile ,fs ,fragment-shader</span>)</span>
+                    <span class="paren3">(<span class="code">gl:link-program ,var</span>)</span>
+                    <span class="paren3">(<span class="code">may-warn <span class="paren4">(<span class="code">gl:get-program-info-log ,var</span>)</span></span>)</span>
+                    <span class="paren3">(<span class="code">gl:use-program ,var</span>)</span></span>)</span>
+                 <span class="paren2">(<span class="code">gl:delete-shader ,fs</span>)</span>
+                 <span class="paren2">(<span class="code">gl:delete-shader ,vs</span>)</span></span>)</span>
+               ,@body</span>)</span>
+           <span class="paren6">(<span class="code">gl:delete-program ,var</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これまでのWITH系マクロと比べると規模が大きくなりますがそれでも基本構造は同じです。
+シェーダーの開放のために<code>UNWIND-PROTECT</code>がネストしている点と共通するコンパイル処理をローカル関数に抜き出している点が特徴です。</p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
