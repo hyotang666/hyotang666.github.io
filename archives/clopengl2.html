@@ -1,0 +1,99 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl2</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 2.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl1.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction</h2>
+
+<p>前章ではとりあえずのwindow表示まで行いました。
+今回は今後のための下準備としての抽象化を行います。</p>
+
+<h2>WITH-CLEAR</h2>
+
+<p>前回作った真っ黒なwindowは表示しっぱなしのwindowです。
+OpenGLでは毎フレームwindowをクリアします。
+手で書くのは馬鹿らしいのでこれもマクロでラップします。</p>
+
+<h3>BUFFER-BIT</h3>
+
+<p><code>GL:CLEAR</code>はクリアすべきバッファビットを受け取ります。
+cl-openglにドキュメントはないのでOpenGLの仕様を読みます。
+そんな面倒なことは自作のエンドユーザー（将来の自分含む）にはさせたくないのでドキュメントを兼ねる型を定義しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> buffer-bit <span class="paren2">(<span class="code"></span>)</span>
+  '<span class="paren2">(<span class="code">member <span class="keyword">:color-buffer-bit</span> <span class="keyword">:depth-buffer-bit</span> <span class="keyword">:stencil-buffer-bit</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>WITH-CLEAR</h3>
+
+<p>マクロ<code>WITH-CLEAR</code>は前回のマクロ<code>WITH-GL-VECTOR</code>と同様の薄いラッパでしかありません。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-clear</span></i>
+          <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">var-win <span class="paren4">(<span class="code">&amp;rest bufs</span>)</span> &amp;key <span class="paren4">(<span class="code">color ''<span class="paren5">(<span class="code">1.0 1.0 1.0 1.0</span>)</span></span>)</span></span>)</span> &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">progn</span></i>
+    <span class="paren3">(<span class="code">apply #'gl:clear-color ,color</span>)</span>
+    <span class="paren3">(<span class="code">gl:clear ,@<span class="paren4">(<span class="code">mapcar <span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren6">(<span class="code">buf</span>)</span> `<span class="paren6">(<span class="code"><i><span class="symbol">the</span></i> buffer-bit ,buf</span>)</span></span>)</span> bufs</span>)</span></span>)</span>
+    ,@body
+    <span class="paren3">(<span class="code">sdl2:gl-swap-window ,var-win</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>color</code>の引数にクォートが二重についてる点要注目。
+ここで埋め込みたいのはクォートされた式であって<code>(1.0 1.0 1.0 1.0)</code>というリストそのものではありません。</p>
+
+<p><code>GL:CLEAR</code>の引数には<a href="http://clhs.lisp.se/Body/s_the.htm" ><code>THE</code></a>特殊形式による型チェックを埋め込むことでコンパイラがユーザーに親切になります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">the</span></i> buffer-bit <span class="keyword">:hoge</span></span>)</span>
+
+debugger invoked on a SIMPLE-TYPE-ERROR in thread
+#&lt;THREAD "main thread" RUNNING {1001578103}&gt;:
+  Value of :HOGE in
+  <span class="paren1">(<span class="code"><i><span class="symbol">THE</span></i> BUFFER-BIT <span class="keyword">:HOGE</span></span>)</span>
+  is
+    :HOGE,
+  not a
+    <span class="paren1">(<span class="code">MEMBER <span class="keyword">:COLOR-BUFFER-BIT</span> <span class="keyword">:DEPTH-BUFFER-BIT</span> <span class="keyword">:STENCIL-BUFFER-BIT</span></span>)</span>. <span class="comment">; &lt;--- 嬉しい！
+</span>
+Type HELP for debugger help, or <span class="paren1">(<span class="code">SB-EXT:EXIT</span>)</span> to exit from SBCL.
+
+restarts <span class="paren1">(<span class="code">invokable by number or by possibly-abbreviated name</span>)</span>:
+  0: [ABORT] Exit debugger, returning to top level.</span></code></pre>
+
+<p>「オプションが間違っている」だけでは不親切で正しくはどういうオプションがあるのかまで表示してもらいたいものです。
+このちょっとした気遣いができてないライブラリに腹を立てることが多いので少なくとも自作のエンドユーザー（将来の自分含む）にはそんな思いをさせたくありません。</p>
+
+<h2>Second window</h2>
+
+<p>真っ白なwindowが表示されればokです。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> second-window <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren6">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+          <span class="paren6">(<span class="code"><span class="keyword">:quit</span> <span class="paren1">(<span class="code"></span>)</span>
+            t</span>)</span>
+          <span class="paren6">(<span class="code"><span class="keyword">:idle</span> <span class="paren1">(<span class="code"></span>)</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren2">(<span class="code">win <span class="paren3">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/second-window.png" alt="image of the window" /></p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
