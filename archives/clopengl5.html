@@ -1,0 +1,325 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl5</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 5.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl4.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前回はシェーダーを抽象化しました。
+今回はVertex Arrayを抽象化します。</p>
+
+<h2>Vertex array.</h2>
+
+<p>OpenGLは頂点（vertex）に関する情報を生の一次元配列で持ちます。</p>
+
+<p>例えば以下のような形です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">vertices #<span class="paren4">(<span class="code"><span class="comment">; x, y
+</span>                  -0.5 -0.5
+                  0.5 -0.5
+                  0.0 0.5</span>)</span></span>)</span></span>)</span>
+  ...</span>)</span></span></code></pre>
+
+<p>これらの配列をまるっとOpenGLに渡すのですが、OpenGLは配列の各要素がx,yの順に並んでいることを知りません。
+それは別途教えてあげる必要があります。</p>
+
+<p>またこれら頂点は一種類さえあれば良いというものではありません。
+アプリケーションにもよるでしょうが複数の設定が必要となるものです。
+そのたびにいちいちOpenGLに設定を教え直すのは手間なので簡単に設定を切り替えるための機能があります。
+名をVertex Array Objectと言います。</p>
+
+<h2>Workflow</h2>
+
+<p>典型的な手順は以下の通り。</p>
+
+<ol>
+<li>OpenGLにN個のVertex Array作成を依頼。</li>
+<li>ターゲットとなるVertex Arrayを一つ指定。</li>
+<li>設定を指定。</li>
+<li>本体処理。</li>
+<li>OpenGLに削除を依頼。</li>
+</ol>
+
+<p>リソースの削除が必要なので今回もWITH系マクロを作ります。</p>
+
+<h2>WITH-VERTEX-ARRAY</h2>
+
+<p>基本構造はこれまでとまったく同じです。
+何も難しい点はありません。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-vertex-array</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;rest bind*</span>)</span> &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> ,<span class="paren3">(<span class="code">mapcar <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">bind</span>)</span> `<span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">car bind</span>)</span> <span class="paren6">(<span class="code">gl:gen-vertex-array</span>)</span></span>)</span></span>)</span> bind*</span>)</span>
+     <span class="paren3">(<span class="code"><i><span class="symbol">unwind-protect</span></i>
+         <span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i>
+          ,@<span class="paren5">(<span class="code">mapcan
+              <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren1">(<span class="code">bind</span>)</span>
+                `<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">gl:bind-vertex-array ,<span class="paren3">(<span class="code">car bind</span>)</span></span>)</span> ,@<span class="paren2">(<span class="code">cdr bind</span>)</span></span>)</span></span>)</span>
+              bind*</span>)</span>
+          ,@body</span>)</span>
+       <span class="paren4">(<span class="code">gl:delete-vertex-arrays <span class="paren5">(<span class="code">list ,@<span class="paren6">(<span class="code">mapcar #'car bind*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>LINK-ATTRIBUTES</h2>
+
+<p>Lisperとして我慢ならない点が一つあります。
+それは頂点情報の定義が変わった時のことです。</p>
+
+<p>例えば頂点情報としてZ軸も扱うように変更するとしましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">vertices #<span class="paren4">(<span class="code"><span class="comment">; x, y, z
+</span>                  -0.5 -0.5 0.0
+                  0.5 -0.5 0.0
+                  0.0 0.5 0.0</span>)</span></span>)</span></span>)</span>
+  ...</span>)</span></span></code></pre>
+
+<p>するとそれをOpenGLに教えなくてはならないのです。</p>
+
+<p>Common Lispでは通常宣言的なプログラミングをします。
+XXXであると宣言したら後はそれに合わせていい具合になって欲しいのです。
+配列の構造（定義）を変えたあとそれをOpenGLに伝えなければならない不便さを例えて言うならテレビのチャンネルを8chに変えるためにはまずテレビ本体のボタンを操作して8chに変えるための信号を受け取れるようにしてしかる後にリモコンで8chを指定しなければならないような不便さです。
+この不便さには耐えられません。
+テレビ本体を操作せずともリモコンのボタンを押したら画面が切り替わって欲しいのです。
+これは贅沢な不満でもなんでもないはずです。</p>
+
+<p>しかしながらOpenGLがそれを要求するのは理解できます。
+なにより速度が求められる世界なのですから。</p>
+
+<p>ですがエンドユーザーであるプログラマがそれに従う必要性は皆無です。
+言語がそのための機能を提供してくれればいいのです。
+そしてCommon Lispはプログラム可能なプログラミング言語です。
+早速Common Lispをプログラムし言語機能を拡張しましょう。</p>
+
+<h3>VECTOR-CLASS</h3>
+
+<p>僕達が今欲しいのは構造体のように抽象化されていながらOpenGLからはただの配列に見えるものです。</p>
+
+<h4>Fail way with defstruct.</h4>
+
+<p>真っ先に思い浮かぶのは<a href="http://www.lispworks.com/documentation/lw70/CLHS/Body/m_defstr.htm" ><code>DEFSTRUCT</code></a>の<code>:TYPE</code>オプションです。</p>
+
+<p>Common Lispで構造体は<code>DEFSTRUCT</code>で定義します。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defstruct</span></i> pos x y</span>)</span> =&gt; POS</span></code></pre>
+
+<p>これで<code>x</code>,<code>y</code>というメンバー変数（Common Lispではスロットと呼ぶ）を持つ<code>POS</code>という構造体ができます。</p>
+
+<p>インスタンスを作るには自動的に作られる<code>MAKE-xxx</code>関数を呼びます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">make-pos <span class="keyword">:x</span> 0 <span class="keyword">:y</span> 1</span>)</span> =&gt; #S<span class="paren1">(<span class="code">POS <span class="keyword">:X</span> 0 <span class="keyword">:Y</span> 1</span>)</span></span></code></pre>
+
+<p>作られるオブジェクトはもちろん<code>pos</code>型です。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">type-of <span class="paren2">(<span class="code">make-pos</span>)</span></span>)</span> =&gt; POS</span></code></pre>
+
+<p>しかしながら<code>:TYPE</code>オプションを指定することで他の型にする事もできます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">defstruct</span></i> <span class="paren2">(<span class="code">pos <span class="paren3">(<span class="code"><span class="keyword">:type</span> vector</span>)</span></span>)</span> x y</span>)</span> =&gt; POS
+
+* <span class="paren1">(<span class="code">make-pos <span class="keyword">:x</span> 0 <span class="keyword">:y</span> 1</span>)</span> =&gt; #<span class="paren1">(<span class="code">0 1</span>)</span>
+
+* <span class="paren1">(<span class="code">type-of <span class="paren2">(<span class="code">make-pos</span>)</span></span>)</span> =&gt; VECTOR</span></code></pre>
+
+<p>上記例では型に<code>VECTOR</code>を指定しコンストラクタが<code>VECTOR</code>を作るようにしています。
+もちろん型は<code>VECTOR</code>になります。</p>
+
+<p>この機能を用いればプログラマからは構造体のように見えながらOpenGLからは配列に見えるコードを実現できそうです。</p>
+
+<p>しかしタイトルが示すようにこれはうまく行きません。</p>
+
+<p>というのも作られるインスタンスはただのVECTORなのでそれ以上の情報を持たないのです。</p>
+
+<p>構造体名からスロットの情報を取り出すのはどうでしょうか。
+これが通常の構造体なら可能なのですが<code>:TYPE</code>オプションを指定するとそれも叶いません。
+<code>:TYPE</code>オプションを指定された構造体はもはや構造体ではないので<code>FIND-CLASS</code>は失敗します。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">find-class 'pos</span>)</span> =&gt; ERROR</span></code></pre>
+
+<h4>MOP</h4>
+
+<p>構造体の<code>:TYPE</code>オプションがうまく行かなかったのはMOP（Meta-Object-Protocol）の文脈から外れてしまうからです。</p>
+
+<p><code>10</code>という値があるとします。
+その型は整数です。</p>
+
+<p>これをオブジェクト志向的に言い換えると<code>10</code>というインスタンスのクラスは整数であるとなります。
+では整数クラスというインスタンスのクラスは何でしょう？
+Common Lispではこれは<code>BUILT-IN-CLASS</code>になります。</p>
+
+<p>RUBYのファンならMatzが「クラスのクラスはクラス」という構造に感動したというエピソードを聞いたことがあるかもしれません。
+Common Lispではこの「クラスのクラス」のことを便宜的にメタクラスと呼び習わします。</p>
+
+<p>そしてメタクラスの実装にはデファクトスタンダード（仕様）が存在します。
+それをMOP（Meta Object Protocol）といいます。</p>
+
+<h4>VECTOR-CLASS</h4>
+
+<p>まずは僕達のメタクラスとなるべき<code>VECTOR-CLASS</code>を定義しましょう。
+それは<code>DEFCLASS</code>で定義できる通常のクラスです。
+<code>STANDARD-CLASS</code>を継承するのが特徴です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> vector-class <span class="paren2">(<span class="code">standard-class</span>)</span> <span class="paren2">(<span class="code"></span>)</span></span>)</span></span></code></pre>
+
+<p>次にこれをメタクラスにできるように許可をだします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> c2mop:validate-superclass <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">c vector-class</span>)</span> <span class="paren3">(<span class="code">s standard-class</span>)</span></span>)</span> t</span>)</span></span></code></pre>
+
+<p>次にコンストラクタの共通インターフェイスである<code>MAKE-INSTANCE</code>を定義します。
+特徴は<code>:AROUND</code>メソッドを定義し<code>CALL-NEXT-METHOD</code>を呼ばないことです。
+これにより<code>MAKE-INSTANCE</code>呼び出しはクラスオブジェクトのインスタンスを作ることなく配列を返すようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> class-list <span class="paren2">(<span class="code">class</span>)</span>
+  <span class="string">"Return class list specified to abstract oder, superclasses are reverse order."</span>
+  <span class="paren2">(<span class="code">uiop:while-collecting <span class="paren3">(<span class="code">acc</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">labels</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">rec <span class="paren6">(<span class="code">c</span>)</span>
+               <span class="paren6">(<span class="code">unless <span class="paren1">(<span class="code">eq 'standard-object <span class="paren2">(<span class="code">class-name c</span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">acc c</span>)</span>
+                 <span class="paren1">(<span class="code">mapc #'rec <span class="paren2">(<span class="code">reverse <span class="paren3">(<span class="code">c2mop:class-direct-superclasses c</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">rec class</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> class-initargs <span class="paren2">(<span class="code">class</span>)</span>
+  <span class="paren2">(<span class="code">uiop:while-collecting <span class="paren3">(<span class="code">acc</span>)</span>
+    <span class="paren3">(<span class="code">dolist <span class="paren4">(<span class="code">c <span class="paren5">(<span class="code">nreverse <span class="paren6">(<span class="code">class-list class</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">dolist <span class="paren5">(<span class="code">s <span class="paren6">(<span class="code">c2mop:class-direct-slots c</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">acc <span class="paren6">(<span class="code">car <span class="paren1">(<span class="code">c2mop:slot-definition-initargs s</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> make-instance <span class="keyword">:around</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">c vector-class</span>)</span> &amp;rest args</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">values
+         <span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> initarg <span class="keyword">:in</span> <span class="paren6">(<span class="code">class-initargs c</span>)</span>
+               <span class="keyword">:collect</span> <span class="paren6">(<span class="code">or <span class="paren1">(<span class="code">getf args initarg</span>)</span>
+                            <span class="paren1">(<span class="code">error <span class="string">"~S is required."</span> initarg</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">make-array <span class="paren4">(<span class="code">length values</span>)</span>
+                <span class="keyword">:initial-contents</span> values
+                <span class="keyword">:element-type</span> 'single-float</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>VECTOR-CLASS</code>をメタクラスに持つクラスは以下のように定義します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> xy <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">%x <span class="keyword">:initarg</span> <span class="keyword">:x</span> <span class="keyword">:type</span> single-float</span>)</span> <span class="paren3">(<span class="code">%y <span class="keyword">:initarg</span> <span class="keyword">:y</span> <span class="keyword">:type</span> single-float</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> vector-class</span>)</span></span>)</span></span></code></pre>
+
+<p>この<code>XY</code>クラスオブジェクトを作ろうとすると配列が作られます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">make-instance 'xy <span class="keyword">:x</span> 0.0 <span class="keyword">:y</span> 1.0</span>)</span> =&gt; #<span class="paren1">(<span class="code">0.0 1.0</span>)</span></span></code></pre>
+
+<p><code>VECTOR-CLASS</code>の<code>MAKE-INSTANCE</code>はプライマリメソッドを呼び出していないだけなのでクラスの設計図はLispに残ります。
+すなわち<code>FIND-CLASS</code>は成功します。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">find-class 'xy</span>)</span> =&gt; #&lt;VECTOR-CLASS XY&gt;</span></code></pre>
+
+<p>設計図が手に入ればそこからスロット情報を取り出すのは簡単です。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">c2mop:class-slots <span class="paren2">(<span class="code">find-class 'xy</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">#&lt;SB-MOP:STANDARD-EFFECTIVE-SLOT-DEFINITION %X&gt;
+ #&lt;SB-MOP:STANDARD-EFFECTIVE-SLOT-DEFINITION %Y&gt;</span>)</span></span></code></pre>
+
+<h3>Implementation.</h3>
+
+<p>ではクラス名とプログラムを受け取りOpenGLに属性情報を伝える関数を定義しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> link-attributes <span class="paren2">(<span class="code">class program</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">rec <span class="paren5">(<span class="code">class-list total-length funs</span>)</span>
+             <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren6">(<span class="code">endp class-list</span>)</span>
+                 <span class="paren6">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">total <span class="paren3">(<span class="code">apply #'+ total-length</span>)</span></span>)</span></span>)</span>
+                   <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> f <span class="keyword">:in</span> funs
+                         <span class="keyword">:for</span> l <span class="keyword">:in</span> total-length
+                         <span class="keyword">:do</span> <span class="paren2">(<span class="code">funcall f total l offset</span>)</span>
+                         <span class="keyword">:sum</span> l <span class="keyword">:into</span> offset</span>)</span></span>)</span>
+                 <span class="paren6">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">slots
+                        <span class="paren3">(<span class="code">length <span class="paren4">(<span class="code">c2mop:class-direct-slots <span class="paren5">(<span class="code">car class-list</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                   <span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren2">(<span class="code">zerop slots</span>)</span>
+                       <span class="paren2">(<span class="code">rec <span class="paren3">(<span class="code">cdr class-list</span>)</span> total-length funs</span>)</span>
+                       <span class="paren2">(<span class="code">rec <span class="paren3">(<span class="code">cdr class-list</span>)</span>
+                            <span class="paren3">(<span class="code">cons <span class="paren4">(<span class="code"><i><span class="symbol">the</span></i> <span class="paren5">(<span class="code">integer 1 4</span>)</span> slots</span>)</span> total-length</span>)</span>
+                            <span class="paren3">(<span class="code">cons <span class="paren4">(<span class="code">processer <span class="paren5">(<span class="code">car class-list</span>)</span></span>)</span> funs</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+           <span class="paren4">(<span class="code">processer <span class="paren5">(<span class="code">class</span>)</span>
+             <span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren6">(<span class="code">total-length length offset</span>)</span>
+               <span class="paren6">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">location
+                       <span class="paren3">(<span class="code">gl:get-attrib-location program
+                                               <span class="paren4">(<span class="code">change-case:camel-case
+                                                 <span class="paren5">(<span class="code">symbol-name
+                                                   <span class="paren6">(<span class="code">class-name class</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                      <span class="paren2">(<span class="code">slots
+                       <span class="paren3">(<span class="code">c2mop:class-direct-slots
+                         <span class="paren4">(<span class="code">c2mop:ensure-finalized class</span>)</span></span>)</span></span>)</span>
+                      <span class="paren2">(<span class="code">type
+                       <span class="paren3">(<span class="code">ecase <span class="paren4">(<span class="code">c2mop:slot-definition-type <span class="paren5">(<span class="code">car slots</span>)</span></span>)</span>
+                         <span class="paren4">(<span class="code">single-float <span class="keyword">:float</span></span>)</span></span>)</span></span>)</span>
+                      <span class="paren2">(<span class="code">size <span class="paren3">(<span class="code">cffi:foreign-type-size type</span>)</span></span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">when <span class="paren2">(<span class="code">minusp location</span>)</span>
+                   <span class="paren2">(<span class="code">error <span class="string">"Variable ~S is not active in program ~S"</span>
+                          <span class="paren3">(<span class="code">change-case:camel-case
+                            <span class="paren4">(<span class="code">symbol-name <span class="paren5">(<span class="code">class-name class</span>)</span></span>)</span></span>)</span>
+                          program</span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">gl:vertex-attrib-pointer location length type nil <span class="comment">; As
+</span>                                                                    <span class="comment">; normalized-p
+</span>                                           <span class="paren2">(<span class="code">* total-length size</span>)</span>
+                                           <span class="paren2">(<span class="code">* offset size</span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">gl:enable-vertex-attrib-array location</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">class-list <span class="paren5">(<span class="code">find-class class</span>)</span></span>)</span> nil nil</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>ライブラリ<a href="https://github.com/rudolfochrist/cl-change-case" >change-case</a>を用いてキャメルケースに変換している点要注意。</p>
+
+<h2>Hello-triangle</h2>
+
+<p>これでようやっと最初の三角形描画が可能となります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*triangle*</span>
+  <span class="paren2">(<span class="code">concatenate '<span class="paren3">(<span class="code">array single-float <span class="paren4">(<span class="code">*</span>)</span></span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'xy <span class="keyword">:x</span> 0.0 <span class="keyword">:y</span> 0.5</span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'xy <span class="keyword">:x</span> 0.5 <span class="keyword">:y</span> -0.5</span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'xy <span class="keyword">:x</span> -0.5 <span class="keyword">:y</span> -0.5</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*vertex-shader*</span>
+  <span class="string">"#version 330 core
+  in vec2 xy;
+  void main () {
+    gl_Position = vec4(xy, 0.0, 1.0);
+  }"</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*fragment-shader*</span>
+  <span class="string">"#version 330 core
+  out vec4 outColor;
+  void main () {
+    outColor = vec4(1.0, 1.0, 1.0, 1.0);
+  }"</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> hello-triangle <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-gl-vector</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">vector <span class="special">*triangle*</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">with-buffer</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">buf vector</span>)</span></span>)</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">with-prog</span></i> <span class="paren2">(<span class="code">prog <span class="special">*vertex-shader*</span> <span class="special">*fragment-shader*</span></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">with-vertex-array</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">vao <span class="paren5">(<span class="code">link-attributes 'xy prog</span>)</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren4">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+                  <span class="paren4">(<span class="code"><span class="keyword">:quit</span> <span class="paren5">(<span class="code"></span>)</span>
+                    t</span>)</span>
+                  <span class="paren4">(<span class="code"><span class="keyword">:idle</span> <span class="paren5">(<span class="code"></span>)</span>
+                    <span class="paren5">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren6">(<span class="code">win <span class="paren1">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span>
+                                     <span class="keyword">:color</span> '<span class="paren1">(<span class="code">0.0 0.0 0.0 1.0</span>)</span></span>)</span>
+                      <span class="paren6">(<span class="code">gl:draw-arrays <span class="keyword">:triangles</span> 0 3</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/hello-triangle.png" alt="image of first triangle" /></p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
