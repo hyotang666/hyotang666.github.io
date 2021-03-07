@@ -1,0 +1,112 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl3</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 3</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl2.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前回ではwindowが毎フレーム更新されるようになりました。
+本章からOpenGLに描画を依頼するための土台を把握していきます。</p>
+
+<h2>Vertex Buffer Object.</h2>
+
+<p>OpenGLの新作法では頂点（vertex）の情報はOpenGL側のバッファに格納して扱います。
+これによりデータ送信という重い作業を一度で済ませてしまおうという魂胆です。</p>
+
+<p>典型的な作業順は以下の通りとなります。</p>
+
+<ol>
+<li>OpenGLにN個のバッファの作成を依頼。</li>
+<li>作られたバッファの中からターゲットとなるバッファを一つ指定。</li>
+<li>指定したバッファにデータを送信。</li>
+<li>本体処理。</li>
+<li>バッファの削除をOpenGLに依頼。</li>
+</ol>
+
+<p>Common Lispには<code>PACKAGE</code>という名前空間システムがあります。
+複数ある名前空間のうち現在有効な名前空間はプログラムの任意の時点で常にひとつです。
+その現在有効な名前空間をカレントパッケージと呼びます。
+カレントパッケージは変数<code>*PACKAGE*</code>に束縛されています。</p>
+
+<p>これと同様にOpenGLでは複数のバッファを管理できますが現在有効なバッファは常にひとつです。
+慣れ親しんだLispの文脈に従いこれをカレントバッファと呼ぶことにします（OpenGLの文脈で特別な呼称は存在しないようです（要出典））。
+Common Lispでパッケージの切り替えに<code>IN-PACKAGE</code>を使うようにOpenGLでバッファの切り替えは<code>GL:BIND-BUFFER</code>で行います。</p>
+
+<p>作ったバッファは適切に削除しなければなりません。
+ということはWITH系マクロの出番です。</p>
+
+<p>ここでは確保・開放のみならず初期化までを担わせます。</p>
+
+<h2>WITH-BUFFER</h2>
+
+<h3>BUFFER-TARGET</h3>
+
+<p>OpenGLでは比較的に時間のかかってしまうCPUとのやり取りを削減するためにバッファはまとめて作成します。
+バッファには様々な用途がありますが用途の指定は後から行います。</p>
+
+<p>どういう用途があるかはOpenGLの仕様を読みます。
+前回同様ここではドキュメントを兼ねた型を定義します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> buffer-target <span class="paren2">(<span class="code"></span>)</span>
+  '<span class="paren2">(<span class="code">member <span class="keyword">:array-buffer</span> <span class="keyword">:element-array-buffer</span>
+           <span class="keyword">:copy-read-buffer</span> <span class="keyword">:copy-write-buffer</span>
+           <span class="keyword">:pixel-unpack-buffer</span> <span class="keyword">:pixel-pack-buffer</span>
+           <span class="keyword">:query-buffer</span> <span class="keyword">:texture-buffer</span>
+           <span class="keyword">:transform-feedback-buffer</span> <span class="keyword">:uniform-buffer</span>
+           <span class="keyword">:draw-indirect-buffer</span> <span class="keyword">:atomic-counter-buffer</span>
+           <span class="keyword">:dispatch-indirect-buffer</span> <span class="keyword">:shader-storage-buffer</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>BUFFER-USAGE</h3>
+
+<p>OpenGLに送信したデータをどのように使うのかについても指定が必要となります。</p>
+
+<p>オプションについてはOpenGLの仕様を読みます。
+上同様これも型を定義します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> buffer-usage <span class="paren2">(<span class="code"></span>)</span> '<span class="paren2">(<span class="code">member <span class="keyword">:static-draw</span> <span class="keyword">:stream-draw</span> <span class="keyword">:dynamic-draw</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>WITH-BUFFER</h3>
+
+<p>マクロ<code>WITH-BUFFER</code>もこれまでの自作WITH系マクロ同様薄いラッパです。
+これまでと違うのは初期化処理も担う点です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-buffer</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;rest bind*</span>)</span> &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code">destructuring-bind
+       ,<span class="paren3">(<span class="code">mapcar #'car bind*</span>)</span>
+       <span class="paren3">(<span class="code">gl:gen-buffers ,<span class="paren4">(<span class="code">length bind*</span>)</span></span>)</span>
+     <span class="paren3">(<span class="code"><i><span class="symbol">unwind-protect</span></i>
+         <span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i>
+          ,@<span class="paren5">(<span class="code">mapcan
+              <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren1">(<span class="code">bind</span>)</span>
+                <span class="paren1">(<span class="code">destructuring-bind
+                    <span class="paren2">(<span class="code">var array
+                     &amp;key <span class="paren3">(<span class="code">target <span class="keyword">:array-buffer</span></span>)</span> <span class="paren3">(<span class="code">usage <span class="keyword">:static-draw</span></span>)</span></span>)</span>
+                    bind
+                  `<span class="paren2">(<span class="code"><span class="paren3">(<span class="code">gl:bind-buffer <span class="paren4">(<span class="code"><i><span class="symbol">the</span></i> buffer-target ,target</span>)</span> ,var</span>)</span>
+                    <span class="paren3">(<span class="code">gl:buffer-data <span class="paren4">(<span class="code"><i><span class="symbol">the</span></i> buffer-target ,target</span>)</span>
+                                    <span class="paren4">(<span class="code"><i><span class="symbol">the</span></i> buffer-usage ,usage</span>)</span> ,array</span>)</span></span>)</span></span>)</span></span>)</span>
+              bind*</span>)</span>
+          ,@body</span>)</span>
+       <span class="paren4">(<span class="code">gl:delete-buffers <span class="paren5">(<span class="code">list ,@<span class="paren6">(<span class="code">mapcar #'car bind*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>中程にある<code>MAPCAN</code>が初期化処理を埋め込みます。
+それを除けばこれまでのWITH系マクロと構造は同じです。</p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
