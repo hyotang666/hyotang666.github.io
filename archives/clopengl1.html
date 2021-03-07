@@ -1,0 +1,236 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl1</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 1.</h1>
+
+<h2>Metanotes.</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>OpenGL周りに興味のあるCLer。</li>
+<li>Common Lispに興味のあるOpenGL経験者。</li>
+</ul>
+
+<p>CLerには筆者が得たOpenGL、cl-opengl周りの知識を、非CLerにはCommon Lisp固有（？）の抽象化技法を解説していきます。</p>
+
+<h3>何でないか</h3>
+
+<ul>
+<li>Common Lisp開発環境構築については触れません。</li>
+</ul>
+
+<h2>Introduction.</h2>
+
+<p>Common LispでOpenGLを使いたくてあれこれ調べてみたものの古い情報しかなくて困ったので得た知見を書き残しておきます。</p>
+
+<p>OpenGL全ての機能を網羅する気はなく、簡単な2Dゲームを作る土台を把握できればそれでヨシとします。</p>
+
+<p>筆者自身はOpenGL周りの知識は皆無です。
+OpenGLのtutorialsをCommon Lispに移植しながらOpenGLについて学び必要なライブラリを探しなければ自作していきます。</p>
+
+<p>本章はエコシステム周りが話題の中心となります。</p>
+
+<h2>About OpenGL.</h2>
+
+<p>OpenGLは仕様であって実装ではありません。
+Common Lispが仕様であって実装でないのと同じです。</p>
+
+<p>この仕様は<a href="https://ja.wikipedia.org/wiki/OpenGL#%E6%AD%B4%E5%8F%B2" >2006年に標準化団体に移行したようです</a>。
+その結果（？）2006年ころに第一次OpenGLブームが起きたようで（要出典）書籍やライブラリもこの頃に出版・開発開始が多いみたいです（感想・推測）。</p>
+
+<p>OpenGL自体の仕様策定は活発なようで<a href="https://learnopengl.com/book/book_pdf.pdf" >第一版が2020年の書籍も出ています</a>。</p>
+
+<h2>Common Lisp eco-systems about opengl.</h2>
+
+<p>Common LispのOpenGLに関するプロダクトは2015年ころのコミットが2021年現在最新コミットであるものが多く2015年ころに良く言えば「枯れた」悪く言えば「飽きられた」ニュートラルにとらえれば「開発者にとって欲しい機能は実装された」とみなせそうです。</p>
+
+<p>ですが前節で記した通り現在でもOpenGLの開発は活発でOpenGLでのワークフローも刷新されていますがCommon Lisp界隈のOpenGLに関する話題は新しいもので出てきてません。</p>
+
+<p>ネットで探してでてくるtutorialsは筆者が探した範囲では2021年現在非推奨の古い作法ばかりでした。
+本シリーズを書くきっかけもCommon LispでOpenGL最新流儀の作法を自身で構築する必要に迫られたためです。</p>
+
+<h3>FFI of oepngl.</h3>
+
+<p><a href="https://github.com/3b/cl-opengl" >cl-opengl</a>一択です。
+<a href="https://github.com/lispbuilder/lispbuilder" >lisp-builder</a>もOpenGLへのバインディングを持ちますが非推奨で「cl-openglを使え」とREADMEにあります。</p>
+
+<h3>Windowing support.</h3>
+
+<p>OpenGLはGPUに依頼してアレコレしてもらうためのものでウィンドウやキーボード入力のサポートは埒外です。
+本節ではそのためのライブラリを列挙します。</p>
+
+<h4><a href="https://github.com/lispgames/cl-sdl2" >cl-sdl2</a></h4>
+
+<p>本シリーズではこれを採用します。
+理由は筆者がすでに慣れているからぐらいのものです。</p>
+
+<h4><a href="https://github.com/3b/cl-opengl/tree/master/glut" >cl-glut</a></h4>
+
+<p>cl-openglにはglutへのバインディングも付いてきます。
+cl-glutを不採用とした理由はその設計と筆者の好みによるものです。</p>
+
+<p>cl-glutはCLOSで固められた設計をしております。</p>
+
+<p>筆者はcleanupコードをWITH系マクロでラップしたいというお気持ちがあります。
+（WITH系マクロについては後述します。）</p>
+
+<p>上記二点が両立できないためcl-glutは不採用としました。</p>
+
+<h4><a href="https://github.com/AlexCharlton/cl-glfw3" >cl-glfw3</a></h4>
+
+<p>対抗馬はこれです。
+不採用とした理由は「よく知らないから」くらいのものです。
+上に記したpdfではglfwを採用しているので事と次第によっては本シリーズ途中に乗り換えるやもしれませぬ。</p>
+
+<p>ここに記す理由は「一応存在は知ってるから」くらいのものです。
+メモです。</p>
+
+<h4>lisp-builder</h4>
+
+<p>バッテリーインクルーデッドという思想についての筆者のお気持ちは好悪半々です。
+「便利！好き！」というお気持ちと「余計なものまでつけんじゃねぇよ」というお気持ちです。</p>
+
+<p>不採用の理由はこの度は後者が勝ったためです。
+後者が勝った理由は筆者がOpenGL周りの知識が皆無で何が必要になるか把握できておらず小さく始めたかったからです。</p>
+
+<h2>Framework of my own.</h2>
+
+<p>OpenGLの最新作法に則ったフレームワークはないっぽいので<a href="https://github.com/hyotang666/fude-gl" >自作します。</a></p>
+
+<p>「筆」からとってFundamental Utility Definitions Especially for openGLと適当にでっちあげました。</p>
+
+<p>本シリーズはfude-glの開発記録でもあります。</p>
+
+<h2>First window.</h2>
+
+<p>とりあえずwindowの表示をしてみましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> first-window <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren6">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+          <span class="paren6">(<span class="code"><span class="keyword">:quit</span> <span class="paren1">(<span class="code"></span>)</span>
+            t</span>)</span>
+          <span class="paren6">(<span class="code"><span class="keyword">:idle</span> <span class="paren1">(<span class="code"></span>)</span>
+            <span class="paren1">(<span class="code">sdl2:gl-swap-window win</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/first-window.png" alt="image of first-window" /></p>
+
+<h2>WITH type macros.</h2>
+
+<p>OpenGLはGPUとやりとりするためのインターフェイスです。
+別の言葉で表すとそれはLisp処理系の埒外です。
+データの送受信は配列で行いますがそのためにLispの配列は使えません。
+Common Lispの配列は生の配列ではなくLisp Objectとしての配列だからです。
+cl-openglはOpenGLに渡すための配列を作る関数<code>GL:ALLOC-GL-ARRAY</code>を提供しています。</p>
+
+<p>繰り返しになりますが<code>GL:ALLOC-GL-ARRAY</code>はLisp処理系の埒外に配列を作ります。
+別の言葉で表すとガベッジコレクタに回収されません。
+プログラマの責任において<code>GL:FREE-GL-ARRAY</code>しなければなりません。</p>
+
+<p>このような場合C++ならクラスを作りデストラクタでfreeする設計にするかもしれません。
+Common LispではWITH系マクロを作ります。
+その代表は<a href="http://www.lispworks.com/documentation/HyperSpec/Body/m_w_open.htm" ><code>WITH-OPEN-FILE</code></a>です。</p>
+
+<p>WITH-OPEN-FILEの展開系（@sbcl）は以下のようなものとなります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">macroexpand-1 '<span class="paren2">(<span class="code"><i><span class="symbol">with-open-file</span></i> <span class="paren3">(<span class="code">s <span class="string">"~/path/to/file"</span></span>)</span>
+                    <i><span class="symbol">the</span></i> body</span>)</span></span>)</span>
+
+1 <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">s <span class="paren4">(<span class="code">open <span class="string">"~/path/to/file"</span></span>)</span></span>)</span> <span class="paren3">(<span class="code"><span class="keyword">#:g22647</span> t</span>)</span></span>)</span>
+2   <span class="paren2">(<span class="code"><i><span class="symbol">unwind-protect</span></i> <span class="paren3">(<span class="code"><i><span class="symbol">multiple-value-prog1</span></i> <span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i> <i><span class="symbol">the</span></i> body</span>)</span> <span class="paren4">(<span class="code"><i><span class="symbol">setq</span></i> <span class="keyword">#:g22647</span> nil</span>)</span></span>)</span>
+3     <span class="paren3">(<span class="code">when s
+4       <span class="paren4">(<span class="code">close s <span class="keyword">:abort</span> <span class="keyword">#:g22647</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<ol>
+<li>リソースを確保し変数に束縛。</li>
+<li><a href="http://www.lispworks.com/documentation/HyperSpec/Body/s_unwind.htm" ><code>UNWIND-PROTECT</code></a>でラップし本体を実行。</li>
+<li>リソースを開放。</li>
+</ol>
+
+<p><code>UNWIND-PROTECT</code>は本体実行中にエラーが起きてもcleanupが実行されるのを保証する特殊形式です。</p>
+
+<p>リソースの確保・開放を行う<code>OPEN</code>・<code>CLOSE</code>を直接使用せずマクロを通して間接的に使用することでリーク（開放忘れ）を防ぎます。
+また<code>UNWIND-PROTECT</code>で包んであるのでエラーが起きても開放は確実に行われます。</p>
+
+<h2>WITH-GL-VECTOR</h2>
+
+<p>小手調べとして<code>WITH-GL-VECTOR</code>マクロを作りましょう。</p>
+
+<h3>FOREIGN-TYPE</h3>
+
+<p>Common Lispの型をFFI側が必要とする型名に変換する必要があります。
+気をつけなければならない点としてCFFIが欲しい名前とCL-OPENGLが欲しい名前とに違いがある点が挙げられます（一敗）。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> foreign-type <span class="paren2">(<span class="code">cl-type &amp;key cffi</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">cond</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">and cffi <span class="paren5">(<span class="code">subtypep cl-type 'single-float</span>)</span></span>)</span> <span class="keyword">:float</span></span>)</span>
+        <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">and cffi <span class="paren5">(<span class="code">subtypep cl-type 'double-float</span>)</span></span>)</span> <span class="keyword">:double</span></span>)</span>
+        <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">subtypep cl-type 'float</span>)</span> <span class="keyword">:float</span></span>)</span>
+        <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">subtypep cl-type '<span class="paren5">(<span class="code">unsigned-byte 8</span>)</span></span>)</span>
+         <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i> cffi
+             <span class="keyword">:unsigned-char</span>
+             <span class="keyword">:unsigned-byte</span></span>)</span></span>)</span>
+        <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">subtypep cl-type '<span class="paren5">(<span class="code">signed-byte 8</span>)</span></span>)</span>
+         <span class="paren4">(<span class="code"><i><span class="symbol">if</span></i> cffi
+             <span class="keyword">:char</span>
+             <span class="keyword">:byte</span></span>)</span></span>)</span>
+        <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">subtypep cl-type '<span class="paren5">(<span class="code">unsigned-byte 16</span>)</span></span>)</span> <span class="keyword">:unsigned-short</span></span>)</span>
+        <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">subtypep cl-type '<span class="paren5">(<span class="code">signed-byte 16</span>)</span></span>)</span> <span class="keyword">:short</span></span>)</span>
+        <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">subtypep cl-type '<span class="paren5">(<span class="code">unsigned-byte 32</span>)</span></span>)</span> <span class="keyword">:unsigned-int</span></span>)</span>
+        <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">subtypep cl-type '<span class="paren5">(<span class="code">signed-byte 32</span>)</span></span>)</span> <span class="keyword">:int</span></span>)</span>
+        <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">and cffi <span class="paren5">(<span class="code">subtypep cl-type '<span class="paren6">(<span class="code">unsigned-byte 64</span>)</span></span>)</span></span>)</span> <span class="keyword">:unsigned-long</span></span>)</span>
+        <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">and cffi <span class="paren5">(<span class="code">subtypep cl-type '<span class="paren6">(<span class="code">signed-byte 64</span>)</span></span>)</span></span>)</span> <span class="keyword">:long</span></span>)</span>
+        <span class="paren3">(<span class="code">t <span class="paren4">(<span class="code">error <span class="string">"Not supported type. ~S"</span> cl-type</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>MAKE-GL-VECTOR</h3>
+
+<p>Common Lispにおいて配列（ARRAY）は多次元をも含みます。
+しかしながら<code>GL:ALLOC-GL-ARRAY</code>は一次元配列のみを扱います。
+Common Lispにおいて一次元配列には<code>VECTOR</code>という特別の呼称を用いるのが常です。
+（ARRAYと呼ぶと多次元になりうることを暗に示唆する。）</p>
+
+<p>また<code>GL:ALLOC-GL-ARRAY</code>は中身のない配列を返します。
+利便性のためにLispの<code>VECTOR</code>を渡すとその中身が代入されたGL配列が返される薄いヘルパを定義します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> make-gl-vector <span class="paren2">(<span class="code">initial-contents</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">length <span class="paren5">(<span class="code">length initial-contents</span>)</span></span>)</span>
+         <span class="paren4">(<span class="code">a
+          <span class="paren5">(<span class="code">gl:alloc-gl-array
+            <span class="paren6">(<span class="code">foreign-type <span class="paren1">(<span class="code">array-element-type initial-contents</span>)</span> <span class="keyword">:cffi</span> t</span>)</span>
+            length</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">dotimes <span class="paren4">(<span class="code">i length a</span>)</span> <span class="paren4">(<span class="code">setf <span class="paren5">(<span class="code">gl:glaref a i</span>)</span> <span class="paren5">(<span class="code">aref initial-contents i</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>WETH-GL-VECTOR</h3>
+
+<p>マクロ自体は大変薄いラッパとなります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-gl-array</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;rest bind*</span>)</span> &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> ,<span class="paren3">(<span class="code">mapcar
+           <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">bind</span>)</span>
+             <span class="paren5">(<span class="code">check-type bind <span class="paren6">(<span class="code">cons symbol <span class="paren1">(<span class="code">cons t null</span>)</span></span>)</span></span>)</span>
+             <span class="paren5">(<span class="code">destructuring-bind
+                 <span class="paren6">(<span class="code">var vector</span>)</span>
+                 bind
+               `<span class="paren6">(<span class="code">,var <span class="paren1">(<span class="code">make-gl-array ,vector</span>)</span></span>)</span></span>)</span></span>)</span>
+           bind*</span>)</span>
+     <span class="paren3">(<span class="code"><i><span class="symbol">unwind-protect</span></i> <span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i> ,@body</span>)</span>
+       ,@<span class="paren4">(<span class="code">mapcar <span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren6">(<span class="code">bind</span>)</span> `<span class="paren6">(<span class="code">gl:free-gl-array ,<span class="paren1">(<span class="code">car bind</span>)</span></span>)</span></span>)</span> bind*</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>

@@ -962,21 +962,23 @@
  * Tiny helpers.
  */
 
-//// ensure_read_id (string) dom
-var ensure_read_id = function (id) {
+//// ensure_read_id (string,dom) dom
+var ensure_read_id = function (id,root) {
+        if (!root) root = document;
         const dom = document.getElementById(id);
         if (dom === null)
                 throw new Error('Missing DOM id ' + id);
         return dom;
 };
 
-//// ensure_read_class (string,integer) dom
+//// ensure_read_class (string,integer,dom) dom
 var ensure_read_class = function (name,length,root) {
         if (!root)
                 root = document;
         const collection = root.getElementsByClassName(name);
         if (collection.length !== length)
-                throw new Error('Class ' + name + ' has length ' + collection.length + ', not ' + length + " " + root);
+                throw new Error('Class ' + name + ' has length ' + collection.length
+                        + ', not ' + length + " " + root);
         return collection;
 };
 
@@ -1024,7 +1026,7 @@ var read_efficient_set = function () {
         const efficient_set = document.getElementsByClassName('set');
         let acc = [];
         for (let i=0; i<efficient_set.length; i++){
-                acc.push(make_efficient_set(efficient_set[i]));
+                acc.push(new Efficient_set(efficient_set[i]));
         }
         return acc;
 }
@@ -1088,6 +1090,13 @@ Menu.prototype = {
         }
 };
 
+//// CLASS Efficient_set { names:[string], param:[integer], dom:dom }
+var Efficient_set = function (dom) {
+        this.names = ensure_read_class('names',1,dom)[0].textContent;
+        this.param = JSON.parse(ensure_read_class('param',1,dom)[0].textContent);
+        this.dom = dom;
+};
+
 //// EATABLEP ([integer], [integer], integer) boolean
 var eatablep = function (menu_param,current_params,next){
         return current_params.every((p,i) => 0 < next-p-menu_param[i]);
@@ -1105,10 +1114,21 @@ var match = function (menu,current_params,next) {
         return acc;
 };
 
-// DEFTYPE set [string]
-//// unique_set ([set]) [set]
+// DEFTYPE name string
+// (defclass names (array))
+var Names = function (args) {
+        if (args===undefined) args = [];
+        this.length = args.length;
+        for (let i=0;i<args.length;i++){
+                this[i] = args[i];
+        }
+        return this;
+}
+Names.prototype = new Array();
+
+//// unique_set ([names]) [names]
 unique_set = function (a) {
-        return a.map(set=>set.sort())
+        return a.map(names=>names.sort())
                 .reduce(function(acc,next) {
                                 if (acc.length === 0 || !acc.some(s=>s.every((e,i)=>e===next[i])))
                                         acc.push(next);
@@ -1131,14 +1151,6 @@ var result_set_string = function (acc,current_param) {
                         ,current_param));
                 return result;
         }));
-};
-
-//// DEFTYPE efficient_set { names: [name], param: [integer], dom: dom }
-//// MAKE_EFFICIENT_SET (dom) efficient_set
-var make_efficient_set = function (dom) {
-        return { names: ensure_read_class('names',1,dom)[0].textContent
-               , param: JSON.parse(ensure_read_class('param',1,dom)[0].textContent)
-               , dom: dom };
 };
 
 //// CREATE_SET ([menu],[integer]) dom
@@ -1263,13 +1275,13 @@ var digest = function ()
 
 //// EFFICIENT () [set]
 var efficient = function () {
-        const matched = match(read_menu(),read_current_params(),read_form_int('next')); // [menu]
-        const expected_exp = read_form_int('exp'); // integer
         const current_param = read_current_params();
         const next = read_form_int('next');
+        const matched = match(read_menu(),current_param,next); // [menu]
+        const expected_exp = read_form_int('exp'); // integer
         let status = 0;
-        let acc = [];
-        let memo = {};
+        let acc = []; // [[menu]]
+        let memo = {}; // {string:boolean}
         let rec = function (i,sorted,set,total) { // (integer,[[integer,menu]],[menu],integer)
                 if (i===0)
                         return body(set.slice().sort((x,y)=>x.name<y.name), total);
@@ -1328,7 +1340,7 @@ var enough = function () {
         const p = diff(read_form_int('next'),read_current_params()); // [integer]
         let z = 0; // integer
         let s = p.reduce((x,y)=>x+y); // integer
-        let acc = []; // [set]
+        let acc = []; // [names]
         let rec = function(i,set) {
                 if (i < 3) {
                         m.forEach(function (m) {
@@ -1347,14 +1359,14 @@ var enough = function () {
                 } else if (ms === z) {
                         if (ts < s) {
                                 s = ts;
-                                acc = [set.map(m=>m.name)];
+                                acc = [new Names(set.map(m=>m.name))];
                         } else if (ts === s)
-                                acc.push(set.map(m=>m.name));
+                                acc.push(new Names(set.map(m=>m.name)));
                         else { } // Do nothing.
                 } else {
                         z = ms;
                         s = ts;
-                        acc = [set.map(m=>m.name)];
+                        acc = [new Names(set.map(m=>m.name))];
                 }
         };
         rec(0, new Array (3));
