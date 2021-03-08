@@ -1,0 +1,281 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl7</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 7.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl6.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前回はElement Buffer Objectを抽象化しました。
+今回はシェーダーへの不満点を解消していきます。</p>
+
+<h2>Issues.</h2>
+
+<p>現在シェーダープログラムは文字列で持っています。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*vertex-shader*</span>
+  <span class="string">"#version 330 core
+  in vec2 xy;
+  void main () {
+    gl_Position = vec4(xy, 0.0, 1.0);
+  }"</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*fragment-shader*</span>
+  <span class="string">"#version 330 core
+  out vec4 outColor;
+  void main () {
+    outColor = vec4(1.0, 1.0, 1.0, 1.0);
+  }"</span></span>)</span></span></code></pre>
+
+<p>書いていて覚える不満点を列挙します。</p>
+
+<ul>
+<li>versionの指定が面倒。</li>
+<li>インプットの指定が面倒。</li>
+<li>アウトプットとインプットの変数名を合致させなければならないのが面倒。</li>
+</ul>
+
+<p>これまで見てきたように僕達はいまや属性の管理を<code>VECTOR-CLASS</code>に投げています。
+<code>VECTOR-CLASS</code>はvertex-shaderに何をインプットするべきか知っています。
+なぜそれをわざわざ人間が指定しなければいけないのでしょうか。</p>
+
+<p>vertex-shaderのアウトプットとfragment-shaderのインプットの変数は名前が合致しなければいけません。
+名前さえ合致していればシェーダーは自由に組み合わせられるとみれば疎結合であると言えるかもしれません。
+ですが名前を合致させなければならないととらえれば密結合であるとも言えます。</p>
+
+<p>シェーダーが分割されているということはきっと自由に組み合わせたい需要があるのでしょう。
+でも今の筆者にはその需要は見えません。</p>
+
+<p>不満を覚えながらコーディングするより不満を解消し気持ちよくコーディングした後に「いやぁやっぱり分割されてあるべきだったわ。めんごめんご」となるほうが精神衛生がよろしゅうございます。</p>
+
+<h2>DEFSHADER</h2>
+
+<h3>Syntax design.</h3>
+
+<p>こういうふうに書けると嬉しいというシンタックスのデッサンは以下のようなものとなります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defshader</span></i> hello-shader 330 <span class="paren2">(<span class="code">xy</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:vertex</span> <span class="paren3">(<span class="code"></span>)</span> <span class="string">"gl_Position = vec4(xy, 1.0, 1.0);"</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:fragment</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">|outColor| <span class="keyword">:vec4</span></span>)</span></span>)</span>
+    <span class="string">"outColor = vec4(1.0, 1.0, 1.0, 1.0);"</span></span>)</span></span>)</span></span></code></pre>
+
+<p>第一引数は定義されるシェーダーの名前です。
+これはクラス名になります。</p>
+
+<p>第二引数はversionです。</p>
+
+<p>第三引数は属性を表す<code>VECTOR-CLASS</code>名のリストです。
+このリストはそのままvertex-shaderのインプットとなります。</p>
+
+<p>第四引数以降はシェーダー定義節です。</p>
+
+<p>節の第一要素は定義されるシェーダー名です。</p>
+
+<p>第二要素はシェーダーの出力リストです。
+これはそのまま次のシェーダーの入力に使われます。</p>
+
+<p>第三要素以降は<code>main</code>関数の中身になります。
+現時点でローカル関数定義はできません。
+<a href="https://ja.wikipedia.org/wiki/YAGNI" >YAGNI</a>の精神です。</p>
+
+<h3>Implementation.</h3>
+
+<p>実装しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defgeneric</span></i> vertex-shader <span class="paren2">(<span class="code">name</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:documentation</span> <span class="string">"Accept class name, return its vertex shader code string."</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defgeneric</span></i> fragment-shader <span class="paren2">(<span class="code">name</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:documentation</span> <span class="string">"Accept class name, return its fragment shader code string."</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">defshader</span></i> <span class="paren2">(<span class="code">name version superclasses &amp;body shader*</span>)</span>
+  <span class="comment">;; Trivial syntax check.
+</span>  <span class="paren2">(<span class="code">check-type name symbol</span>)</span>
+  <span class="paren2">(<span class="code">check-type version <span class="paren3">(<span class="code">or symbol integer</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">assert <span class="paren3">(<span class="code">and <span class="paren4">(<span class="code">listp superclasses</span>)</span> <span class="paren4">(<span class="code">every #'find-class superclasses</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">assert <span class="paren3">(<span class="code">every <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">s</span>)</span> <span class="paren5">(<span class="code">find <span class="paren6">(<span class="code">car s</span>)</span> '<span class="paren6">(<span class="code"><span class="keyword">:vertex</span> <span class="keyword">:fragment</span></span>)</span></span>)</span></span>)</span> shader*</span>)</span></span>)</span>
+  <span class="comment">;; binds
+</span>  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">format
+         #.<span class="paren5">(<span class="code">concatenate 'string <span class="string">"#version ~A core~%"</span> <span class="comment">; version
+</span>                        <span class="string">"~{in ~A ~A;~%~}~&amp;"</span> <span class="comment">; in
+</span>                        <span class="string">"~{out ~A ~A;~%~}~&amp;"</span> <span class="comment">; out
+</span>                        <span class="string">"~@[~{uniform ~A ~A;~%~}~]~&amp;"</span> <span class="comment">; uniforms
+</span>                        <span class="string">"void main () {~%~{~A~^~%~}~%}"</span> <span class="comment">; the body.
+</span>                        </span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">labels</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code"><i><span class="symbol">defs</span></i> <span class="paren6">(<span class="code">list</span>)</span>
+               <span class="paren6">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren1">(<span class="code">name type</span>)</span> <span class="keyword">:in</span> list
+                     <span class="keyword">:collect</span> <span class="paren1">(<span class="code">change-case:camel-case <span class="paren2">(<span class="code">symbol-name type</span>)</span></span>)</span>
+                     <span class="keyword">:collect</span> <span class="paren1">(<span class="code">change-case:camel-case <span class="paren2">(<span class="code">symbol-name name</span>)</span></span>)</span></span>)</span></span>)</span>
+             <span class="paren5">(<span class="code">rec <span class="paren6">(<span class="code">shaders in acc</span>)</span>
+               <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren1">(<span class="code">endp shaders</span>)</span>
+                   <span class="paren1">(<span class="code">nreverse acc</span>)</span>
+                   <span class="paren1">(<span class="code">body <span class="paren2">(<span class="code">car shaders</span>)</span> <span class="paren2">(<span class="code">cdr shaders</span>)</span> in acc</span>)</span></span>)</span></span>)</span>
+             <span class="paren5">(<span class="code">body <span class="paren6">(<span class="code">shader rest in acc</span>)</span>
+               <span class="paren6">(<span class="code">destructuring-bind
+                   <span class="paren1">(<span class="code">type out &amp;rest main</span>)</span>
+                   shader
+                 <span class="paren1">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;uniform
+                         <span class="paren4">(<span class="code">position-if
+                           <span class="paren5">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren6">(<span class="code">x</span>)</span> <span class="paren6">(<span class="code">and <span class="paren1">(<span class="code">symbolp x</span>)</span> <span class="paren1">(<span class="code">string= '&amp;uniform x</span>)</span></span>)</span></span>)</span>
+                           out</span>)</span></span>)</span>
+                        <span class="paren3">(<span class="code">vars <span class="paren4">(<span class="code">and out <span class="paren5">(<span class="code"><i><span class="symbol">defs</span></i> <span class="paren6">(<span class="code">subseq out 0 &amp;uniform</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                   <span class="paren2">(<span class="code">rec rest `',vars
+                        <span class="paren3">(<span class="code">cons
+                          <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">method
+                                 <span class="paren1">(<span class="code">intern <span class="paren2">(<span class="code">format nil <span class="string">"~A-SHADER"</span> type</span>)</span>
+                                         <span class="keyword">:fude-gl</span></span>)</span></span>)</span></span>)</span>
+                            `<span class="paren5">(<span class="code"><i><span class="symbol">defmethod</span></i> ,method <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">type <span class="paren2">(<span class="code">eql ',name</span>)</span></span>)</span></span>)</span>
+                               ,<span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren1">(<span class="code">typep main
+                                           '<span class="paren2">(<span class="code">cons
+                                              <span class="paren3">(<span class="code">cons <span class="paren4">(<span class="code">eql <i><span class="symbol">quote</span></i></span>)</span>
+                                                    <span class="paren4">(<span class="code">cons symbol null</span>)</span></span>)</span>
+                                              null</span>)</span></span>)</span>
+                                    `<span class="paren1">(<span class="code">,method ',<span class="paren2">(<span class="code">cadar main</span>)</span></span>)</span>
+                                    `<span class="paren1">(<span class="code">format nil <span class="paren2">(<span class="code">formatter ,format</span>)</span> ',version
+                                             ,in ',vars
+                                             ',<span class="paren2">(<span class="code">and &amp;uniform
+                                                    <span class="paren3">(<span class="code"><i><span class="symbol">defs</span></i>
+                                                      <span class="paren4">(<span class="code">subseq out
+                                                              <span class="paren5">(<span class="code">1+ &amp;uniform</span>)</span></span>)</span></span>)</span></span>)</span>
+                                             ',main</span>)</span></span>)</span></span>)</span></span>)</span>
+                          acc</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="comment">;; The body.
+</span>      `<span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i>
+        <span class="paren5">(<span class="code"><i><span class="symbol">defclass</span></i> ,name ,superclasses <span class="paren6">(<span class="code"></span>)</span> <span class="paren6">(<span class="code"><span class="keyword">:metaclass</span> vector-class</span>)</span></span>)</span>
+        ,@<span class="paren5">(<span class="code">rec shader*
+               `<span class="paren6">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> c <span class="keyword">:in</span> <span class="paren1">(<span class="code">class-list <span class="paren2">(<span class="code">find-class type</span>)</span></span>)</span>
+                      <span class="keyword">:for</span> slots = <span class="paren1">(<span class="code">c2mop:class-direct-slots c</span>)</span>
+                      <span class="keyword">:when</span> slots
+                        <span class="keyword">:collect</span> <span class="paren1">(<span class="code">format nil <span class="string">"vec~D"</span> <span class="paren2">(<span class="code">length slots</span>)</span></span>)</span>
+                        <span class="keyword">:and</span> <span class="keyword">:collect</span> <span class="paren1">(<span class="code">change-case:camel-case
+                                        <span class="paren2">(<span class="code">symbol-name <span class="paren3">(<span class="code">class-name c</span>)</span></span>)</span></span>)</span></span>)</span>
+               nil</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>マクロの展開形を見てみましょう。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">macroexpand-1 '<span class="paren2">(<span class="code"><i><span class="symbol">defshader</span></i> hello-rectangle 330 <span class="paren3">(<span class="code">xy</span>)</span>
+                    <span class="paren3">(<span class="code"><span class="keyword">:vertex</span> <span class="paren4">(<span class="code"></span>)</span> <span class="string">"gl_Position = vec4(xy, 0.0, 1.0);"</span></span>)</span>
+                    <span class="paren3">(<span class="code"><span class="keyword">:fragment</span> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">|outColor| <span class="keyword">:vec4</span></span>)</span></span>)</span>
+                      <span class="string">"outColor = vec4(1.0, 1.0, 1.0, 1.0);"</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">progn</span></i>
+ <span class="paren2">(<span class="code"><i><span class="symbol">defclass</span></i> hello-rectangle <span class="paren3">(<span class="code">xy</span>)</span> <span class="paren3">(<span class="code"></span>)</span> <span class="paren3">(<span class="code"><span class="keyword">:metaclass</span> vector-class</span>)</span></span>)</span>
+ <span class="paren2">(<span class="code"><i><span class="symbol">defmethod</span></i> vertex-shader <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">type <span class="paren5">(<span class="code">eql 'hello-rectangle</span>)</span></span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">format nil
+           <span class="paren4">(<span class="code">formatter
+            <span class="string">"#version ~A core~%~{in ~A ~A;~%~}~&amp;~{out ~A ~A;~%~}~&amp;~@[~{uniform ~A ~A;~%~}~]~&amp;void main () {~%~{~A~^~%~}~%}"</span></span>)</span>
+           '330
+           <span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> c <span class="keyword">:in</span> <span class="paren5">(<span class="code">class-list <span class="paren6">(<span class="code">find-class type</span>)</span></span>)</span>
+                 <span class="keyword">:for</span> slots = <span class="paren5">(<span class="code">sb-mop:class-direct-slots c</span>)</span>
+                 <span class="keyword">:when</span> slots
+                   <span class="keyword">:collect</span> <span class="paren5">(<span class="code">format nil <span class="string">"vec~D"</span> <span class="paren6">(<span class="code">length slots</span>)</span></span>)</span>
+                   <span class="keyword">:and</span> <span class="keyword">:collect</span> <span class="paren5">(<span class="code">change-case:camel-case
+                                   <span class="paren6">(<span class="code">symbol-name <span class="paren1">(<span class="code">class-name c</span>)</span></span>)</span></span>)</span></span>)</span>
+           'nil 'nil '<span class="paren4">(<span class="code"><span class="string">"gl_Position = vec4(xy, 0.0, 1.0);"</span></span>)</span></span>)</span></span>)</span>
+ <span class="paren2">(<span class="code"><i><span class="symbol">defmethod</span></i> fragment-shader <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">type <span class="paren5">(<span class="code">eql 'hello-rectangle</span>)</span></span>)</span></span>)</span>
+   <span class="paren3">(<span class="code">format nil
+           <span class="paren4">(<span class="code">formatter
+            <span class="string">"#version ~A core~%~{in ~A ~A;~%~}~&amp;~{out ~A ~A;~%~}~&amp;~@[~{uniform ~A ~A;~%~}~]~&amp;void main () {~%~{~A~^~%~}~%}"</span></span>)</span>
+           '330 'nil '<span class="paren4">(<span class="code"><span class="string">"vec4"</span> <span class="string">"outColor"</span></span>)</span> 'nil
+           '<span class="paren4">(<span class="code"><span class="string">"outColor = vec4(1.0, 1.0, 1.0, 1.0);"</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>クラスが定義されシェーダーコードを返すメソッドが二つ定義されているのがわかります。</p>
+
+<p>これで前回の四角形描画関数を書き直すと以下のようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defshader</span></i> hello-rectangle 330 <span class="paren2">(<span class="code">xy</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:vertex</span> <span class="paren3">(<span class="code"></span>)</span> <span class="string">"gl_Position = vec4(xy, 0.0, 1.0);"</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:fragment</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">|outColor| <span class="keyword">:vec4</span></span>)</span></span>)</span>
+    <span class="string">"outColor = vec4(1.0, 1.0, 1.0, 1.0);"</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*rectangle*</span>
+  <span class="paren2">(<span class="code">concatenate '<span class="paren3">(<span class="code">array single-float <span class="paren4">(<span class="code">*</span>)</span></span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'hello-rectangle <span class="keyword">:x</span> -0.5 <span class="keyword">:y</span> -0.5</span>)</span> <span class="comment">; Top left.
+</span>               <span class="paren3">(<span class="code">make-instance 'hello-rectangle <span class="keyword">:x</span> 0.5 <span class="keyword">:y</span> -0.5</span>)</span> <span class="comment">; Top right.
+</span>               <span class="paren3">(<span class="code">make-instance 'hello-rectangle <span class="keyword">:x</span> -0.5 <span class="keyword">:y</span> 0.5</span>)</span> <span class="comment">; Bottom left.
+</span>               <span class="paren3">(<span class="code">make-instance 'hello-rectangle <span class="keyword">:x</span> 0.5 <span class="keyword">:y</span> 0.5</span>)</span> <span class="comment">; Bottom right.
+</span>               </span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> hello-rectangle <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-vao</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">vao <span class="paren2">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*rectangle*</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:attributes</span> 'hello-rectangle</span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:indices</span> <span class="paren3">(<span class="code">coerce '<span class="paren4">(<span class="code">0 1 2 2 3 1</span>)</span> '<span class="paren4">(<span class="code">array <span class="paren5">(<span class="code">unsigned-byte 8</span>)</span> <span class="paren5">(<span class="code">*</span>)</span></span>)</span></span>)</span>
+                                  <span class="keyword">:target</span> <span class="keyword">:element-array-buffer</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:shader</span> <span class="paren3">(<span class="code">vertex-shader 'hello-rectangle</span>)</span>
+                                 <span class="paren3">(<span class="code">fragment-shader 'hello-rectangle</span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren1">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:quit</span> <span class="paren2">(<span class="code"></span>)</span> t</span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:idle</span> <span class="paren2">(<span class="code"></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren3">(<span class="code">win <span class="paren4">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span>
+                               <span class="keyword">:color</span> '<span class="paren4">(<span class="code">0.0 0.0 0.0 1.0</span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">%gl:draw-elements <span class="keyword">:triangles</span>
+                                   <span class="paren4">(<span class="code">length <span class="paren5">(<span class="code">indices-of vao</span>)</span></span>)</span>
+                                   <span class="paren4">(<span class="code">foreign-type <span class="paren5">(<span class="code">array-element-type <span class="paren6">(<span class="code">indices-of vao</span>)</span></span>)</span></span>)</span>
+                                   0</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>マクロ<code>WITH-VAO</code>の初期化フォームの中に繰り返し出てくる<code>HELLO-RECTANGLE</code>が鬱陶しいですね。
+これもまとめてしまいましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-shader</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;rest bind*</span>)</span> &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">with-vao</span></i> ,<span class="paren3">(<span class="code">mapcar <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">bind</span>)</span>
+                        <span class="paren5">(<span class="code">destructuring-bind <span class="paren6">(<span class="code">class &amp;rest clause*</span>)</span> bind
+                          `<span class="paren6">(<span class="code">,class ,@clause*
+                                   <span class="paren1">(<span class="code"><span class="keyword">:attributes</span> ',class</span>)</span>
+                                   <span class="paren1">(<span class="code"><span class="keyword">:shader</span> <span class="paren2">(<span class="code">vertex-shader ',class</span>)</span>
+                                            <span class="paren2">(<span class="code">fragment-shader ',class</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                      bind*</span>)</span>
+             ,@body</span>)</span></span>)</span></span></code></pre>
+
+<p>これで以下のように書けるようになりました。</p>
+
+<p>変数名を<code>DEFSHADER</code>で定義したクラス名と同名にしなくてはならないという制約を受け入れることでコンパクトにできます。
+制約が不満なら下層の<code>WITH-VAO</code>を直接使えばいいだけです。
+上にあるマクロ定義を見れば分かる通り<code>WITH-SHADER</code>マクロは大変薄いラッパでしかありません。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> hello-rectangle <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">hello-rectangle <span class="paren2">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*rectangle*</span></span>)</span>
+                                       <span class="paren2">(<span class="code"><span class="keyword">:indices</span> <span class="paren3">(<span class="code">coerce '<span class="paren4">(<span class="code">0 1 2 2 3 1</span>)</span>
+                                                         '<span class="paren4">(<span class="code">array <span class="paren5">(<span class="code">unsigned-byte 8</span>)</span> <span class="paren5">(<span class="code">*</span>)</span></span>)</span></span>)</span>
+                                                 <span class="keyword">:target</span> <span class="keyword">:element-array-buffer</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren1">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:quit</span> <span class="paren2">(<span class="code"></span>)</span> t</span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:idle</span> <span class="paren2">(<span class="code"></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren3">(<span class="code">win <span class="paren4">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span>
+                               <span class="keyword">:color</span> '<span class="paren4">(<span class="code">0.0 0.0 0.0 1.0</span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">%gl:draw-elements <span class="keyword">:triangles</span>
+                                   <span class="paren4">(<span class="code">length <span class="paren5">(<span class="code">indices-of hello-rectangle</span>)</span></span>)</span>
+                                   <span class="paren4">(<span class="code">foreign-type <span class="paren5">(<span class="code">array-element-type
+                                                   <span class="paren6">(<span class="code">indices-of hello-rectangle</span>)</span></span>)</span></span>)</span>
+                                   0</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
