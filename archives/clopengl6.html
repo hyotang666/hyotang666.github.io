@@ -1,0 +1,249 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl6</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 6.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl5.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前回はVertex Array Objectを抽象化しました。
+今回はElement Buffer Objectを抽象化します。</p>
+
+<h2>Bug fix.</h2>
+
+<p>Element Buffer Objectへの対応にあたり前回のコードに不具合があることが判明しました。
+まずはそれを修正します。</p>
+
+<p>どのような不具合かというとバッファの初期化はVertex Array Objectを指定してから行わなければならなかったというものです。</p>
+
+<p><code>WITH-BUFFER</code>から初期化処理をなくします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-buffer</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;rest var*</span>)</span> &amp;body body</span>)</span>
+  <span class="paren2">(<span class="code">assert <span class="paren3">(<span class="code">every #'symbolp var*</span>)</span></span>)</span>
+  `<span class="paren2">(<span class="code">destructuring-bind
+       ,var*
+       <span class="paren3">(<span class="code">gl:gen-buffers ,<span class="paren4">(<span class="code">length var*</span>)</span></span>)</span>
+     <span class="paren3">(<span class="code"><i><span class="symbol">unwind-protect</span></i> <span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i> ,@body</span>)</span> <span class="paren4">(<span class="code">gl:delete-buffers <span class="paren5">(<span class="code">list ,@var*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>よって三角形描画関数は以下のようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> fixed-hello-triangle <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-gl-vector</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">vector <span class="special">*triangle*</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">with-buffer</span></i> <span class="paren1">(<span class="code">buf</span>)</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">with-prog</span></i> <span class="paren2">(<span class="code">prog <span class="special">*vertex-shader*</span> <span class="special">*fragment-shader*</span></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">with-vertex-array</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">vao 
+                                    <span class="paren5">(<span class="code">gl:bind-buffer <span class="keyword">:array-buffer</span> buf</span>)</span>
+                                    <span class="paren5">(<span class="code">gl:buffer-data <span class="keyword">:array-buffer</span> <span class="keyword">:static-draw</span> vector</span>)</span>
+                                    <span class="paren5">(<span class="code">link-attributes 'xy prog</span>)</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren4">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+                  <span class="paren4">(<span class="code"><span class="keyword">:quit</span> <span class="paren5">(<span class="code"></span>)</span>
+                    t</span>)</span>
+                  <span class="paren4">(<span class="code"><span class="keyword">:idle</span> <span class="paren5">(<span class="code"></span>)</span>
+                    <span class="paren5">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren6">(<span class="code">win <span class="paren1">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span>
+                                     <span class="keyword">:color</span> '<span class="paren1">(<span class="code">0.0 0.0 0.0 1.0</span>)</span></span>)</span>
+                      <span class="paren6">(<span class="code">gl:draw-arrays <span class="keyword">:triangles</span> 0 3</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>Element Buffer Object.</h2>
+
+<p>四角形を描画するとしましょう。
+OpenGLは三角形しか描画できないので四角形を描画するには三角形が２つ必要です。</p>
+
+<p>ではそのための頂点はいくつ必要でしょうか。
+一つの三角形は頂点が三つです。
+その三角形が二つあるということは単純計算で六つ頂点が必要となります。</p>
+
+<p>三角形二つを組み合わせて四角形を作る場合重複する頂点が出てきます。
+単純に四角形を作るだけで考えるなら頂点は四つあればいいはずです。</p>
+
+<p>そこで頂点は四つだけ作りOpenGLには別途三角形描画をどの頂点を使って行うか教えてあげることとします。</p>
+
+<p>コードはこれまで作ってきたヘルパを使って以下のようなものになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*rectangle*</span>
+  <span class="paren2">(<span class="code">concatenate '<span class="paren3">(<span class="code">array single-float <span class="paren4">(<span class="code">*</span>)</span></span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'xy <span class="keyword">:x</span> -0.5 <span class="keyword">:y</span> -0.5</span>)</span> <span class="comment">; Top left.
+</span>               <span class="paren3">(<span class="code">make-instance 'xy <span class="keyword">:x</span> 0.5 <span class="keyword">:y</span> -0.5</span>)</span> <span class="comment">; Top right.
+</span>               <span class="paren3">(<span class="code">make-instance 'xy <span class="keyword">:x</span> -0.5 <span class="keyword">:y</span> 0.5</span>)</span> <span class="comment">; Bottom left.
+</span>               <span class="paren3">(<span class="code">make-instance 'xy <span class="keyword">:x</span> 0.5 <span class="keyword">:y</span> 0.5</span>)</span> <span class="comment">; Bottom right.
+</span>               </span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> hello-rectangle <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-gl-vector</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">vertices <span class="special">*rectangle*</span></span>)</span>
+                         <span class="paren1">(<span class="code">indices <span class="paren2">(<span class="code">coerce '<span class="paren3">(<span class="code">0 1 2 2 3 1</span>)</span>
+                                          '<span class="paren3">(<span class="code">array <span class="paren4">(<span class="code">unsigned-byte 8</span>)</span> <span class="paren4">(<span class="code">*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">with-buffer</span></i> <span class="paren1">(<span class="code">vbo ebo</span>)</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">with-prog</span></i> <span class="paren2">(<span class="code">prog <span class="special">*vertex-shader*</span> <span class="special">*fragment-shader*</span></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">with-vertex-array</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">vao 
+                                    <span class="paren5">(<span class="code">gl:bind-buffer <span class="keyword">:array-buffer</span> vbo</span>)</span>
+                                    <span class="paren5">(<span class="code">gl:buffer-data <span class="keyword">:array-buffer</span> <span class="keyword">:static-draw</span> vertices</span>)</span>
+                                    <span class="paren5">(<span class="code">link-attributes 'xy prog</span>)</span>
+                                    <span class="paren5">(<span class="code">gl:bind-buffer <span class="keyword">:element-array-buffer</span> ebo</span>)</span>
+                                    <span class="paren5">(<span class="code">gl:buffer-data <span class="keyword">:element-array-buffer</span> <span class="keyword">:static-draw</span> indices</span>)</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren4">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+                  <span class="paren4">(<span class="code"><span class="keyword">:quit</span> <span class="paren5">(<span class="code"></span>)</span>
+                    t</span>)</span>
+                  <span class="paren4">(<span class="code"><span class="keyword">:idle</span> <span class="paren5">(<span class="code"></span>)</span>
+                    <span class="paren5">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren6">(<span class="code">win <span class="paren1">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span>
+                                     <span class="keyword">:color</span> '<span class="paren1">(<span class="code">0.0 0.0 0.0 1.0</span>)</span></span>)</span>
+                      <span class="paren6">(<span class="code">%gl:draw-elements <span class="keyword">:triangles</span> 
+                                         <span class="paren1">(<span class="code">gl::gl-array-size indices</span>)</span>
+                                         <span class="paren1">(<span class="code">gl::cffi-type-to-gl <span class="paren2">(<span class="code">gl::gl-array-type indices</span>)</span></span>)</span>
+                                         0</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/hello-rectangle.png" alt="image of the rectangle" /></p>
+
+<h2>Issues</h2>
+
+<p>動くだけは動くのですがコードには不満が残ります。</p>
+
+<ul>
+<li>変数<code>VERTICES</code>は変数<code>VAO</code>の初期化フォーム内でしか使われない。</li>
+<li>変数<code>VBO</code>は変数<code>VAO</code>の初期化フォーム内でしか使われない。</li>
+<li>変数<code>EBO</code>は変数<code>VAO</code>の初期化フォーム内でしか使われない。</li>
+<li>変数<code>PROG</code>は変数<code>VAO</code>の初期化フォーム内でしか使われない。</li>
+<li>変数<code>VAO</code>の初期化フォームに重複が多い。</li>
+</ul>
+
+<p>変数<code>INDICES</code>こそイベントループ内で参照されていますが、それ以外の変数の多くは変数<code>VAO</code>の初期化フォーム内で参照されるのみであることがわかります。
+これらは有機的に絡み合い分かちがたく結びついたひとかたまりの処理でありその内部でしか使われない変数は外に見えない方が健全です。</p>
+
+<h2>WITH-VAO</h2>
+
+<p>こういうふうに書けると嬉しいなというシンタックスをデッサンしてみたものが以下になります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">with-vao</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">vao <span class="paren4">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*rectangle*</span></span>)</span>
+                <span class="paren4">(<span class="code"><span class="keyword">:attributes</span> 'xy</span>)</span>
+                <span class="paren4">(<span class="code"><span class="keyword">:indices</span> <span class="paren5">(<span class="code">coerce '<span class="paren6">(<span class="code">0 1 2 2 3 1</span>)</span> '<span class="paren6">(<span class="code">array <span class="paren1">(<span class="code">unsigned-byte 8</span>)</span> <span class="paren1">(<span class="code">*</span>)</span></span>)</span></span>)</span>
+                          <span class="keyword">:target</span> <span class="keyword">:element-array-buffer</span></span>)</span>
+                <span class="paren4">(<span class="code"><span class="keyword">:shader</span> <span class="special">*vertex-shader*</span> <span class="special">*fragment-shader*</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren3">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:quit</span> <span class="paren4">(<span class="code"></span>)</span> t</span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:idle</span> <span class="paren4">(<span class="code"></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren5">(<span class="code">win <span class="paren6">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">%gl:draw-elements <span class="keyword">:triangle</span>
+                           <span class="paren6">(<span class="code">length <span class="paren1">(<span class="code">indices-of vao</span>)</span></span>)</span>
+                           <span class="paren6">(<span class="code">foreign-type <span class="paren1">(<span class="code">array-element-type <span class="paren2">(<span class="code">indices-of vao</span>)</span></span>)</span></span>)</span>
+                           0</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>実装しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-vao</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;rest bind*</span>)</span> &amp;body body</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">table <span class="paren5">(<span class="code">gensym <span class="string">"TABLE"</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">&lt;init-buffer&gt; <span class="paren6">(<span class="code">clause buf vec</span>)</span>
+             <span class="paren6">(<span class="code">destructuring-bind
+                 <span class="paren1">(<span class="code">&amp;key <span class="paren2">(<span class="code">target <span class="keyword">:array-buffer</span></span>)</span> <span class="paren2">(<span class="code">usage <span class="keyword">:static-draw</span></span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">cddr clause</span>)</span>
+               `<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">gl:bind-buffer <span class="paren3">(<span class="code"><i><span class="symbol">the</span></i> buffer-target ,target</span>)</span> ,buf</span>)</span>
+                 <span class="paren2">(<span class="code">gl:buffer-data <span class="paren3">(<span class="code"><i><span class="symbol">the</span></i> buffer-target ,target</span>)</span>
+                                 <span class="paren3">(<span class="code"><i><span class="symbol">the</span></i> buffer-usage ,usage</span>)</span> ,vec</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      `<span class="paren4">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">,table <span class="paren1">(<span class="code">make-hash-table</span>)</span></span>)</span></span>)</span>
+         <span class="paren5">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">indices-of <span class="paren2">(<span class="code">id</span>)</span>
+                  <span class="paren2">(<span class="code">gethash id ,table</span>)</span></span>)</span></span>)</span>
+           ,@<span class="paren6">(<span class="code"><i><span class="symbol">labels</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">rec <span class="paren3">(<span class="code">bind*</span>)</span>
+                        <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren4">(<span class="code">endp bind*</span>)</span>
+                            body
+                            <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">prog <span class="paren1">(<span class="code">gensym <span class="string">"PROG"</span></span>)</span></span>)</span>
+                                  <span class="paren6">(<span class="code">vector <span class="paren1">(<span class="code">gensym <span class="string">"VECTOR"</span></span>)</span></span>)</span>
+                                  <span class="paren6">(<span class="code">vertices <span class="paren1">(<span class="code">gensym <span class="string">"VERTICES"</span></span>)</span></span>)</span>
+                                  <span class="paren6">(<span class="code">indices <span class="paren1">(<span class="code">gensym <span class="string">"INDICES"</span></span>)</span></span>)</span>
+                                  <span class="paren6">(<span class="code">bufs <span class="paren1">(<span class="code">alexandria:make-gensym-list 2</span>)</span></span>)</span></span>)</span>
+                              <span class="paren5">(<span class="code">check-type <span class="paren6">(<span class="code">car bind*</span>)</span> <span class="paren6">(<span class="code">cons symbol <span class="paren1">(<span class="code">cons *</span>)</span></span>)</span></span>)</span>
+                              <span class="paren5">(<span class="code">assert <span class="paren6">(<span class="code">every
+                                        <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren2">(<span class="code">x</span>)</span> <span class="paren2">(<span class="code">assoc x <span class="paren3">(<span class="code">cdar bind*</span>)</span></span>)</span></span>)</span>
+                                        '<span class="paren1">(<span class="code"><span class="keyword">:vertices</span> <span class="keyword">:indices</span> <span class="keyword">:attributes</span>
+                                          <span class="keyword">:shader</span></span>)</span></span>)</span></span>)</span>
+                              `<span class="paren5">(<span class="code"><span class="paren6">(<span class="code"><i><span class="symbol">with-prog</span></i> <span class="paren1">(<span class="code">,prog
+                                            ,@<span class="paren2">(<span class="code">cdr
+                                                <span class="paren3">(<span class="code">assoc <span class="keyword">:shader</span> <span class="paren4">(<span class="code">cdar bind*</span>)</span></span>)</span></span>)</span></span>)</span>
+                                  <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">,vector
+                                         ,<span class="paren4">(<span class="code">second
+                                            <span class="paren5">(<span class="code">assoc <span class="keyword">:indices</span> <span class="paren6">(<span class="code">cdar bind*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                                    <span class="paren2">(<span class="code"><i><span class="symbol">with-gl-vector</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">,vertices
+                                                      ,<span class="paren5">(<span class="code">second
+                                                         <span class="paren6">(<span class="code">assoc <span class="keyword">:vertices</span> <span class="paren1">(<span class="code">cdar
+                                                                            bind*</span>)</span></span>)</span></span>)</span></span>)</span>
+                                                     <span class="paren4">(<span class="code">,indices ,vector</span>)</span></span>)</span>
+                                      <span class="paren3">(<span class="code"><i><span class="symbol">with-buffer</span></i> ,bufs
+                                        <span class="paren4">(<span class="code"><i><span class="symbol">with-vertex-array</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">,<span class="paren1">(<span class="code">caar bind*</span>)</span>
+                                                             ,@<span class="paren1">(<span class="code">&lt;init-buffer&gt;
+                                                                 <span class="paren2">(<span class="code">assoc
+                                                                   <span class="keyword">:vertices</span> <span class="paren3">(<span class="code">cdar
+                                                                               bind*</span>)</span></span>)</span>
+                                                                 <span class="paren2">(<span class="code">car bufs</span>)</span>
+                                                                 vertices</span>)</span>
+                                                             <span class="paren1">(<span class="code">link-attributes
+                                                               ,<span class="paren2">(<span class="code">second
+                                                                  <span class="paren3">(<span class="code">assoc
+                                                                    <span class="keyword">:attributes</span> <span class="paren4">(<span class="code">cdar
+                                                                                  bind*</span>)</span></span>)</span></span>)</span>
+                                                               ,prog</span>)</span>
+                                                             ,@<span class="paren1">(<span class="code">&lt;init-buffer&gt;
+                                                                 <span class="paren2">(<span class="code">assoc
+                                                                   <span class="keyword">:indices</span> <span class="paren3">(<span class="code">cdar
+                                                                              bind*</span>)</span></span>)</span>
+                                                                 <span class="paren2">(<span class="code">cadr bufs</span>)</span>
+                                                                 indices</span>)</span></span>)</span></span>)</span>
+                                          <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">gethash ,<span class="paren1">(<span class="code">caar bind*</span>)</span> ,table</span>)</span>
+                                                  ,vector</span>)</span>
+                                          ,@<span class="paren5">(<span class="code">rec <span class="paren6">(<span class="code">cdr bind*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+               <span class="paren1">(<span class="code">rec bind*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>WITH-VAO</code>を使って四角形描画関数を書き直すと以下のようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> hello-rectangle <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-vao</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">vao <span class="paren2">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*rectangle*</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:attributes</span> 'xy</span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:indices</span> <span class="paren3">(<span class="code">coerce '<span class="paren4">(<span class="code">0 1 2 2 3 1</span>)</span> '<span class="paren4">(<span class="code">array <span class="paren5">(<span class="code">unsigned-byte 8</span>)</span> <span class="paren5">(<span class="code">*</span>)</span></span>)</span></span>)</span>
+                                  <span class="keyword">:target</span> <span class="keyword">:element-array-buffer</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:shader</span> <span class="special">*vertex-shader*</span> <span class="special">*fragment-shader*</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren1">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:quit</span> <span class="paren2">(<span class="code"></span>)</span> t</span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:idle</span> <span class="paren2">(<span class="code"></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren3">(<span class="code">win <span class="paren4">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span>
+                               <span class="keyword">:color</span> '<span class="paren4">(<span class="code">0.0 0.0 0.0 1.0</span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">%gl:draw-elements <span class="keyword">:triangles</span>
+                                   <span class="paren4">(<span class="code">length <span class="paren5">(<span class="code">indices-of vao</span>)</span></span>)</span>
+                                   <span class="paren4">(<span class="code">foreign-type <span class="paren5">(<span class="code">array-element-type <span class="paren6">(<span class="code">indices-of vao</span>)</span></span>)</span></span>)</span>
+                                   0</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>すっきりして見通しが良くなりました。
+またデータの相関図も（少なくとも筆者には）直感的に理解しやすいコードになりました。</p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
