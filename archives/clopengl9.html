@@ -1,0 +1,408 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl9</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 9.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl8.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前回は<code>uniform</code>の取り扱い方を学びました。
+本章では<code>texture</code>の取り扱い方を学びます。</p>
+
+<h2>Workflow</h2>
+
+<p><code>texture</code>を使う典型的な手順は以下のようになります。</p>
+
+<ol>
+<li>OpenGLにN個の<code>texture</code>生成を依頼。</li>
+<li>現在有効な<code>texture</code>を一つ指定。</li>
+<li><code>texture</code>のオプションを設定。</li>
+<li>ロードしたイメージデータを<code>texture</code>に流し込み。</li>
+<li>本体処理。</li>
+<li>OpenGLに<code>texture</code>の消去を依頼。</li>
+</ol>
+
+<p>リソースの開放が必要なのでいつもどおりWITH系マクロを定義します。</p>
+
+<h2>WITH-TEXTURES</h2>
+
+<p><code>texture</code>周りは複雑なので段階的に構築して行きましょう。</p>
+
+<h3>First step: Generates and deletes.</h3>
+
+<p>とりあえずはリソースの確保と開放のみです。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-textures</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;rest vars</span>)</span> &amp;body body</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind ,vars <span class="paren3">(<span class="code">gl:gen-textures ,<span class="paren4">(<span class="code">length vars</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">unwind-protect</span></i> <span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i> ,@body</span>)</span>
+      <span class="paren4">(<span class="code">gl:delete-textures <span class="paren5">(<span class="code">list ,@vars</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Scond step: Association.</h3>
+
+<h4>Texture target.</h4>
+
+<p>カレント<code>texture</code>の指定には<code>target</code>の指定が必要です。
+OpenGLの仕様を読み型に落とし込みます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> texture-target <span class="paren2">(<span class="code"></span>)</span>
+  '<span class="paren2">(<span class="code">member <span class="keyword">:texture-1d</span> <span class="keyword">:texture-1d-array</span>
+           <span class="keyword">:texture-2d</span> <span class="keyword">:texture-2d-array</span>
+           <span class="keyword">:texture-2d-multisample</span> <span class="keyword">:texture-2d-multisample-array</span>
+           <span class="keyword">:texture-3d</span> <span class="keyword">:texture-cube-map</span>
+           <span class="keyword">:texture-cube-map-array</span> <span class="keyword">:texture-rectangle</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>pname.</h4>
+
+<p><code>texture</code>のオプションを設定するにはKey-Valueペアを使うと考えればとらえやすいです。
+このキーのことを<code>pname</code>（おそらくはParameter Name）と呼びます。</p>
+
+<p>サポートされているキーについてはOpenGLの仕様を読み型に落とし込みます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> texture-pname <span class="paren2">(<span class="code"></span>)</span>
+  '<span class="paren2">(<span class="code">member <span class="keyword">:depth-stencil-texture-mode</span>
+           <span class="keyword">:texture-base-level</span> <span class="keyword">:texture-compare-func</span>
+           <span class="keyword">:texture-compare-mode</span> <span class="keyword">:texture-lod-bias</span>
+           <span class="keyword">:texture-min-filter</span> <span class="keyword">:texture-mag-filter</span>
+           <span class="keyword">:texture-min-lod</span> <span class="keyword">:texture-max-lod</span>
+           <span class="keyword">:texture-max-level</span> <span class="keyword">:texture-swizzle-r</span>
+           <span class="keyword">:texture-swizzle-g</span> <span class="keyword">:texture-swizzle-b</span>
+           <span class="keyword">:texture-swizzle-a</span> <span class="keyword">:texture-wrap-s</span>
+           <span class="keyword">:texture-wrap-t</span> <span class="keyword">:texture-wrap-r</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>Texture-wrap</h4>
+
+<p>キーが<code>:TEXTURE-WRAP-x</code>の場合valueは列挙型で固定されます。
+これもOpenGLの仕様を読み型にしておきます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> texture-wrapping <span class="paren2">(<span class="code"></span>)</span>
+  '<span class="paren2">(<span class="code">member <span class="keyword">:repeat</span> <span class="keyword">:mirrored-repeat</span> <span class="keyword">:clamp-to-edge</span> <span class="keyword">:clamp-to-border</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>Texture-mag-filter</h4>
+
+<p>キーが<code>:TEXTURE-MAG-FILTER</code>の場合のオプションです。
+これもOpenGLの仕様を読み型にしておきます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> texture-mag-filter <span class="paren2">(<span class="code"></span>)</span> '<span class="paren2">(<span class="code">member <span class="keyword">:linear</span> <span class="keyword">:nearest</span></span>)</span></span>)</span></span></code></pre>
+
+<h4>Texture-min-filter</h4>
+
+<p>キーが<code>:TEXTURE-MAG-FILTER</code>の場合のオプションです。
+これもOpenGLの仕様を読み型にしておきます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> texture-min-filter <span class="paren2">(<span class="code"></span>)</span>
+  '<span class="paren2">(<span class="code">or textute-mag-filter
+       <span class="paren3">(<span class="code">member <span class="keyword">:nearest-mipmap-nearest</span> <span class="keyword">:lenear-mipmap-nearest</span>
+               <span class="keyword">:nearest-mipmap-linear</span> <span class="keyword">:linear-mipmap-linear</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>現状Tutorialsで出てくるのはこれだけなのでこれ以上は定義しません。
+<a href="https://ja.wikipedia.org/wiki/YAGNI" >YAGNI</a>の精神です。</p>
+
+<h4>Issues.</h4>
+
+<p>現在の<code>WITH-TEXTURES</code>マクロで<code>texture</code>のオプション指定をする場合以下のようなコードとなります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">with-textures</span></i> <span class="paren2">(<span class="code">a b</span>)</span>
+  <span class="paren2">(<span class="code">gl:bind-texture <span class="keyword">:texture-2d</span> b</span>)</span>
+  <span class="paren2">(<span class="code">gl:tex-parameter <span class="keyword">:texture-2d</span> <span class="keyword">:texture-wrap-s</span> <span class="keyword">:repeat</span></span>)</span>
+  <span class="paren2">(<span class="code">gl:tex-parameter <span class="keyword">:texture-2d</span> <span class="keyword">:texture-wrap-t</span> <span class="keyword">:repeat</span></span>)</span>
+  <span class="paren2">(<span class="code">gl:tex-parameter <span class="keyword">:texture-2d</span> <span class="keyword">:texture-min-filter</span> <span class="keyword">:linear</span></span>)</span>
+  <span class="paren2">(<span class="code">gl:tex-parameter <span class="keyword">:texture-2d</span> <span class="keyword">:texture-mag-filter</span> <span class="keyword">:linear</span></span>)</span>
+  <span class="paren2">(<span class="code">gl:bind-texture <span class="keyword">:texture-2d</span> a</span>)</span>
+  <span class="paren2">(<span class="code">gl:tex-parameter <span class="keyword">:texture-2d</span> <span class="keyword">:texture-wrap-s</span> <span class="keyword">:repeat</span></span>)</span>
+  <span class="paren2">(<span class="code">gl:tex-parameter <span class="keyword">:texture-2d</span> <span class="keyword">:texture-wrap-t</span> <span class="keyword">:repeat</span></span>)</span>
+  <span class="paren2">(<span class="code">gl:tex-parameter <span class="keyword">:texture-2d</span> <span class="keyword">:texture-min-filter</span> <span class="keyword">:linear</span></span>)</span>
+  <span class="paren2">(<span class="code">gl:tex-parameter <span class="keyword">:texture-2d</span> <span class="keyword">:texture-mag-filter</span> <span class="keyword">:linear</span></span>)</span>
+  ...</span>)</span></span></code></pre>
+
+<p>重複が多くて辛いのとどの設定がどの<code>texture</code>に対してのものだかが見えづらくなってます。
+（二つ目の<code>texture</code>に関する設定を最初にしてますが気づきましたか？）</p>
+
+<p>以下のように書けた方が<code>texture</code>とその設定の関係性が見えやすくて良いです。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">with-textures</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="keyword">:texture-2d</span> <span class="keyword">:texture-wrap-s</span> <span class="keyword">:repeat</span>
+                               <span class="keyword">:texture-wrap-t</span> <span class="keyword">:repaet</span>
+                               <span class="keyword">:texture-min-filter</span> <span class="keyword">:linear</span>
+                               <span class="keyword">:texture-mag-filter</span> <span class="keyword">:linear</span></span>)</span>
+                <span class="paren3">(<span class="code">b <span class="keyword">:texture-2d</span> <span class="keyword">:texture-wrap-s</span> <span class="keyword">:repeat</span>
+                               <span class="keyword">:texture-wrap-t</span> <span class="keyword">:repaet</span>
+                               <span class="keyword">:texture-min-filter</span> <span class="keyword">:linear</span>
+                               <span class="keyword">:texture-mag-filter</span> <span class="keyword">:linear</span></span>)</span></span>)</span>
+  ...</span>)</span></span></code></pre>
+
+<p>これを実現するためにマクロを増築しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-textures</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;rest bind*</span>)</span> &amp;body body</span>)</span>
+  <span class="comment">;; Trivial syntax check.
+</span>  <span class="paren2">(<span class="code">assert <span class="paren3">(<span class="code">every <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">b</span>)</span> <span class="paren5">(<span class="code">typep b '<span class="paren6">(<span class="code">cons symbol <span class="paren1">(<span class="code">cons texture-target *</span>)</span></span>)</span></span>)</span></span>)</span>
+                 bind*</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">vname <span class="paren5">(<span class="code">k v</span>)</span>
+           <span class="paren5">(<span class="code">case k
+             <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="keyword">:texture-wrap-s</span> <span class="keyword">:texture-wrap-t</span> <span class="keyword">:texture-wrap-r</span></span>)</span>
+              `<span class="paren1">(<span class="code"><i><span class="symbol">the</span></i> texture-wrapping ,v</span>)</span></span>)</span>
+             <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="keyword">:texture-mag-filter</span></span>)</span> `<span class="paren1">(<span class="code"><i><span class="symbol">the</span></i> texture-mag-fileter ,v</span>)</span></span>)</span>
+             <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="keyword">:texture-min-fileter</span></span>)</span> `<span class="paren1">(<span class="code"><i><span class="symbol">the</span></i> texture-min-fileter ,v</span>)</span></span>)</span>
+             <span class="paren6">(<span class="code">otherwise v</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="comment">;; The body.
+</span>    `<span class="paren3">(<span class="code">destructuring-bind
+         ,<span class="paren4">(<span class="code">mapcar #'car bind*</span>)</span>
+         <span class="paren4">(<span class="code">gl:gen-textures ,<span class="paren5">(<span class="code">length bind*</span>)</span></span>)</span>
+       <span class="paren4">(<span class="code"><i><span class="symbol">unwind-protect</span></i>
+           <span class="paren5">(<span class="code"><i><span class="symbol">progn</span></i>
+            ,@<span class="paren6">(<span class="code">mapcan
+                <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren2">(<span class="code">b</span>)</span>
+                  <span class="paren2">(<span class="code">destructuring-bind
+                      <span class="paren3">(<span class="code">var target &amp;rest params</span>)</span>
+                      b
+                    `<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">gl:bind-texture ,target ,var</span>)</span>
+                      ,@<span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren5">(<span class="code">k v</span>)</span> <span class="keyword">:on</span> params <span class="keyword">:by</span> #'cddr
+                              <span class="keyword">:collect</span> `<span class="paren5">(<span class="code">gl:tex-parameter
+                                          <span class="paren6">(<span class="code"><i><span class="symbol">the</span></i> texture-pname ,k</span>)</span>
+                                          ,<span class="paren6">(<span class="code">vname k v</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                bind*</span>)</span>
+            ,@body</span>)</span>
+         <span class="paren5">(<span class="code">gl:delete-textures <span class="paren6">(<span class="code">list ,@<span class="paren1">(<span class="code">mapcar #'car bind*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Third Step: The default.</h3>
+
+<p>既定値があるともっと便利です。
+以下のように書けます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">with-textures</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="keyword">:texture-2d</span></span>)</span>
+                <span class="paren3">(<span class="code">b <span class="keyword">:texture-2d</span></span>)</span></span>)</span>
+  t</span>)</span></span></code></pre>
+
+<p>増築しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-textures</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;rest bind*</span>)</span> &amp;body body</span>)</span>
+  <span class="comment">;; Trivial syntax check.
+</span>  <span class="paren2">(<span class="code">dolist <span class="paren3">(<span class="code">b bind*</span>)</span> <span class="paren3">(<span class="code"><i><span class="symbol">the</span></i> <span class="paren4">(<span class="code">cons symbol <span class="paren5">(<span class="code">cons texture-target *</span>)</span></span>)</span> b</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">vname <span class="paren5">(<span class="code">k v</span>)</span>
+             <span class="paren5">(<span class="code">case k
+               <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="keyword">:texture-wrap-s</span> <span class="keyword">:texture-wrap-t</span> <span class="keyword">:texture-wrap-r</span></span>)</span>
+                <span class="paren1">(<span class="code">ensure-check v 'texture-wrapping</span>)</span></span>)</span>
+               <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="keyword">:texture-mag-filter</span></span>)</span> <span class="paren1">(<span class="code">ensure-check v 'texture-mag-filter</span>)</span></span>)</span>
+               <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="keyword">:texture-min-fileter</span></span>)</span> <span class="paren1">(<span class="code">ensure-check v 'texture-min-filter</span>)</span></span>)</span>
+               <span class="paren6">(<span class="code">otherwise v</span>)</span></span>)</span></span>)</span>
+           <span class="paren4">(<span class="code">&lt;option-setters&gt; <span class="paren5">(<span class="code">params</span>)</span>
+             <span class="paren5">(<span class="code">destructuring-bind
+                 <span class="paren6">(<span class="code">&amp;key <span class="paren1">(<span class="code">texture-wrap-s <span class="keyword">:repeat</span></span>)</span> <span class="paren1">(<span class="code">texture-wrap-t <span class="keyword">:repeat</span></span>)</span>
+                  <span class="paren1">(<span class="code">texture-min-filter <span class="keyword">:linear</span></span>)</span> <span class="paren1">(<span class="code">texture-mag-filter <span class="keyword">:linear</span></span>)</span>
+                  &amp;allow-other-keys</span>)</span>
+                 params
+               <span class="paren6">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">params
+                      <span class="paren3">(<span class="code">list* <span class="keyword">:texture-wrap-s</span> texture-wrap-s <span class="keyword">:texture-wrap-t</span>
+                             texture-wrap-t <span class="keyword">:texture-mag-filter</span>
+                             texture-mag-filter <span class="keyword">:texture-min-filter</span>
+                             texture-min-filter
+                             <span class="paren4">(<span class="code">uiop:remove-plist-keys
+                               '<span class="paren5">(<span class="code"><span class="keyword">:texture-wrap-s</span> <span class="keyword">:texture-wrap-t</span>
+                                 <span class="keyword">:texture-min-filter</span> <span class="keyword">:texture-mag-filter</span></span>)</span>
+                               params</span>)</span></span>)</span></span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren2">(<span class="code">k v</span>)</span> <span class="keyword">:on</span> params <span class="keyword">:by</span> #'cddr
+                       <span class="keyword">:collect</span> `<span class="paren2">(<span class="code">gl:tex-parameter
+                                   ,<span class="paren3">(<span class="code">ensure-check k 'texture-pname</span>)</span>
+                                   ,<span class="paren3">(<span class="code">vname k v</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+           <span class="paren4">(<span class="code">ensure-check <span class="paren5">(<span class="code">v type</span>)</span>
+             <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren6">(<span class="code">constantp v</span>)</span>
+                 <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">assert <span class="paren2">(<span class="code">typep v type</span>)</span></span>)</span> v</span>)</span>
+                 `<span class="paren6">(<span class="code"><i><span class="symbol">the</span></i> ,type ,v</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="comment">;; The body.
+</span>    `<span class="paren3">(<span class="code">destructuring-bind
+         ,<span class="paren4">(<span class="code">mapcar #'car bind*</span>)</span>
+         <span class="paren4">(<span class="code">gl:gen-textures ,<span class="paren5">(<span class="code">length bind*</span>)</span></span>)</span>
+       <span class="paren4">(<span class="code"><i><span class="symbol">unwind-protect</span></i>
+           <span class="paren5">(<span class="code"><i><span class="symbol">progn</span></i>
+            ,@<span class="paren6">(<span class="code">mapcan
+                <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren2">(<span class="code">b</span>)</span>
+                  <span class="paren2">(<span class="code">destructuring-bind
+                      <span class="paren3">(<span class="code">var target &amp;rest params</span>)</span>
+                      b
+                    `<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">gl:bind-texture ,<span class="paren5">(<span class="code">ensure-check target 'texture-target</span>)</span>
+                                       ,var</span>)</span>
+                      ,@<span class="paren4">(<span class="code">&lt;option-setters&gt; params</span>)</span></span>)</span></span>)</span></span>)</span>
+                bind*</span>)</span>
+            ,@body</span>)</span>
+         <span class="paren5">(<span class="code">gl:delete-textures <span class="paren6">(<span class="code">list ,@<span class="paren1">(<span class="code">mapcar #'car bind*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>Fourth step: Initialize.</h3>
+
+<p><code>texture</code>に画像を貼り付けるのも各<code>texture</code>ごとにできたほうが関係性が分かりやすくていいです。
+画像データは既にロードされているとして以下のように書けると嬉しゅうございます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">with-textures</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">a <span class="keyword">:texture-2d</span>
+                   <span class="keyword">:params</span> <span class="paren4">(<span class="code"><span class="keyword">:texture-wrap-s</span> <span class="keyword">:repeat</span> ...</span>)</span>
+                   <span class="keyword">:init</span> <span class="paren4">(<span class="code">gl:tex-image-2d <span class="keyword">:texture-2d</span> 0 <span class="keyword">:rgb</span> <span class="special">*width*</span> <span class="special">*height*</span> 0 <span class="keyword">:rgb</span> <span class="keyword">:unsigned-byte</span> <span class="special">*image*</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">b ...</span>)</span></span>)</span>
+  ...</span>)</span></span></code></pre>
+
+<p>改築しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-textures</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">&amp;rest bind*</span>)</span> &amp;body body</span>)</span>
+  <span class="comment">;; Trivial syntax check.
+</span>  <span class="paren2">(<span class="code">dolist <span class="paren3">(<span class="code">b bind*</span>)</span> <span class="paren3">(<span class="code"><i><span class="symbol">the</span></i> <span class="paren4">(<span class="code">cons symbol <span class="paren5">(<span class="code">cons texture-target *</span>)</span></span>)</span> b</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">labels</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">vname <span class="paren5">(<span class="code">k v</span>)</span>
+             <span class="paren5">(<span class="code">case k
+               <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="keyword">:texture-wrap-s</span> <span class="keyword">:texture-wrap-t</span> <span class="keyword">:texture-wrap-r</span></span>)</span>
+                <span class="paren1">(<span class="code">ensure-check v 'texture-wrapping</span>)</span></span>)</span>
+               <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="keyword">:texture-mag-filter</span></span>)</span> <span class="paren1">(<span class="code">ensure-check v 'texture-mag-filter</span>)</span></span>)</span>
+               <span class="paren6">(<span class="code"><span class="paren1">(<span class="code"><span class="keyword">:texture-min-fileter</span></span>)</span> <span class="paren1">(<span class="code">ensure-check v 'texture-min-filter</span>)</span></span>)</span>
+               <span class="paren6">(<span class="code">otherwise v</span>)</span></span>)</span></span>)</span>
+           <span class="paren4">(<span class="code">&lt;option-setters&gt; <span class="paren5">(<span class="code">params</span>)</span>
+             <span class="paren5">(<span class="code">destructuring-bind
+                 <span class="paren6">(<span class="code">&amp;key <span class="paren1">(<span class="code">texture-wrap-s <span class="keyword">:repeat</span></span>)</span> <span class="paren1">(<span class="code">texture-wrap-t <span class="keyword">:repeat</span></span>)</span>
+                  <span class="paren1">(<span class="code">texture-min-filter <span class="keyword">:linear</span></span>)</span> <span class="paren1">(<span class="code">texture-mag-filter <span class="keyword">:linear</span></span>)</span>
+                  &amp;allow-other-keys</span>)</span>
+                 params
+               <span class="paren6">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">params
+                      <span class="paren3">(<span class="code">list* <span class="keyword">:texture-wrap-s</span> texture-wrap-s <span class="keyword">:texture-wrap-t</span>
+                             texture-wrap-t <span class="keyword">:texture-mag-filter</span>
+                             texture-mag-filter <span class="keyword">:texture-min-filter</span>
+                             texture-min-filter
+                             <span class="paren4">(<span class="code">uiop:remove-plist-keys
+                               '<span class="paren5">(<span class="code"><span class="keyword">:texture-wrap-s</span> <span class="keyword">:texture-wrap-t</span>
+                                 <span class="keyword">:texture-min-filter</span> <span class="keyword">:texture-mag-filter</span></span>)</span>
+                               params</span>)</span></span>)</span></span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren2">(<span class="code">k v</span>)</span> <span class="keyword">:on</span> params <span class="keyword">:by</span> #'cddr
+                       <span class="keyword">:collect</span> `<span class="paren2">(<span class="code">gl:tex-parameter
+                                   ,<span class="paren3">(<span class="code">ensure-check k 'texture-pname</span>)</span>
+                                   ,<span class="paren3">(<span class="code">vname k v</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+           <span class="paren4">(<span class="code">ensure-check <span class="paren5">(<span class="code">v type</span>)</span>
+             <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren6">(<span class="code">constantp v</span>)</span>
+                 <span class="paren6">(<span class="code"><i><span class="symbol">progn</span></i> <span class="paren1">(<span class="code">assert <span class="paren2">(<span class="code">typep v type</span>)</span></span>)</span> v</span>)</span>
+                 `<span class="paren6">(<span class="code"><i><span class="symbol">the</span></i> ,type ,v</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="comment">;; The body.
+</span>    `<span class="paren3">(<span class="code">destructuring-bind
+         ,<span class="paren4">(<span class="code">mapcar #'car bind*</span>)</span>
+         <span class="paren4">(<span class="code">gl:gen-textures ,<span class="paren5">(<span class="code">length bind*</span>)</span></span>)</span>
+       <span class="paren4">(<span class="code"><i><span class="symbol">unwind-protect</span></i>
+           <span class="paren5">(<span class="code"><i><span class="symbol">progn</span></i>
+            ,@<span class="paren6">(<span class="code">mapcan
+                <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren2">(<span class="code">b</span>)</span>
+                  <span class="paren2">(<span class="code">destructuring-bind
+                      <span class="paren3">(<span class="code">var target &amp;key params init</span>)</span> <span class="comment">; &lt;--- New!
+</span>                      b
+                    `<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">gl:bind-texture ,<span class="paren5">(<span class="code">ensure-check target 'texture-target</span>)</span>
+                                       ,var</span>)</span>
+                      ,@<span class="paren4">(<span class="code">&lt;option-setters&gt; params</span>)</span>
+                      ,init</span>)</span></span>)</span></span>)</span> <span class="comment">; &lt;--- New!
+</span>                bind*</span>)</span>
+            ,@body</span>)</span>
+         <span class="paren5">(<span class="code">gl:delete-textures <span class="paren6">(<span class="code">list ,@<span class="paren1">(<span class="code">mapcar #'car bind*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>Helpers</h2>
+
+<p><code>texture</code>マクロの改築はひとまず終了ですが表示にはヘルパがまだ必要です。</p>
+
+<h3>Texture coodinates.</h3>
+
+<p><code>texture</code>の座標を個別に管理する必要があります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> st <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">%s <span class="keyword">:initarg</span> <span class="keyword">:s</span> <span class="keyword">:type</span> single-float</span>)</span> <span class="paren3">(<span class="code">%t <span class="keyword">:initarg</span> <span class="keyword">:t</span> <span class="keyword">:type</span> single-float</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> vector-class</span>)</span></span>)</span></span></code></pre>
+
+<h3>Images.</h3>
+
+<p>いったん棚にあげていた画像のロードを済ませましょう。
+本家tutorialsからもらってくるとします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">pathname <span class="paren4">(<span class="code">merge-pathnames <span class="string">"container.jpg"</span> <span class="paren5">(<span class="code">user-homedir-pathname</span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">unless <span class="paren3">(<span class="code">probe-file pathname</span>)</span>
+    <span class="paren3">(<span class="code">dex:fetch <span class="string">"https://learnopengl.com/img/textures/container.jpg"</span> pathname</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*image*</span> <span class="paren3">(<span class="code">opticl:read-jpeg-file pathname</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>TEX-IMAGE-2D</h3>
+
+<p>cl-openglの<code>TEX-IAMGE-2D</code>の引数はLisp配列から自動的に求められるものが多うございます。
+ここは一つ独自のラッパを導入しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> base-internal-format <span class="paren2">(<span class="code"></span>)</span>
+  '<span class="paren2">(<span class="code">member <span class="keyword">:depth-component</span> <span class="keyword">:depth-stencil</span> <span class="keyword">:red</span> <span class="keyword">:rg</span> <span class="keyword">:rgb</span> <span class="keyword">:rgba</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">deftype</span></i> pixel-format <span class="paren2">(<span class="code"></span>)</span>
+  '<span class="paren2">(<span class="code">or base-internal-format
+       <span class="paren3">(<span class="code">member <span class="keyword">:bgr</span>
+               <span class="keyword">:bgra</span> <span class="keyword">:red-integer</span>
+               <span class="keyword">:rg-integer</span> <span class="keyword">:rgb-integer</span>
+               <span class="keyword">:bgr-integer</span> <span class="keyword">:rgba-integer</span>
+               <span class="keyword">:bgra-integer</span> <span class="keyword">:stencil-index</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> tex-image-2d <span class="paren2">(<span class="code">array</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">format <span class="paren5">(<span class="code">ecase <span class="paren6">(<span class="code">array-dimension array 2</span>)</span> <span class="paren6">(<span class="code">3 <span class="keyword">:rgb</span></span>)</span> <span class="paren6">(<span class="code">4 <span class="keyword">:rgba</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">gl:tex-image-2d <span class="paren4">(<span class="code"><i><span class="symbol">the</span></i> texture-target <span class="keyword">:texture-2d</span></span>)</span> 0 <span class="comment">; mipmap level.
+</span>                     <span class="paren4">(<span class="code"><i><span class="symbol">the</span></i> base-internal-format format</span>)</span>
+                     <span class="paren4">(<span class="code">array-dimension array 0</span>)</span> <span class="comment">; width
+</span>                     <span class="paren4">(<span class="code">array-dimension array 1</span>)</span> <span class="comment">; height
+</span>                     0 <span class="comment">; legacy stuff.
+</span>                     <span class="paren4">(<span class="code"><i><span class="symbol">the</span></i> pixel-format format</span>)</span>
+                     <span class="paren4">(<span class="code">foreign-type <span class="paren5">(<span class="code">array-element-type array</span>)</span></span>)</span>
+                     <span class="paren4">(<span class="code">make-array <span class="paren5">(<span class="code">array-total-size array</span>)</span>
+                                 <span class="keyword">:element-type</span> <span class="paren5">(<span class="code">array-element-type array</span>)</span>
+                                 <span class="keyword">:displaced-to</span> array</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>DRAW-ELEMENTS</h3>
+
+<p>これまではcl-openglの下層パッケージである<code>%GL</code>の<code>DRAW-ELEMENTS</code>を使っていました。
+というのも<code>CL-OPENGL:DRAW-ELEMENTS</code>はバッファに対応していないからです。
+これにもラッパ関数を作りましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> draw-elements <span class="paren2">(<span class="code">mode cl-vector &amp;key <span class="paren3">(<span class="code">offset 0</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">%gl:draw-elements mode <span class="paren3">(<span class="code">length cl-vector</span>)</span>
+                     <span class="paren3">(<span class="code">foreign-type <span class="paren4">(<span class="code">array-element-type cl-vector</span>)</span></span>)</span> offset</span>)</span></span>)</span></span></code></pre>
+
+<h2>Conclusion.</h2>
+
+<p>まとめると以下のようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defshader</span></i> hello-texture 330 <span class="paren2">(<span class="code">xy st</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:vertex</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">|texCoord| <span class="keyword">:vec2</span></span>)</span></span>)</span>
+    <span class="string">"gl_Position = vec4(xy, 0.0, 1.0);"</span>
+    <span class="string">"texCoord = st;"</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:fragment</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">color <span class="keyword">:vec4</span></span>)</span> &amp;uniform <span class="paren4">(<span class="code">tex <span class="keyword">:|sampler2D|</span></span>)</span></span>)</span>
+    <span class="string">"color = texture(tex, texCoord);"</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*texture-quad*</span>
+  <span class="paren2">(<span class="code">concatenate '<span class="paren3">(<span class="code">array single-float <span class="paren4">(<span class="code">*</span>)</span></span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'hello-texture <span class="keyword">:x</span> -0.5 <span class="keyword">:y</span> 0.5 <span class="keyword">:s</span> 0.0 <span class="keyword">:t</span> 1.0</span>)</span> <span class="comment">; top left
+</span>               <span class="paren3">(<span class="code">make-instance 'hello-texture <span class="keyword">:x</span> 0.5 <span class="keyword">:y</span> 0.5 <span class="keyword">:s</span> 1.0 <span class="keyword">:t</span> 1.0</span>)</span> <span class="comment">; top right
+</span>               <span class="paren3">(<span class="code">make-instance 'hello-texture <span class="keyword">:x</span> -0.5 <span class="keyword">:y</span> -0.5 <span class="keyword">:s</span> 0.0 <span class="keyword">:t</span> 0.0</span>)</span> <span class="comment">; bottom left
+</span>               <span class="paren3">(<span class="code">make-instance 'hello-texture <span class="keyword">:x</span> 0.5 <span class="keyword">:y</span> -0.5 <span class="keyword">:s</span> 1.0 <span class="keyword">:t</span> 0.0</span>)</span></span>)</span></span>)</span> <span class="comment">; bottom right
+</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> hello-texture <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">hello-texture <span class="paren2">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*texture-quad*</span></span>)</span>
+                                     <span class="paren2">(<span class="code"><span class="keyword">:indices</span> '<span class="paren3">(<span class="code">0 1 2 2 3 1</span>)</span></span>)</span>
+                                     <span class="paren2">(<span class="code"><span class="keyword">:uniform</span> <span class="paren3">(<span class="code">tex-loc tex</span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">with-textures</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">tex <span class="keyword">:texture-2d</span> <span class="keyword">:init</span> <span class="paren3">(<span class="code">tex-image-2d <span class="special">*image*</span></span>)</span></span>)</span></span>)</span>
+            <span class="paren1">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+              <span class="paren2">(<span class="code"><span class="keyword">:quit</span> <span class="paren3">(<span class="code"></span>)</span>
+                t</span>)</span>
+              <span class="paren2">(<span class="code"><span class="keyword">:idle</span> <span class="paren3">(<span class="code"></span>)</span>
+                <span class="paren3">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren4">(<span class="code">win <span class="paren5">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+                  <span class="paren4">(<span class="code">fude-gl:draw-elements <span class="keyword">:triangles</span> <span class="paren5">(<span class="code">indices-of hello-texture</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/hello-texture.png" alt="image of the texture example" /></p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
