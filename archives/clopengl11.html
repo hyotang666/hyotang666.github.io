@@ -1,0 +1,237 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl11</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 11.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl10.html" >前回</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前回は複数の<code>texture</code>を取り扱えるようマクロの改築を行いました。
+本章では行列演算を導入し<code>texture</code>の移動、伸縮、回転を実施します。</p>
+
+<p>実装よりはエコシステムの紹介となります。</p>
+
+<h2>Ecosystem.</h2>
+
+<p>行列演算を行うライブラリは複数ありますがこれらはけしてOpenGLで行うような画像処理に特化しているわけではありません。
+その土台となる機能でしかありません。
+僕達が必要としているOpenGLで使うように設計されている行列演算ライブラリは以下の二択です。</p>
+
+<h3><a href="https://github.com/Shinmera/3d-matrices" >3d-matrices</a> with <a href="https://github.com/Shinmera/3d-vectors" >3d-vectors</a>.</h3>
+
+<p>本シリーズで採用するのはこれです。</p>
+
+<h3><a href="https://github.com/nikodemus/sb-cga" >sb-cga</a></h3>
+
+<p>対抗馬はこれです。</p>
+
+<p>こちらを不採用にした理由は幾つかの機能が足りないのと実装が参照しているtutorialsで採用されているGLMと挙動が異なる点があるからです。
+具体的にはGLMの回転は左回転ですがsb-cgaは右回転です。</p>
+
+<p>速度はこちらのほうが早そうなので（要計測）何よりも速度が求められる場合はこちらの採用を視野にいれてもいいかもしれません。</p>
+
+<h2>How to use.</h2>
+
+<p><code>uniform</code>変数に行列を渡すには<code>GL:UNIFORM-MATRIX</code>を使います。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> radians <span class="paren2">(<span class="code">degrees</span>)</span> <span class="paren2">(<span class="code">* degrees <span class="paren3">(<span class="code">/ pi 180</span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defshader</span></i> transform-demo 330 <span class="paren2">(<span class="code">xy st</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:vertex</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">coord <span class="keyword">:vec2</span></span>)</span> &amp;uniform <span class="paren4">(<span class="code">transform <span class="keyword">:mat4</span></span>)</span></span>)</span>
+    <span class="string">"gl_Position = transform * vec4(xy, 0.0, 1.0);"</span>
+    <span class="string">"coord = st;"</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:fragment</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">color <span class="keyword">:vec4</span></span>)</span> &amp;uniform <span class="paren4">(<span class="code">tex1 <span class="keyword">:|sampler2D|</span></span>)</span> <span class="paren4">(<span class="code">tex2 <span class="keyword">:|sampler2D|</span></span>)</span></span>)</span>
+    <span class="string">"color = mix(texture(tex1, coord), texture(tex2, coord), 0.2);"</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*texture-quad*</span>
+  <span class="paren2">(<span class="code">concatenate '<span class="paren3">(<span class="code">array single-float <span class="paren4">(<span class="code">*</span>)</span></span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'transform-demo <span class="keyword">:x</span> -0.5 <span class="keyword">:y</span> 0.5 <span class="keyword">:s</span> 0.0 <span class="keyword">:t</span> 1.0</span>)</span> <span class="comment">; top left
+</span>               <span class="paren3">(<span class="code">make-instance 'transform-demo <span class="keyword">:x</span> 0.5 <span class="keyword">:y</span> 0.5 <span class="keyword">:s</span> 1.0 <span class="keyword">:t</span> 1.0</span>)</span> <span class="comment">; top right
+</span>               <span class="paren3">(<span class="code">make-instance 'transform-demo <span class="keyword">:x</span> -0.5 <span class="keyword">:y</span> -0.5 <span class="keyword">:s</span> 0.0 <span class="keyword">:t</span> 0.0</span>)</span> <span class="comment">; bottom left
+</span>               <span class="paren3">(<span class="code">make-instance 'transform-demo <span class="keyword">:x</span> 0.5 <span class="keyword">:y</span> -0.5 <span class="keyword">:s</span> 1.0 <span class="keyword">:t</span> 0.0</span>)</span></span>)</span></span>)</span> <span class="comment">; bottom right
+</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> transform-demo <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">transform-demo
+                        <span class="paren2">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*texture-quad*</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:indices</span> '<span class="paren3">(<span class="code">0 1 2 2 3 1</span>)</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:uniform</span> <span class="paren3">(<span class="code">tex1 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*image*</span></span>)</span></span>)</span>
+                                  <span class="paren3">(<span class="code">tex2 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*face*</span></span>)</span></span>)</span>
+                                  transform</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren1">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:quit</span> <span class="paren2">(<span class="code"></span>)</span>
+              t</span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:idle</span> <span class="paren2">(<span class="code"></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren3">(<span class="code">win <span class="paren4">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">gl:uniform-matrix transform 4
+                                   <span class="paren4">(<span class="code">vector
+                                     <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">mat <span class="paren2">(<span class="code">3d-matrices:meye 4</span>)</span></span>)</span></span>)</span>
+                                       <span class="paren6">(<span class="code">3d-matrices:nmrotate mat
+                                                             3d-vectors:+vz+
+                                                             <span class="paren1">(<span class="code">radians 90</span>)</span></span>)</span>
+                                       <span class="paren6">(<span class="code">3d-matrices:marr
+                                         <span class="paren1">(<span class="code">3d-matrices:nmscale mat
+                                                              <span class="paren2">(<span class="code">3d-vectors:vec
+                                                                0.5 0.5
+                                                                0.5</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">draw-elements <span class="keyword">:triangles</span> <span class="paren4">(<span class="code">indices-of transform-demo</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/transform-demo.png" alt="image of the example." /></p>
+
+<h3>Translate X axis.</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> translate-x <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">transform-demo
+                        <span class="paren2">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*texture-quad*</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:indices</span> '<span class="paren3">(<span class="code">0 1 2 2 3 1</span>)</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:uniform</span> <span class="paren3">(<span class="code">tex1 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*image*</span></span>)</span></span>)</span>
+                                  <span class="paren3">(<span class="code">tex2 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*face*</span></span>)</span></span>)</span>
+                                  transform</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren1">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:quit</span> <span class="paren2">(<span class="code"></span>)</span>
+              t</span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:idle</span> <span class="paren2">(<span class="code"></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren3">(<span class="code">win <span class="paren4">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">sleep <span class="paren4">(<span class="code">/ 1 60</span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">gl:uniform-matrix transform 4
+                                   <span class="paren4">(<span class="code">vector
+                                     <span class="paren5">(<span class="code">3d-matrices:marr
+                                       <span class="paren6">(<span class="code">3d-matrices:mtranslation
+                                         <span class="paren1">(<span class="code">3d-vectors:vec <span class="paren2">(<span class="code">sin <span class="paren3">(<span class="code">get-internal-real-time</span>)</span></span>)</span>
+                                                         0.0
+                                                         0.0</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">draw-elements <span class="keyword">:triangles</span> <span class="paren4">(<span class="code">indices-of transform-demo</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/translate-x.gif" alt="gif of the example." /></p>
+
+<h3>Translate Y axis.</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> translate-y <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">transform-demo
+                        <span class="paren2">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*texture-quad*</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:indices</span> '<span class="paren3">(<span class="code">0 1 2 2 3 1</span>)</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:uniform</span> <span class="paren3">(<span class="code">tex1 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*image*</span></span>)</span></span>)</span>
+                                  <span class="paren3">(<span class="code">tex2 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*face*</span></span>)</span></span>)</span>
+                                  transform</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren1">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:quit</span> <span class="paren2">(<span class="code"></span>)</span>
+              t</span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:idle</span> <span class="paren2">(<span class="code"></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren3">(<span class="code">win <span class="paren4">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">sleep <span class="paren4">(<span class="code">/ 1 60</span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">gl:uniform-matrix transform 4
+                                   <span class="paren4">(<span class="code">vector
+                                     <span class="paren5">(<span class="code">3d-matrices:marr
+                                       <span class="paren6">(<span class="code">3d-matrices:mtranslation
+                                         <span class="paren1">(<span class="code">3d-vectors:vec 0.0
+                                                         <span class="paren2">(<span class="code">sin <span class="paren3">(<span class="code">get-internal-real-time</span>)</span></span>)</span>
+                                                         0.0</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">draw-elements <span class="keyword">:triangles</span> <span class="paren4">(<span class="code">indices-of transform-demo</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/translate-y.gif" alt="gif of the example." /></p>
+
+<h3>Scaling.</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> scaling <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">transform-demo
+                        <span class="paren2">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*texture-quad*</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:indices</span> '<span class="paren3">(<span class="code">0 1 2 2 3 1</span>)</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:uniform</span> <span class="paren3">(<span class="code">tex1 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*image*</span></span>)</span></span>)</span>
+                                  <span class="paren3">(<span class="code">tex2 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*face*</span></span>)</span></span>)</span>
+                                  transform</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren1">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:quit</span> <span class="paren2">(<span class="code"></span>)</span>
+              t</span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:idle</span> <span class="paren2">(<span class="code"></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren3">(<span class="code">win <span class="paren4">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">sleep <span class="paren4">(<span class="code">/ 1 60</span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">gl:uniform-matrix transform 4
+                                   <span class="paren4">(<span class="code">vector
+                                     <span class="paren5">(<span class="code">3d-matrices:marr
+                                       <span class="paren6">(<span class="code">3d-matrices:nmscale
+                                         <span class="paren1">(<span class="code">3d-matrices:mtranslation
+                                           <span class="paren2">(<span class="code">3d-vectors:vec 0 0 0</span>)</span></span>)</span>
+                                         <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">v <span class="paren4">(<span class="code">sin <span class="paren5">(<span class="code">get-internal-real-time</span>)</span></span>)</span></span>)</span></span>)</span>
+                                           <span class="paren2">(<span class="code">3d-vectors:vec v v 0.0</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">draw-elements <span class="keyword">:triangles</span> <span class="paren4">(<span class="code">indices-of transform-demo</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/scaling.gif" alt="gif of the example." /></p>
+
+<h3>Rotating.</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> rotating <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">transform-demo
+                        <span class="paren2">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*texture-quad*</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:indices</span> '<span class="paren3">(<span class="code">0 1 2 2 3 1</span>)</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:uniform</span> <span class="paren3">(<span class="code">tex1 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*image*</span></span>)</span></span>)</span>
+                                  <span class="paren3">(<span class="code">tex2 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*face*</span></span>)</span></span>)</span>
+                                  transform</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren1">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:quit</span> <span class="paren2">(<span class="code"></span>)</span>
+              t</span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:idle</span> <span class="paren2">(<span class="code"></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren3">(<span class="code">win <span class="paren4">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">sleep <span class="paren4">(<span class="code">/ 1 60</span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">gl:uniform-matrix transform 4
+                                   <span class="paren4">(<span class="code">vector
+                                     <span class="paren5">(<span class="code">3d-matrices:marr
+                                       <span class="paren6">(<span class="code">3d-matrices:nmrotate
+                                         <span class="paren1">(<span class="code">3d-matrices:mtranslation
+                                           <span class="paren2">(<span class="code">3d-vectors:vec 0 0 0</span>)</span></span>)</span>
+                                         3d-vectors:+vz+
+                                         <span class="paren1">(<span class="code">radians <span class="paren2">(<span class="code">get-internal-real-time</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">draw-elements <span class="keyword">:triangles</span> <span class="paren4">(<span class="code">indices-of transform-demo</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/rotating.gif" alt="gif of the example." /></p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
