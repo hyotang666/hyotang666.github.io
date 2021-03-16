@@ -1,0 +1,329 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl13</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 13.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl12.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前章では遠近法行列を導入して3Dの世界に一歩足を踏み入れました。
+本章ではカメラ視点行列を取り入れて二歩目を踏み出します。</p>
+
+<h2>Camera.</h2>
+
+<p><code>uniform</code>変数<code>VIEW</code>にカメラ視点行列を渡すだけなので難しいことはありません。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> cameras <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">cubes
+                        <span class="paren2">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*depth-demo*</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:indices</span> '<span class="paren3">(<span class="code"></span>)</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:uniform</span> <span class="paren3">(<span class="code">tex1 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*image*</span></span>)</span></span>)</span>
+                                  <span class="paren3">(<span class="code">tex2 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*face*</span></span>)</span></span>)</span>
+                                  model view projection</span>)</span></span>)</span></span>)</span>
+            <span class="paren6">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">send <span class="paren3">(<span class="code">matrix uniform</span>)</span>
+                         <span class="paren3">(<span class="code">gl:uniform-matrix uniform 4 <span class="paren4">(<span class="code">vector <span class="paren5">(<span class="code">3d-matrices:marr matrix</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+              <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">cube-positions
+                      <span class="paren4">(<span class="code">list <span class="paren5">(<span class="code">3d-vectors:vec 0 0 0</span>)</span>
+                            <span class="paren5">(<span class="code">3d-vectors:vec 2 5 -15</span>)</span>
+                            <span class="paren5">(<span class="code">3d-vectors:vec -1.5 -2.2 -2.5</span>)</span>
+                            <span class="paren5">(<span class="code">3d-vectors:vec -3.8 -2.0 -12.3</span>)</span>
+                            <span class="paren5">(<span class="code">3d-vectors:vec 2.4 -0.4 -3.5</span>)</span>
+                            <span class="paren5">(<span class="code">3d-vectors:vec -1.7 3 -7.5</span>)</span>
+                            <span class="paren5">(<span class="code">3d-vectors:vec 1.3 -2 -2.5</span>)</span>
+                            <span class="paren5">(<span class="code">3d-vectors:vec 1.5 2 -2.5</span>)</span>
+                            <span class="paren5">(<span class="code">3d-vectors:vec 1.5 0.2 -1.5</span>)</span>
+                            <span class="paren5">(<span class="code">3d-vectors:vec -1.3 1 -1.5</span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren2">(<span class="code">gl:enable <span class="keyword">:depth-test</span></span>)</span>
+                <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren3">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+                  <span class="paren3">(<span class="code"><span class="keyword">:quit</span> <span class="paren4">(<span class="code"></span>)</span>
+                    t</span>)</span>
+                  <span class="paren3">(<span class="code"><span class="keyword">:idle</span> <span class="paren4">(<span class="code"></span>)</span>
+                    <span class="paren4">(<span class="code">sleep <span class="paren5">(<span class="code">/ 1 15</span>)</span></span>)</span>
+                    <span class="paren4">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren5">(<span class="code">win <span class="paren6">(<span class="code"><span class="keyword">:color-buffer-bit</span> <span class="keyword">:depth-buffer-bit</span></span>)</span></span>)</span>
+                     <span class="paren5">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">radius 10</span>)</span>
+                            <span class="paren1">(<span class="code">v <span class="paren2">(<span class="code">3d-matrices:mlookat <span class="comment">; &lt;--- New!
+</span>                                 <span class="paren3">(<span class="code">3d-vectors:vec <span class="paren4">(<span class="code">* <span class="paren5">(<span class="code">sin <span class="paren6">(<span class="code">get-internal-real-time</span>)</span></span>)</span> radius</span>)</span>
+                                                 0
+                                                 <span class="paren4">(<span class="code">* <span class="paren5">(<span class="code">cos <span class="paren6">(<span class="code">get-internal-real-time</span>)</span></span>)</span> radius</span>)</span></span>)</span>
+                                <span class="paren3">(<span class="code">3d-vectors:vec 0 0 0</span>)</span>
+                                <span class="paren3">(<span class="code">3d-vectors:vec 0 1 0</span>)</span></span>)</span></span>)</span></span>)</span>
+                       <span class="paren6">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> pos <span class="keyword">:in</span> cube-positions
+                             <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+                             <span class="keyword">:do</span> <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">m <span class="paren4">(<span class="code">3d-matrices:nmrotate <span class="paren5">(<span class="code">3d-matrices:mtranslation pos</span>)</span>
+                                           <span class="paren5">(<span class="code">3d-vectors:vec 1 0.3 0.5</span>)</span>
+                                           <span class="paren5">(<span class="code">fude-gl:radians <span class="paren6">(<span class="code">* 20 i</span>)</span></span>)</span></span>)</span></span>)</span>
+                                       <span class="paren3">(<span class="code">p <span class="paren4">(<span class="code">3d-matrices:mperspective 45
+                                           <span class="paren5">(<span class="code"><i><span class="symbol">multiple-value-call</span></i> #'/ <span class="paren6">(<span class="code">sdl2:get-window-size win</span>)</span></span>)</span>
+                                           0.1
+                                           100</span>)</span></span>)</span></span>)</span>
+                                   <span class="paren2">(<span class="code">send m model</span>)</span>
+                                   <span class="paren2">(<span class="code">send v view</span>)</span>
+                                   <span class="paren2">(<span class="code">send p projection</span>)</span>
+                                   <span class="paren2">(<span class="code">gl:draw-arrays <span class="keyword">:triangles</span> 0 36</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/camera.gif" alt="Video of the example above." /></p>
+
+<h2>WALK-AROUND</h2>
+
+<p>ユーザーの入力を受け取りカメラを動かしてみましょう。</p>
+
+<p>コードの規模が大きくなってきたので変数を外に出します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*cube-positions*</span>
+  <span class="paren2">(<span class="code">list <span class="paren3">(<span class="code">3d-vectors:vec 0 0 0</span>)</span> <span class="paren3">(<span class="code">3d-vectors:vec 2 5 -15</span>)</span>
+        <span class="paren3">(<span class="code">3d-vectors:vec -1.5 -2.2 -2.5</span>)</span> <span class="paren3">(<span class="code">3d-vectors:vec -3.8 -2.0 -12.3</span>)</span>
+        <span class="paren3">(<span class="code">3d-vectors:vec 2.4 -0.4 -3.5</span>)</span> <span class="paren3">(<span class="code">3d-vectors:vec -1.7 3 -7.5</span>)</span>
+        <span class="paren3">(<span class="code">3d-vectors:vec 1.3 -2 -2.5</span>)</span> <span class="paren3">(<span class="code">3d-vectors:vec 1.5 2 -2.5</span>)</span>
+        <span class="paren3">(<span class="code">3d-vectors:vec 1.5 0.2 -1.5</span>)</span> <span class="paren3">(<span class="code">3d-vectors:vec -1.3 1 -1.5</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>入力に従って新しいベクタを計算する処理です。
+なお<code>3D-VECTORS:VUNIT</code>は<code>glm::normalize</code>に相当し、<code>3D-VECTORS:VC</code>は<code>glm::cross</code>に相当します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> move-camera <span class="paren2">(<span class="code">keysym camera-front camera-up camera-pos</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">camera-speed 0.05</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">case <span class="paren4">(<span class="code">sdl2:scancode keysym</span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:scancode-up</span>
+       <span class="paren5">(<span class="code">3d-vectors:nv+ camera-pos <span class="paren6">(<span class="code">3d-vectors:v* camera-speed camera-front</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:scancode-down</span>
+       <span class="paren5">(<span class="code">3d-vectors:nv- camera-pos <span class="paren6">(<span class="code">3d-vectors:v* camera-speed camera-front</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:scancode-left</span>
+       <span class="paren5">(<span class="code">3d-vectors:v- camera-pos
+                      <span class="paren6">(<span class="code">3d-vectors:v*
+                        <span class="paren1">(<span class="code">3d-vectors:vunit
+                          <span class="paren2">(<span class="code">3d-vectors:vc camera-front camera-up</span>)</span></span>)</span>
+                        camera-speed</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:scancode-right</span>
+       <span class="paren5">(<span class="code">3d-vectors:v+ camera-pos
+                      <span class="paren6">(<span class="code">3d-vectors:v*
+                        <span class="paren1">(<span class="code">3d-vectors:vunit
+                          <span class="paren2">(<span class="code">3d-vectors:vc camera-front camera-up</span>)</span></span>)</span>
+                        camera-speed</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">otherwise camera-pos</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>入力イベントをハンドリングするだけなので何も難しくはありません。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> walk-around <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600</span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">cubes
+                        <span class="paren2">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*depth-demo*</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:indices</span> '<span class="paren3">(<span class="code"></span>)</span></span>)</span>
+                        <span class="paren2">(<span class="code"><span class="keyword">:uniform</span> <span class="paren3">(<span class="code">tex1 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*image*</span></span>)</span></span>)</span>
+                                  <span class="paren3">(<span class="code">tex2 <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">tex-image-2d <span class="special">*face*</span></span>)</span></span>)</span>
+                                  model view projection</span>)</span></span>)</span></span>)</span>
+            <span class="paren6">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">send <span class="paren3">(<span class="code">matrix uniform</span>)</span>
+                         <span class="paren3">(<span class="code">gl:uniform-matrix uniform 4 <span class="paren4">(<span class="code">vector <span class="paren5">(<span class="code">3d-matrices:marr matrix</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+              <span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">camera-pos <span class="paren4">(<span class="code">3d-vectors:vec 0 0 3</span>)</span></span>)</span>
+                    <span class="paren3">(<span class="code">camera-front <span class="paren4">(<span class="code">3d-vectors:vec 0 0 -1</span>)</span></span>)</span>
+                    <span class="paren3">(<span class="code">camera-up <span class="paren4">(<span class="code">3d-vectors:vec 0 1 0</span>)</span></span>)</span>
+                    <span class="paren3">(<span class="code">p <span class="paren4">(<span class="code">3d-matrices:mperspective 45
+                                                 <span class="paren5">(<span class="code"><i><span class="symbol">multiple-value-call</span></i> #'/ <span class="paren6">(<span class="code">sdl2:get-window-size win</span>)</span></span>)</span>
+                                                 0.1
+                                                 100</span>)</span></span>)</span></span>)</span>
+                <span class="paren2">(<span class="code">gl:enable <span class="keyword">:depth-test</span></span>)</span>
+                <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren3">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+                  <span class="paren3">(<span class="code"><span class="keyword">:quit</span> <span class="paren4">(<span class="code"></span>)</span>
+                    t</span>)</span>
+                  <span class="paren3">(<span class="code"><span class="keyword">:keydown</span> <span class="paren4">(<span class="code"><span class="keyword">:keysym</span> keysym</span>)</span> <span class="comment">; &lt;--- New!
+</span>                    <span class="paren4">(<span class="code">setf camera-pos
+                            <span class="paren5">(<span class="code">move-camera keysym camera-front camera-up camera-pos</span>)</span></span>)</span></span>)</span>
+                  <span class="paren3">(<span class="code"><span class="keyword">:idle</span> <span class="paren4">(<span class="code"></span>)</span>
+                    <span class="paren4">(<span class="code">sleep <span class="paren5">(<span class="code">/ 1 15</span>)</span></span>)</span>
+                    <span class="paren4">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren5">(<span class="code">win <span class="paren6">(<span class="code"><span class="keyword">:color-buffer-bit</span> <span class="keyword">:depth-buffer-bit</span></span>)</span></span>)</span>
+                       <span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> pos <span class="keyword">:in</span> <span class="special">*cube-positions*</span>
+                             <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+                             <span class="keyword">:for</span> m = <span class="paren6">(<span class="code">3d-matrices:nmrotate <span class="paren1">(<span class="code">3d-matrices:mtranslation pos</span>)</span>
+                                                            <span class="paren1">(<span class="code">3d-vectors:vec 1 0.3 0.5</span>)</span>
+                                                            <span class="paren1">(<span class="code">fude-gl:radians <span class="paren2">(<span class="code">* 20 i</span>)</span></span>)</span></span>)</span>
+                             <span class="keyword">:do</span> <span class="paren6">(<span class="code">send m model</span>)</span>
+                                 <span class="paren6">(<span class="code">send <span class="paren1">(<span class="code">3d-matrices:mlookat camera-pos
+                                                            <span class="paren2">(<span class="code">3d-vectors:v+ camera-pos camera-front</span>)</span>
+                                                            camera-up</span>)</span>
+                                       view</span>)</span>
+                                 <span class="paren6">(<span class="code">send p projection</span>)</span>
+                                 <span class="paren6">(<span class="code">gl:draw-arrays <span class="keyword">:triangles</span> 0 36</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/walk-around.gif" alt="Video of the example above" /></p>
+
+<h2>Digressions</h2>
+
+<p>学習意欲の高い人の場合<code>3D-VECTORS:VUNIT</code>が<code>glm::normalize</code>に相当するということをどのように調べれば良いのか気になったかもしれません。</p>
+
+<p>ここでは余談として筆者がどのようにして探し出したか手順を記しておきます。</p>
+
+<h3>CL:APROPOS</h3>
+
+<p>シンボルを探す場合Lispに尋ねるのが早いです。
+<code>CL:APROPOS</code>でLispに尋ねられます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">apropos <span class="string">"normalize"</span></span>)</span>
+
+ALEXANDRIA::NORMALIZE
+ALEXANDRIA::NORMALIZE-AUXILARY
+ALEXANDRIA::NORMALIZE-KEYWORD
+ALEXANDRIA::NORMALIZE-OPTIONAL
+ASDF/INTERFACE::NORMALIZED-VERSION
+ASDF/PARSE-DEFSYSTEM::NORMALIZE-VERSION <span class="paren1">(<span class="code">fbound</span>)</span>
+ASDF/FORCING:NORMALIZE-FORCED-NOT-SYSTEMS <span class="paren1">(<span class="code">fbound</span>)</span>
+ASDF/FORCING:NORMALIZE-FORCED-SYSTEMS <span class="paren1">(<span class="code">fbound</span>)</span>
+ASDF/SESSION::NORMALIZED-NAMESTRING
+ASDF/SESSION:NORMALIZE-NAMESTRING <span class="paren1">(<span class="code">fbound</span>)</span>
+CFFI-TOOLCHAIN::NORMALIZE-FLAGS <span class="paren1">(<span class="code">fbound</span>)</span>
+CFFI-TOOLCHAIN::NORMALIZEP
+CL-COLORS2::NORMALIZE
+CL-COLORS2::NORMALIZE-HUE <span class="paren1">(<span class="code">fbound</span>)</span>
+CL-OPENGL::NORMALIZED
+CL-OPENGL-BINDINGS::NORMALIZED
+CL-PPCRE::NORMALIZE-VAR-LIST <span class="paren1">(<span class="code">fbound</span>)</span>
+COM.GIGAMONKEYS.BINARY-DATA::NORMALIZE-MAPPING <span class="paren1">(<span class="code">fbound</span>)</span>
+COM.GIGAMONKEYS.BINARY-DATA::NORMALIZE-SLOT-SPEC <span class="paren1">(<span class="code">fbound</span>)</span>
+NORMALIZED-VERSION
+FLEXI-STREAMS::NORMALIZE-EXTERNAL-FORMAT <span class="paren1">(<span class="code">fbound</span>)</span>
+FLEXI-STREAMS::NORMALIZE-EXTERNAL-FORMAT-NAME <span class="paren1">(<span class="code">fbound</span>)</span>
+:DENORMALIZED-OPERAND <span class="paren1">(<span class="code">bound</span>)</span>
+:NORMALIZE <span class="paren1">(<span class="code">bound</span>)</span>
+:NORMALIZE-AUXILARY <span class="paren1">(<span class="code">bound</span>)</span>
+:NORMALIZE-KEYWORD <span class="paren1">(<span class="code">bound</span>)</span>
+:NORMALIZE-OPTIONAL <span class="paren1">(<span class="code">bound</span>)</span>
+:NORMALIZED <span class="paren1">(<span class="code">bound</span>)</span>
+:NORMALIZED-RANGE-EXT <span class="paren1">(<span class="code">bound</span>)</span>
+:SIGNED-NORMALIZED <span class="paren1">(<span class="code">bound</span>)</span>
+:UNSIGNED-NORMALIZED <span class="paren1">(<span class="code">bound</span>)</span>
+:UNSIGNED-NORMALIZED-ARB <span class="paren1">(<span class="code">bound</span>)</span>
+:UNSIGNED-NORMALIZED-EXT <span class="paren1">(<span class="code">bound</span>)</span>
+:VERTEX-ATTRIB-ARRAY-NORMALIZED <span class="paren1">(<span class="code">bound</span>)</span>
+:VERTEX-ATTRIB-ARRAY-NORMALIZED-ARB <span class="paren1">(<span class="code">bound</span>)</span>
+LOCAL-TIME::%NORMALIZE-MONTH-YEAR-PAIR <span class="paren1">(<span class="code">fbound</span>)</span>
+OPTICL::NORMALIZE-ARRAY <span class="paren1">(<span class="code">fbound</span>)</span>
+SB-BIGNUM::%MOSTLY-NORMALIZE-BIGNUM <span class="paren1">(<span class="code">fbound</span>)</span>
+SB-BIGNUM::%NORMALIZE-BIGNUM <span class="paren1">(<span class="code">fbound</span>)</span>
+SB-BIGNUM::%NORMALIZE-BIGNUM-BUFFER <span class="paren1">(<span class="code">fbound</span>)</span>
+SB-BIGNUM::FULLY-NORMALIZE
+SB-C::NORMALIZE-BOUND
+SB-IMPL::NORMALIZE-DEPRECATION-REPLACEMENTS <span class="paren1">(<span class="code">fbound</span>)</span>
+SB-IMPL::NORMALIZE-DEPRECATION-SINCE <span class="paren1">(<span class="code">fbound</span>)</span>
+SB-IMPL::NORMALIZE-FN
+SB-IMPL::NORMALIZE-PTR
+SB-IMPL::NORMALIZE-READ-BUFFER <span class="paren1">(<span class="code">fbound</span>)</span>
+SB-IMPL::NORMALIZED-EXTERNAL-FORMAT
+SB-IMPL::STR-TO-NORMALIZE
+SB-KERNEL::NORMALIZE
+SB-PCL::*NORMALIZE-TYPE <span class="paren1">(<span class="code">fbound</span>)</span>
+SB-PCL::NORMALIZE-OPTIONS
+SB-UNICODE:NORMALIZE-STRING <span class="paren1">(<span class="code">fbound</span>)</span>
+SB-UNICODE:NORMALIZED-P <span class="paren1">(<span class="code">fbound</span>)</span>
+FLOAT-DENORMALIZED-P <span class="paren1">(<span class="code">fbound</span>)</span>
+UIOP/LAUNCH-PROGRAM::%NORMALIZE-IO-SPECIFIER <span class="paren1">(<span class="code">fbound</span>)</span>
+UIOP/PATHNAME::NORMALIZE-COMPONENT
+UIOP/RUN-PROGRAM::%NORMALIZE-SYSTEM-COMMAND <span class="paren1">(<span class="code">fbound</span>)</span>
+UIOP/PATHNAME:DENORMALIZE-PATHNAME-DIRECTORY-COMPONENT <span class="paren1">(<span class="code">fbound</span>)</span>
+UIOP/PATHNAME:NORMALIZE-PATHNAME-DIRECTORY-COMPONENT <span class="paren1">(<span class="code">fbound</span>)</span>
+UIOP/UTILITY::NORMALIZED
+LEAST-NEGATIVE-NORMALIZED-DOUBLE-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-NEGATIVE-NORMALIZED-LONG-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-NEGATIVE-NORMALIZED-SHORT-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-NEGATIVE-NORMALIZED-SINGLE-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-POSITIVE-NORMALIZED-DOUBLE-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-POSITIVE-NORMALIZED-LONG-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-POSITIVE-NORMALIZED-SHORT-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-POSITIVE-NORMALIZED-SINGLE-FLOAT <span class="paren1">(<span class="code">bound</span>)</span></span></code></pre>
+
+<p>出力が多い場合は<code>PACKAGE</code>を指定して探すこともできます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">apropos <span class="string">"normalize"</span> <span class="keyword">:3d-vectors</span></span>)</span>
+
+LEAST-NEGATIVE-NORMALIZED-DOUBLE-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-NEGATIVE-NORMALIZED-LONG-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-NEGATIVE-NORMALIZED-SHORT-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-NEGATIVE-NORMALIZED-SINGLE-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-POSITIVE-NORMALIZED-DOUBLE-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-POSITIVE-NORMALIZED-LONG-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-POSITIVE-NORMALIZED-SHORT-FLOAT <span class="paren1">(<span class="code">bound</span>)</span>
+LEAST-POSITIVE-NORMALIZED-SINGLE-FLOAT <span class="paren1">(<span class="code">bound</span>)</span></span></code></pre>
+
+<p>見つからない場合たとえば<code>ize</code>が<code>ise</code>だったりするかもしれませんので引数を変えて訊ねてみます。
+なお<a href="https://github.com/edicl/cl-ppcre" ><code>CL-PPCRE</code></a>には正規表現に対応した<code>REGEX-APROPOS</code>という関数もあるのでそちらを使うのもいいでしょう。</p>
+
+<p>本格的に見つからない場合そもそも<code>glm::normalize</code>が何をする処理なのか<code>GLM</code>のドキュメントを読んでみます。
+<a href="https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/normalize.xhtml" >以下のようにあります。</a></p>
+
+<blockquote>
+<p>calculates the unit vector in the same direction as the original vector</p>
+</blockquote>
+
+<p>なけなしの線形代数に関する記憶で<code>unit vector</code>という単語に思い当たる節があります。
+そこで今度は<code>unit</code>で訊ねてみます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">apropos <span class="string">"unit"</span> <span class="keyword">:3d-vectors</span></span>)</span>
+
+INTERNAL-TIME-UNITS-PER-SECOND <span class="paren1">(<span class="code">bound</span>)</span>
+3D-VECTORS:NVUNIT <span class="paren1">(<span class="code">fbound</span>)</span>
+3D-VECTORS:VUNIT <span class="paren1">(<span class="code">fbound</span>)</span>
+WITH-COMPILATION-UNIT <span class="paren1">(<span class="code">fbound</span>)</span></span></code></pre>
+
+<p>頭に<code>N</code>が付いているのはベクタを破壊的に変更するものであると<a href="https://github.com/Shinmera/3d-vectors" >3d-vectorsのREADMEにあります。</a></p>
+
+<p><code>3D-VECTORS:VUNIT</code>が本丸のようです。
+<code>CL:DESCRIBE</code>で詳細を見ます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">describe '3d-vectors:vunit</span>)</span>
+
+3D-VECTORS:VUNIT
+  [symbol]
+
+VUNIT names a compiled function:
+  Lambda-list: <span class="paren1">(<span class="code">3D-VECTORS::A</span>)</span>
+  Declared type: <span class="paren1">(<span class="code"><i><span class="symbol">FUNCTION</span></i>
+                  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">OR 3D-VECTORS:VEC2 3D-VECTORS:VEC3
+                       3D-VECTORS:VEC4</span>)</span></span>)</span>
+                  <span class="paren2">(<span class="code">VALUES
+                   <span class="paren3">(<span class="code">OR 3D-VECTORS:VEC2 3D-VECTORS:VEC3 3D-VECTORS:VEC4</span>)</span>
+                   &amp;REST T</span>)</span></span>)</span>
+  Documentation:
+    Returns the unit vector form of the given vector by the 2-norm.
+  Inline proclamation: MAYBE-INLINE <span class="paren1">(<span class="code">inline expansion available</span>)</span>
+  Source file: /home/hyotang666/.roswell/lisp/quicklisp/dists/quicklisp/software/3d-vectors-20201220-git/ops.lisp</span></code></pre>
+
+<p>Documentationを見ると同じものであるようです。</p>
+
+<p>一応念の為REPLで叩いて挙動を確認します。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">3d-vectors:vunit <span class="paren2">(<span class="code">3d-vectors:vec 1 1</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code">3D-VECTORS:VEC2 0.70710677 0.70710677</span>)</span>
+* <span class="paren1">(<span class="code">3d-vectors:vx *</span>)</span>
+
+0.70710677
+* <span class="paren1">(<span class="code">abs <span class="paren2">(<span class="code">complex * *</span>)</span></span>)</span>
+
+1.0</span></code></pre>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
