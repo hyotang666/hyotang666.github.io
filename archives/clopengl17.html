@@ -1,0 +1,198 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl17</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 17.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl16.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前章ではボールを導入しました。
+本章では衝突判定を作ります。</p>
+
+<h2>VECTOR-DIRECTION</h2>
+
+<p>ベクタから上下左右四方向を計算します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">compass <span class="paren4">(<span class="code">make-hash-table</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">def <span class="paren5">(<span class="code">k v</span>)</span>
+           <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">gethash k compass</span>)</span> v</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:up</span> <span class="paren4">(<span class="code">3d-vectors:vec 0 1</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:right</span> <span class="paren4">(<span class="code">3d-vectors:vec 1 0</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:down</span> <span class="paren4">(<span class="code">3d-vectors:vec 0 -1</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:left</span> <span class="paren4">(<span class="code">3d-vectors:vec -1 0</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> vector-direction <span class="paren3">(<span class="code">target</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:with</span> normalized = <span class="paren4">(<span class="code">3d-vectors:vunit target</span>)</span>
+          <span class="keyword">:with</span> max = 0
+          <span class="keyword">:with</span> best
+          <span class="keyword">:for</span> direction <span class="keyword">:being</span> <span class="keyword">:each</span> <span class="keyword">:hash-key</span> <span class="keyword">:of</span> compass <span class="keyword">:using</span>
+               <span class="paren4">(<span class="code"><span class="keyword">:hash-value</span> v</span>)</span>
+          <span class="keyword">:for</span> dot-product = <span class="paren4">(<span class="code">3d-vectors:v. normalized v</span>)</span>
+          <span class="keyword">:if</span> <span class="paren4">(<span class="code">&lt; max dot-product</span>)</span>
+            <span class="keyword">:do</span> <span class="paren4">(<span class="code">setf max dot-product
+                      best direction</span>)</span>
+          <span class="keyword">:finally</span> <span class="paren4">(<span class="code">return best</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>COLLIDEP</h2>
+
+<p>衝突判定を計算します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> collidep <span class="paren2">(<span class="code">circle rect</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">with-slots</span></i> <span class="paren3">(<span class="code">radius x y</span>)</span>
+      circle
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-slots</span></i> <span class="paren4">(<span class="code">w h <span class="paren5">(<span class="code">rect-x x</span>)</span> <span class="paren5">(<span class="code">rect-y y</span>)</span></span>)</span>
+        rect
+      <span class="paren4">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">center <span class="paren1">(<span class="code">3d-vectors:vec <span class="paren2">(<span class="code">+ x radius</span>)</span> <span class="paren2">(<span class="code">+ y radius</span>)</span></span>)</span></span>)</span>
+             <span class="paren6">(<span class="code">aabb-half-extents <span class="paren1">(<span class="code">3d-vectors:vec <span class="paren2">(<span class="code">/ w 2</span>)</span> <span class="paren2">(<span class="code">/ h 2</span>)</span></span>)</span></span>)</span>
+             <span class="paren6">(<span class="code">aabb-center
+              <span class="paren1">(<span class="code">3d-vectors:nv+ <span class="paren2">(<span class="code">3d-vectors:vec rect-x rect-y</span>)</span>
+                              aabb-half-extents</span>)</span></span>)</span>
+             <span class="paren6">(<span class="code">difference
+              <span class="paren1">(<span class="code">3d-vectors:v-
+                <span class="paren2">(<span class="code">3d-vectors:v+ aabb-center
+                               <span class="paren3">(<span class="code">3d-vectors:vclamp
+                                 <span class="paren4">(<span class="code">3d-vectors:v- center aabb-center</span>)</span>
+                                 <span class="paren4">(<span class="code">3d-vectors:v- aabb-half-extents</span>)</span>
+                                 aabb-half-extents</span>)</span></span>)</span>
+                center</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren6">(<span class="code">&lt; <span class="paren1">(<span class="code">3d-vectors:vlength difference</span>)</span> radius</span>)</span>
+            <span class="paren6">(<span class="code">values t <span class="paren1">(<span class="code">vector-direction difference</span>)</span> difference</span>)</span>
+            <span class="paren6">(<span class="code">values nil <span class="keyword">:up</span> <span class="paren1">(<span class="code">3d-vectors:vec 0 0</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>CHECK-COLLISION</h2>
+
+<p>衝突判定と衝突した場合の応答を行います。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> check-collision <span class="paren2">(<span class="code">ball player level</span>)</span>
+  <span class="paren2">(<span class="code">unless <span class="paren3">(<span class="code">ball-stuckp ball</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren4">(<span class="code">collidep ball player</span>)</span>
+        <span class="paren4">(<span class="code"><i><span class="symbol">with-slots</span></i> <span class="paren5">(<span class="code">x w</span>)</span>
+            player
+          <span class="paren5">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">center-board <span class="paren2">(<span class="code">+ x <span class="paren3">(<span class="code">/ w 2</span>)</span></span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">distance
+                  <span class="paren2">(<span class="code">- <span class="paren3">(<span class="code">+ <span class="paren4">(<span class="code">ball-x ball</span>)</span> <span class="paren4">(<span class="code">ball-radius ball</span>)</span></span>)</span> center-board</span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">percentage <span class="paren2">(<span class="code">/ distance <span class="paren3">(<span class="code">/ w 2</span>)</span></span>)</span></span>)</span>
+                 <span class="paren1">(<span class="code">strength 2</span>)</span>
+                 <span class="paren1">(<span class="code">length <span class="paren2">(<span class="code">3d-vectors:vlength <span class="paren3">(<span class="code">ball-velocity ball</span>)</span></span>)</span></span>)</span></span>)</span>
+            <span class="paren6">(<span class="code">3d-vectors:vsetf <span class="paren1">(<span class="code">ball-velocity ball</span>)</span>
+                              <span class="paren1">(<span class="code">* <span class="paren2">(<span class="code">car <span class="special">*initial-velocity*</span></span>)</span> percentage strength</span>)</span>
+                              <span class="paren1">(<span class="code">* -1
+                                 <span class="paren2">(<span class="code">abs
+                                   <span class="paren3">(<span class="code">- <span class="paren4">(<span class="code">3d-vectors:vy <span class="paren5">(<span class="code">ball-velocity ball</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+            <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">ball-velocity ball</span>)</span>
+                    <span class="paren1">(<span class="code">3d-vectors:v* <span class="paren2">(<span class="code">3d-vectors:vunit <span class="paren3">(<span class="code">ball-velocity ball</span>)</span></span>)</span>
+                                   length</span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">dotimes <span class="paren5">(<span class="code">x <span class="paren6">(<span class="code">array-total-size level</span>)</span></span>)</span>
+          <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">elt <span class="paren2">(<span class="code">row-major-aref level x</span>)</span></span>)</span></span>)</span>
+            <span class="paren6">(<span class="code">when elt
+              <span class="paren1">(<span class="code">multiple-value-bind <span class="paren2">(<span class="code">collidep direction difference</span>)</span>
+                  <span class="paren2">(<span class="code">collidep ball elt</span>)</span>
+                <span class="paren2">(<span class="code">when collidep
+                  <span class="paren3">(<span class="code">when <span class="paren4">(<span class="code">eq <span class="keyword">:normal</span> <span class="paren5">(<span class="code">blocks-type elt</span>)</span></span>)</span>
+                    <span class="paren4">(<span class="code">setf <span class="paren5">(<span class="code">row-major-aref level x</span>)</span> nil</span>)</span></span>)</span>
+                  <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren4">(<span class="code">find direction '<span class="paren5">(<span class="code"><span class="keyword">:left</span> <span class="keyword">:right</span></span>)</span></span>)</span>
+                      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">penetration
+                             <span class="paren1">(<span class="code">- <span class="paren2">(<span class="code">ball-radius ball</span>)</span>
+                                <span class="paren2">(<span class="code">abs <span class="paren3">(<span class="code">3d-vectors:vx difference</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                        <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">3d-vectors:vx <span class="paren1">(<span class="code">ball-velocity ball</span>)</span></span>)</span>
+                                <span class="paren6">(<span class="code">- <span class="paren1">(<span class="code">3d-vectors:vx <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span></span>)</span></span>)</span>
+                        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren6">(<span class="code">eq <span class="keyword">:left</span> direction</span>)</span>
+                            <span class="paren6">(<span class="code">incf <span class="paren1">(<span class="code">3d-vectors:vx <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span>
+                                  penetration</span>)</span>
+                            <span class="paren6">(<span class="code">decf <span class="paren1">(<span class="code">3d-vectors:vx <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span>
+                                  penetration</span>)</span></span>)</span></span>)</span>
+                      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">penetration
+                             <span class="paren1">(<span class="code">- <span class="paren2">(<span class="code">ball-radius ball</span>)</span>
+                                <span class="paren2">(<span class="code">abs <span class="paren3">(<span class="code">3d-vectors:vy difference</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                        <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">3d-vectors:vy <span class="paren1">(<span class="code">ball-velocity ball</span>)</span></span>)</span>
+                                <span class="paren6">(<span class="code">- <span class="paren1">(<span class="code">3d-vectors:vy <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span></span>)</span></span>)</span>
+                        <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren6">(<span class="code">eq <span class="keyword">:up</span> direction</span>)</span>
+                            <span class="paren6">(<span class="code">incf <span class="paren1">(<span class="code">3d-vectors:vx <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span>
+                                  penetration</span>)</span>
+                            <span class="paren6">(<span class="code">decf <span class="paren1">(<span class="code">3d-vectors:vx <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span>
+                                  penetration</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>MAIN</h2>
+
+<p><code>MAIN</code>関数は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">uiop:nest
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren4">(<span class="code"><span class="keyword">:everything</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600
+                           <span class="keyword">:title</span> <span class="string">"Breakout-CL"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren4">(<span class="code">context win</span>)</span>
+      <span class="paren4">(<span class="code">gl:enable <span class="keyword">:blend</span></span>)</span>
+      <span class="paren4">(<span class="code">gl:blend-func <span class="keyword">:src-alpha</span> <span class="keyword">:one-minus-src-alpha</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">fude-gl:with-shader</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">splite
+                            <span class="paren6">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*quads*</span></span>)</span>
+                            <span class="paren6">(<span class="code"><span class="keyword">:uniform</span> model projection |spliteColor| image</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">fude-gl:with-textures</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">background <span class="keyword">:texture-2d</span>
+                                        <span class="keyword">:init</span> <span class="paren6">(<span class="code">fude-gl:tex-image-2d
+                                                <span class="paren1">(<span class="code">ensure-image <span class="keyword">:background</span></span>)</span></span>)</span></span>)</span>
+                            <span class="paren5">(<span class="code"><i><span class="symbol">block</span></i> <span class="keyword">:texture-2d</span>
+                                   <span class="keyword">:init</span> <span class="paren6">(<span class="code">fude-gl:tex-image-2d
+                                           <span class="paren1">(<span class="code">ensure-image <span class="keyword">:block</span></span>)</span></span>)</span></span>)</span>
+                            <span class="paren5">(<span class="code">block-solid <span class="keyword">:texture-2d</span>
+                                         <span class="keyword">:init</span> <span class="paren6">(<span class="code">fude-gl:tex-image-2d
+                                                 <span class="paren1">(<span class="code">ensure-image <span class="keyword">:block-solid</span></span>)</span></span>)</span></span>)</span>
+                            <span class="paren5">(<span class="code">paddle <span class="keyword">:texture-2d</span>
+                                    <span class="keyword">:init</span> <span class="paren6">(<span class="code">fude-gl:tex-image-2d
+                                            <span class="paren1">(<span class="code">ensure-image <span class="keyword">:paddle</span></span>)</span></span>)</span></span>)</span>
+                            <span class="paren5">(<span class="code">ball-tex <span class="keyword">:texture-2d</span>
+                                      <span class="keyword">:init</span> <span class="paren6">(<span class="code">fude-gl:tex-image-2d
+                                              <span class="paren1">(<span class="code">ensure-image <span class="keyword">:face</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">level <span class="paren6">(<span class="code">level <span class="special">*level1*</span> win</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">player <span class="paren6">(<span class="code">make-player win</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">ball <span class="paren6">(<span class="code">make-ball player</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">gl:uniform-matrix projection 4 <span class="paren5">(<span class="code">ortho win</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren4">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:quit</span> <span class="paren5">(<span class="code"></span>)</span>
+        t</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:idle</span> nil <span class="paren4">(<span class="code">sleep <span class="paren5">(<span class="code">/ 1 30</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">fude-gl:with-clear</span></i> <span class="paren4">(<span class="code">win <span class="paren5">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">move player 0.05 <span class="paren5">(<span class="code">sdl2:get-window-size win</span>)</span> <span class="keyword">:ball</span> ball</span>)</span>
+      <span class="paren4">(<span class="code">move ball 0.05 <span class="paren5">(<span class="code">sdl2:get-window-size win</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">check-collision ball player level</span>)</span> <span class="comment">; &lt;--- New!
+</span>      <span class="paren4">(<span class="code">draw model
+            <span class="paren5">(<span class="code"><i><span class="symbol">multiple-value-call</span></i> #'model-matrix 0 0 <span class="paren6">(<span class="code">sdl2:get-window-size win</span>)</span></span>)</span>
+            image background</span>)</span>
+      <span class="paren4">(<span class="code">dotimes <span class="paren5">(<span class="code">i <span class="paren6">(<span class="code">array-total-size level</span>)</span> <span class="paren6">(<span class="code">gl:uniformf |spliteColor| 1 1 1</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">o <span class="paren2">(<span class="code">row-major-aref level i</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">when o
+            <span class="paren1">(<span class="code"><i><span class="symbol">with-slots</span></i> <span class="paren2">(<span class="code">x y w h type color</span>)</span>
+                o
+              <span class="paren2">(<span class="code"><i><span class="symbol">3d-vectors:with-vec3</span></i> <span class="paren3">(<span class="code">r g b</span>)</span>
+                  color
+                <span class="paren3">(<span class="code">gl:uniformf |spliteColor| r g b</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code">draw model <span class="paren3">(<span class="code">model-matrix x y w h</span>)</span> image
+                    <span class="paren3">(<span class="code">ecase type <span class="paren4">(<span class="code"><span class="keyword">:solid</span> block-solid</span>)</span> <span class="paren4">(<span class="code"><span class="keyword">:normal</span> <i><span class="symbol">block</span></i></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">with-slots</span></i> <span class="paren5">(<span class="code">x y w h</span>)</span>
+          ball
+        <span class="paren5">(<span class="code">draw model <span class="paren6">(<span class="code">model-matrix x y w h</span>)</span> image ball-tex</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">with-slots</span></i> <span class="paren5">(<span class="code">x y w h</span>)</span>
+          player
+        <span class="paren5">(<span class="code">draw model <span class="paren6">(<span class="code">model-matrix x y w h</span>)</span> image paddle</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/collision.gif" alt="GIF of the example above." /></p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
