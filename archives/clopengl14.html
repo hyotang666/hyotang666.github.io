@@ -1,0 +1,191 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl14</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 14.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl13.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前章ではカメラ視点行列を導入しユーザーの入力を受け取りました。
+本シリーズの目標は3Dではなく簡単な2Dゲーム作成なのでこれ以上3D周りの機能に踏み込むことはしません。
+2Dゲーム作成のための基礎は把握できてきたので応用へと進みましょう。
+<a href="https://learnopengl.com/book/book_pdf.pdf" >本家tutorial</a>を参照にブロック崩しをCommon Lispに移植していきます。</p>
+
+<p>本章ではスプライトを扱うための地固めを行います。</p>
+
+<h2>BREAKOUT-CL</h2>
+
+<p>ゲーム作成用の<code>ASDF:SYSTEM</code>を作りましょう。
+ここでは名を<code>BREAKOUT-CL</code>とします。</p>
+
+<h2>ORTHO</h2>
+
+<p>3D用の<code>projection</code>行列は遠近法行列を用いましたが2D用には<code>orthographic</code>（正射影）行列を用います。
+簡便のために関数にしておきましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> ortho <span class="paren2">(<span class="code">win</span>)</span>
+  <span class="paren2">(<span class="code">multiple-value-bind <span class="paren3">(<span class="code">w h</span>)</span>
+      <span class="paren3">(<span class="code">sdl2:get-window-size win</span>)</span>
+    <span class="paren3">(<span class="code">vector <span class="paren4">(<span class="code">3d-matrices:marr <span class="paren5">(<span class="code">3d-matrices:mortho 0 w h 0 -1 1</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>Shader</h2>
+
+<p><code>Splite</code>表示用のシェーダーは以下の通り。</p>
+
+<p>3D視点でないため<code>view</code>行列を受け取らない点要注目。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">fude-gl:defshader</span></i> splite 330 <span class="paren2">(<span class="code">fude-gl:xy fude-gl:st</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:vertex</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">|texCoord| <span class="keyword">:vec2</span></span>)</span> &amp;uniform <span class="paren4">(<span class="code">model <span class="keyword">:mat4</span></span>)</span> <span class="paren4">(<span class="code">projection <span class="keyword">:mat4</span></span>)</span></span>)</span>
+    <span class="string">"texCoord = st;"</span>
+    <span class="string">"gl_Position = projection * model * vec4(xy, 0.0, 1.0);"</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:fragment</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">color <span class="keyword">:vec4</span></span>)</span> &amp;uniform <span class="paren4">(<span class="code">image <span class="keyword">:|sampler2D|</span></span>)</span>
+              <span class="paren4">(<span class="code">|spliteColor| <span class="keyword">:vec3</span></span>)</span></span>)</span>
+    <span class="string">"color = vec4(spliteColor, 1.0) * texture(image, texCoord);"</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>*QUADS*</h2>
+
+<p><code>Splite</code>描画用の頂点は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*quads*</span>
+  <span class="paren2">(<span class="code">concatenate '<span class="paren3">(<span class="code">array single-float <span class="paren4">(<span class="code">*</span>)</span></span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'splite <span class="keyword">:x</span> 0.0 <span class="keyword">:y</span> 1.0 <span class="keyword">:s</span> 0.0 <span class="keyword">:t</span> 1.0</span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'splite <span class="keyword">:x</span> 1.0 <span class="keyword">:y</span> 0.0 <span class="keyword">:s</span> 1.0 <span class="keyword">:t</span> 0.0</span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'splite <span class="keyword">:x</span> 0.0 <span class="keyword">:y</span> 0.0 <span class="keyword">:s</span> 0.0 <span class="keyword">:t</span> 0.0</span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'splite <span class="keyword">:x</span> 0.0 <span class="keyword">:y</span> 1.0 <span class="keyword">:s</span> 0.0 <span class="keyword">:t</span> 1.0</span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'splite <span class="keyword">:x</span> 1.0 <span class="keyword">:y</span> 1.0 <span class="keyword">:s</span> 1.0 <span class="keyword">:t</span> 1.0</span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'splite <span class="keyword">:x</span> 1.0 <span class="keyword">:y</span> 0.0 <span class="keyword">:s</span> 1.0 <span class="keyword">:t</span> 0.0</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>MODEL-MATRIX</h2>
+
+<p><code>model</code>行列を簡単に生成できるように関数にしましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> model-matrix <span class="paren2">(<span class="code">x y w h &amp;optional <span class="paren3">(<span class="code">rotate 0</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">vector
+    <span class="paren3">(<span class="code">3d-matrices:marr
+      <span class="paren4">(<span class="code">3d-matrices:nmscale
+        <span class="paren5">(<span class="code">3d-matrices:nmtranslate
+          <span class="paren6">(<span class="code">3d-matrices:nmrotate
+            <span class="paren1">(<span class="code">3d-matrices:nmtranslate
+              <span class="paren2">(<span class="code">3d-matrices:mtranslation <span class="paren3">(<span class="code">3d-vectors:vec x y 0</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code">3d-vectors:vec <span class="paren3">(<span class="code">* 0.5 w</span>)</span> <span class="paren3">(<span class="code">* 0.5 h</span>)</span> 0</span>)</span></span>)</span>
+            3d-vectors:+vz+ <span class="paren1">(<span class="code">fude-gl:radians rotate</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">3d-vectors:vec <span class="paren1">(<span class="code">* -0.5 w</span>)</span> <span class="paren1">(<span class="code">* -0.5 h</span>)</span> 0</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">3d-vectors:vec w h 1</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>Images.</h2>
+
+<h3>EFILETYPE-CASE</h3>
+
+<p>拡張子で分岐する簡単な条件分岐マクロを定義します。
+わざわざマクロ化する魂胆は修正箇所の削減です。
+分岐節を追加・削除（＝サポートされている拡張子を追加・削除）するとエラーメッセージのサポートされている拡張子群が自動的に更新されます。
+人が手で二箇所修正しなければならないというルールを導入するよりこのマクロを使わなければならないというルールを導入するほうがコスパがよろしゅうございます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> efiletype-case <span class="paren2">(<span class="code">pathname &amp;body clause*</span>)</span>
+  <span class="comment">;; Trivial syntax check.
+</span>  <span class="paren2">(<span class="code">assert <span class="paren3">(<span class="code">every <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">clause</span>)</span> <span class="paren5">(<span class="code">typep clause '<span class="paren6">(<span class="code">cons cons *</span>)</span></span>)</span></span>)</span> clause*</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">type <span class="paren5">(<span class="code">gensym <span class="string">"FILETYPE"</span></span>)</span></span>)</span></span>)</span>
+    `<span class="paren3">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,type <span class="paren6">(<span class="code">pathname-type ,pathname</span>)</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code"><i><span class="symbol">cond</span></i>
+         ,@<span class="paren5">(<span class="code">mapcar
+             <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren1">(<span class="code">clause</span>)</span>
+               `<span class="paren1">(<span class="code"><span class="paren2">(<span class="code">find ,type ',<span class="paren3">(<span class="code">car clause</span>)</span> <span class="keyword">:test</span> #'string-equal</span>)</span>
+                 ,@<span class="paren2">(<span class="code">cdr clause</span>)</span></span>)</span></span>)</span>
+             clause*</span>)</span>
+         <span class="paren5">(<span class="code">t
+          <span class="paren6">(<span class="code">error <span class="string">"Not supported file type ~S. ~S"</span> ,type
+                 ',<span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> c <span class="keyword">:in</span> clause*
+                         <span class="keyword">:append</span> <span class="paren2">(<span class="code">car c</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>ENSURE-LOAD</h3>
+
+<p>画像ファイルが既にローカルにあるならそれを、なければネットからダウンロードしてきます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> ensure-load <span class="paren2">(<span class="code">url</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">filename <span class="paren5">(<span class="code">subseq url <span class="paren6">(<span class="code">1+ <span class="paren1">(<span class="code">position <span class="character">#\/</span> url <span class="keyword">:from-end</span> t</span>)</span></span>)</span></span>)</span></span>)</span>
+         <span class="paren4">(<span class="code">pathname
+          <span class="paren5">(<span class="code">ensure-directories-exist
+            <span class="paren6">(<span class="code">merge-pathnames <span class="paren1">(<span class="code">format nil <span class="string">"img/~A"</span> filename</span>)</span>
+                             <span class="paren1">(<span class="code">asdf:system-source-directory
+                               <span class="paren2">(<span class="code">asdf:find-system <span class="keyword">:breakout-cl</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">unless <span class="paren4">(<span class="code">probe-file pathname</span>)</span>
+      <span class="paren4">(<span class="code">uiop:format! <span class="special">*trace-output*</span> <span class="string">"~&amp;Downloading ~S"</span> filename</span>)</span>
+      <span class="paren4">(<span class="code">dex:fetch url pathname</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">efiletype-case pathname
+      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">png</span>)</span> <span class="paren5">(<span class="code">opticl:read-png-file pathname</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">jpg jpeg</span>)</span> <span class="paren5">(<span class="code">opticl:read-jpeg-file pathname</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>ENSURE-IMAGE</h3>
+
+<p>ロードした画像はキャッシュを取っておくことにします。（何度もロードしたくない。）
+また事前に登録されている画像しか取り扱えないようにしておきます。（不測の事態を抱え込みたくない。）</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*images*</span> <span class="paren2">(<span class="code">make-hash-table <span class="keyword">:test</span> #'equal</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">urls <span class="paren4">(<span class="code">make-hash-table</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">def <span class="paren5">(<span class="code">name url</span>)</span>
+           <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">gethash name urls</span>)</span> url</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:face</span> <span class="string">"https://learnopengl.com/img/textures/awesomeface.png"</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:block</span> <span class="string">"https://learnopengl.com/img/in-practice/breakout/textures/block.png"</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:block-solid</span> <span class="string">"https://learnopengl.com/img/in-practice/breakout/textures/block_solid.png"</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:background</span> <span class="string">"https://learnopengl.com/img/in-practice/breakout/textures/background.jpg"</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:paddle</span> <span class="string">"https://learnopengl.com/img/in-practice/breakout/textures/paddle.png"</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">defun</span></i> ensure-image <span class="paren3">(<span class="code">name</span>)</span>
+    <span class="paren3">(<span class="code">or <span class="paren4">(<span class="code">gethash name <span class="special">*images*</span></span>)</span>
+        <span class="paren4">(<span class="code">setf <span class="paren5">(<span class="code">gethash name <span class="special">*images*</span></span>)</span>
+                <span class="paren5">(<span class="code">ensure-load
+                  <span class="paren6">(<span class="code">or <span class="paren1">(<span class="code">gethash name urls</span>)</span>
+                      <span class="paren1">(<span class="code">error <span class="string">"Unknown image file name. ~S ~S"</span> name
+                             <span class="paren2">(<span class="code">alexandria:hash-table-keys urls</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>MAIN</h2>
+
+<p><code>MAIN</code>関数は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren3">(<span class="code"><span class="keyword">:everything</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600
+                           <span class="keyword">:title</span> <span class="string">"Breakout-CL"</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren5">(<span class="code">context win</span>)</span>
+        <span class="paren5">(<span class="code">gl:enable <span class="keyword">:blend</span></span>)</span>
+        <span class="paren5">(<span class="code">gl:blend-func <span class="keyword">:src-alpha</span> <span class="keyword">:one-minus-src-alpha</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">fude-gl:with-shader</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">splite
+                                <span class="paren2">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*quads*</span></span>)</span>
+                                <span class="paren2">(<span class="code"><span class="keyword">:uniform</span> model projection |spliteColor|
+                                          <span class="paren3">(<span class="code">image <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">fude-gl:tex-image-2d
+                                                               <span class="paren5">(<span class="code">ensure-image <span class="keyword">:face</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">gl:uniform-matrix projection 4 <span class="paren1">(<span class="code">ortho win</span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren1">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:quit</span> <span class="paren2">(<span class="code"></span>)</span>
+              t</span>)</span>
+            <span class="paren1">(<span class="code"><span class="keyword">:idle</span> <span class="paren2">(<span class="code"></span>)</span>
+              <span class="paren2">(<span class="code">sleep <span class="paren3">(<span class="code">/ 1 30</span>)</span></span>)</span>
+              <span class="paren2">(<span class="code"><i><span class="symbol">fude-gl:with-clear</span></i> <span class="paren3">(<span class="code">win <span class="paren4">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">gl:uniform-matrix model 4 <span class="paren4">(<span class="code">model-matrix 200 200 300 400 45</span>)</span></span>)</span>
+                <span class="paren3">(<span class="code">gl:uniformi image face</span>)</span>
+                <span class="paren3">(<span class="code">gl:uniformf |spliteColor| 0 1 0</span>)</span>
+                <span class="paren3">(<span class="code">gl:draw-arrays <span class="keyword">:triangles</span> 0 6</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/splite.png" alt="Image of the example above" /></p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
