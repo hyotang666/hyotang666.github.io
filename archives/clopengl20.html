@@ -1,0 +1,309 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl20</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 20.</h1>
+
+<h2>Metanotes.</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl19.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前章ではテクスト描画のための関数を実装していきました。
+本章ではこれまでに構築してきたマクロ群を改築していきます。</p>
+
+<h2>Issue.</h2>
+
+<p>前回作った関数<code>RENDER-TEXT</code>のAPIを見ればわかりますがvertex-array-objectやbertex-buffer-objectの値が必要となります。
+ところがこれらの値は現在のマクロでは隠蔽されてしまっております。</p>
+
+<p>そこで必要な場合は変数を指定しそれに束縛してもらえるようにシンタックスを変更しましょう。</p>
+
+<p>変更が必要なのは<code>WITH-VAO</code>と<code>WITH-SHADER</code>の二つです。
+具体的には<code>WITH-VAO</code>のシンタックスが変わるのでそれに引きずられて<code>WITH-SHADER</code>にも変更が必要となるという内訳になります。</p>
+
+<h2>WITH-VAO</h2>
+
+<p>これまでは<code>:VERTICES</code>節には初期化フォームを渡すだけでしたが変数も渡すようにシンタックスを変更します。
+なお<code>NIL</code>を渡した場合は内部で<code>CL:GENSYM</code>が使われるものとします。
+またvertex-array-objectやvertex-buffer-object参照するための変数を渡すためのオプション節もサポートするようにします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">glyph
+                <span class="paren4">(<span class="code"><span class="keyword">:vertices</span> vertices <span class="comment">; &lt;--- This var!
+</span>                           <span class="paren5">(<span class="code">make-array <span class="paren6">(<span class="code">* 4 6</span>)</span>
+                                       <span class="keyword">:element-type</span> 'single-float
+                                       <span class="keyword">:initial-element</span> 0.0</span>)</span>
+                           <span class="keyword">:usage</span> <span class="keyword">:dynamic-draw</span></span>)</span>
+                <span class="paren4">(<span class="code"><span class="keyword">:vertex-array</span> glyph-vao</span>)</span> <span class="comment">; &lt;--- New!
+</span>                <span class="paren4">(<span class="code"><span class="keyword">:buffer</span> buffer</span>)</span> <span class="comment">; &lt;--- New!
+</span>                <span class="paren4">(<span class="code"><span class="keyword">:uniform</span> projection text |textColor|</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上のコードは変更後こうなるというデッサンです。
+それでは実装に取り掛かりましょう。</p>
+
+<h3><a href="https://github.com/hyotang666/check-bnf" >check-bnf</a></h3>
+
+<p>増築や改築を繰り返しシンタックスの把握が容易ではなくなってきたのでここらで<code>CHECK-BNF</code>を導入することとします。
+手前味噌ですがこれは筆者作のライブラリでマクロのシンタックスをBNF風に記述できる<code>CL:CHECK-TYPE</code>のお化けです。</p>
+
+<p>コードが肥大してきたのでマクロの本体、コード生成は下層ヘルパに切り出すとします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-vao</span></i> <span class="paren2">(<span class="code">&amp;whole whole <span class="paren3">(<span class="code">&amp;rest bind*</span>)</span> &amp;body body</span>)</span>
+  <span class="string">"Each VAR is bound by openGL vertex array object id."</span>
+  <span class="paren2">(<span class="code">check-bnf:check-bnf <span class="paren3">(<span class="code"><span class="keyword">:whole</span> whole</span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">bind* <span class="paren5">(<span class="code">var option+</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">option+
+      <span class="paren5">(<span class="code">or vertices-clause
+          indices-clause
+          uniform-clause
+          buffer-clause
+          attributes-clause
+          shader-clause</span>)</span></span>)</span>
+     <span class="comment">;; When this VAR is specified, it is bound by gl-array pointer.
+</span>     <span class="paren4">(<span class="code">vertices-clause <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">eql <span class="keyword">:vertices</span></span>)</span> var init-form vertices-option*</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">vertices-option* <span class="paren5">(<span class="code">member <span class="keyword">:usage</span> <span class="keyword">:target</span> <span class="keyword">:size</span></span>)</span> check-bnf:expression</span>)</span>
+     <span class="comment">;;
+</span>     <span class="paren4">(<span class="code">indices-clause <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">eql <span class="keyword">:indices</span></span>)</span> init-form indices-option*</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">indices-option* keyword check-bnf:expression</span>)</span>
+     <span class="comment">;; When this VAR is specified, it is bound by openGL uniform location.
+</span>     <span class="paren4">(<span class="code">uniform-clause <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">eql <span class="keyword">:uniform</span></span>)</span> uniform-var-spec+</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">uniform-var-spec <span class="paren5">(<span class="code">or var <span class="paren6">(<span class="code">var var</span>)</span></span>)</span></span>)</span>
+     <span class="comment">;; When this VAR is specified, it is bound by openGL buffer object id.
+</span>     <span class="paren4">(<span class="code">buffer-clause <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">eql <span class="keyword">:buffer</span></span>)</span> var</span>)</span></span>)</span>
+     <span class="comment">;;
+</span>     <span class="paren4">(<span class="code">attributes-clause <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">eql <span class="keyword">:attributes</span></span>)</span> attribute-name</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">attribute-name check-bnf:expression</span>)</span>
+     <span class="comment">;; When this VAR is specified, it is bound by openGL shader program id.
+</span>     <span class="paren4">(<span class="code">shader-clause <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">eql <span class="keyword">:shader</span></span>)</span> var vertex-shader fragment-shader</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">vertex-shader check-bnf:expression</span>)</span>
+     <span class="paren4">(<span class="code">fragment-shader check-bnf:expression</span>)</span>
+     <span class="comment">;;
+</span>     <span class="paren4">(<span class="code">var symbol</span>)</span>
+     <span class="paren4">(<span class="code">init-form check-bnf:expression</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">multiple-value-bind <span class="paren3">(<span class="code">forms refs</span>)</span>
+      <span class="paren3">(<span class="code">parse-with-vao-binds bind* body</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren4">(<span class="code">null refs</span>)</span>
+        <span class="paren4">(<span class="code">car forms</span>)</span>
+        `<span class="paren4">(<span class="code"><i><span class="symbol">macrolet</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">indices-of <span class="paren1">(<span class="code">id</span>)</span>
+                      <span class="paren1">(<span class="code">case id ,@refs <span class="paren2">(<span class="code">otherwise <span class="string">"No indices for ~S"</span> id</span>)</span></span>)</span></span>)</span></span>)</span>
+           ,@forms</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>WITH-VAO</code>マクロの大半は<code>CHECK-BNF:CHECK-BNF</code>フォームに占拠されました。
+しかしこれにより何かしらおかしなシンタックスが渡された場合比較的親切なエラーメッセージが表示されます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><i><span class="symbol">with-vao</span></i> <span class="keyword">:not-bind-form</span> <span class="keyword">:body</span></span>)</span>
+
+debugger invoked on a CHECK-BNF::VIOLATE-LIST in thread
+#&lt;THREAD "main thread" RUNNING {1001590133}&gt;:
+  Syntax-error in WITH-VAO
+
+    BIND              := <span class="paren1">(<span class="code">VAR OPTION+</span>)</span>*
+    VAR               := SYMBOL
+    OPTION            := [ VERTICES-CLAUSE
+                         | INDICES-CLAUSE
+                         | UNIFORM-CLAUSE
+                         | BUFFER-CLAUSE
+                         | ATTRIBUTES-CLAUSE
+                         | SHADER-CLAUSE
+                         ]+
+    VERTICES-CLAUSE   := ((EQL :VERTICES) VAR INIT-FORM VERTICES-OPTION*)
+    INIT-FORM         := EXPRESSION
+    VERTICES-OPTION   := { [ :USAGE | :TARGET | :SIZE ] EXPRESSION }*
+    INDICES-CLAUSE    := ((EQL :INDICES) INIT-FORM INDICES-OPTION*)
+    INDICES-OPTION    := { KEYWORD EXPRESSION }*
+    UNIFORM-CLAUSE    := ((EQL :UNIFORM) UNIFORM-VAR-SPEC+)
+    UNIFORM-VAR-SPEC  := [ VAR | <span class="paren1">(<span class="code">VAR VAR</span>)</span> ]
+    BUFFER-CLAUSE     := <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">EQL <span class="keyword">:BUFFER</span></span>)</span> VAR</span>)</span>
+    ATTRIBUTES-CLAUSE := <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">EQL <span class="keyword">:ATTRIBUTES</span></span>)</span> ATTRIBUTE-NAME</span>)</span>
+    ATTRIBUTE-NAME    := EXPRESSION
+    SHADER-CLAUSE     := <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">EQL <span class="keyword">:SHADER</span></span>)</span> VAR VERTEX-SHADER FRAGMENT-SHADER</span>)</span>
+    VERTEX-SHADER     := EXPRESSION
+    FRAGMENT-SHADER   := EXPRESSION
+
+  BIND*: Require LIST but :NOT-BIND-FORM.
+
+  in <span class="paren1">(<span class="code"><i><span class="symbol">WITH-VAO</span></i> <span class="keyword">:NOT-BIND-FORM</span>
+       <span class="keyword">:BODY</span></span>)</span></span></code></pre>
+
+<p>これはエンドユーザーにとっても開発者にとっても嬉しいものです。</p>
+
+<h3>PARSE-WITH-VAO-BINDS</h3>
+
+<p>切り出したヘルパーは以下の通りです。
+変数が指定されていればそれを使い<code>NIL</code>が指定されていれば<code>CL:GENSYM</code>するのが特徴です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> &lt;init-buffer&gt; <span class="paren2">(<span class="code">clause buf vec</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind
+      <span class="paren3">(<span class="code">&amp;key <span class="paren4">(<span class="code">target <span class="keyword">:array-buffer</span></span>)</span> <span class="paren4">(<span class="code">usage <span class="keyword">:static-draw</span></span>)</span></span>)</span>
+      clause
+    `<span class="paren3">(<span class="code"><span class="paren4">(<span class="code">gl:bind-buffer ,<span class="paren5">(<span class="code">type-assert target 'buffer-target</span>)</span> ,buf</span>)</span>
+      <span class="paren4">(<span class="code">gl:buffer-data ,<span class="paren5">(<span class="code">type-assert target 'buffer-target</span>)</span>
+                      ,<span class="paren5">(<span class="code">type-assert usage 'buffer-usage</span>)</span> ,vec</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> parse-with-vao-binds <span class="paren2">(<span class="code">bind* body</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">refs</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">labels</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">clause <span class="paren6">(<span class="code">clause bind</span>)</span>
+               <span class="paren6">(<span class="code">or <span class="paren1">(<span class="code">assoc clause <span class="paren2">(<span class="code">cdr bind</span>)</span></span>)</span>
+                   <span class="paren1">(<span class="code">error <span class="string">"Missing required cluase ~S in ~S"</span> clause bind</span>)</span></span>)</span></span>)</span>
+             <span class="paren5">(<span class="code">rec <span class="paren6">(<span class="code">bind*</span>)</span>
+               <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren1">(<span class="code">endp bind*</span>)</span>
+                   body
+                   <span class="paren1">(<span class="code">destructuring-bind
+                       <span class="paren2">(<span class="code">prog vs fs</span>)</span>
+                       <span class="paren2">(<span class="code">cdr <span class="paren3">(<span class="code">clause <span class="keyword">:shader</span> <span class="paren4">(<span class="code">car bind*</span>)</span></span>)</span></span>)</span>
+                     <span class="paren2">(<span class="code">unless prog <span class="comment">; &lt;--- Here!
+</span>                       <span class="paren3">(<span class="code">setf prog <span class="paren4">(<span class="code">gensym <span class="string">"PROG"</span></span>)</span></span>)</span></span>)</span>
+                     `<span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><i><span class="symbol">with-prog</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,prog ,vs ,fs</span>)</span></span>)</span>
+                         ,<span class="paren4">(<span class="code">body <span class="paren5">(<span class="code">assoc <span class="keyword">:indices</span> <span class="paren6">(<span class="code">cdar bind*</span>)</span></span>)</span> prog bind*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+             <span class="paren5">(<span class="code">&lt;may-uniform-bind&gt; <span class="paren6">(<span class="code">uniforms bind*</span>)</span>
+               <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> uniforms
+                   `<span class="paren1">(<span class="code"><span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> ,uniforms
+                       ,@<span class="paren3">(<span class="code">rec <span class="paren4">(<span class="code">cdr bind*</span>)</span></span>)</span></span>)</span></span>)</span>
+                   <span class="paren1">(<span class="code">rec <span class="paren2">(<span class="code">cdr bind*</span>)</span></span>)</span></span>)</span></span>)</span>
+             <span class="paren5">(<span class="code">&lt;body-form&gt; <span class="paren6">(<span class="code">bind* prog &amp;optional indices-bind ebo-bind ebo-inits</span>)</span>
+               <span class="paren6">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">verts <span class="paren3">(<span class="code">clause <span class="keyword">:vertices</span> <span class="paren4">(<span class="code">car bind*</span>)</span></span>)</span></span>)</span>
+                      <span class="paren2">(<span class="code">vertices <span class="paren3">(<span class="code">or <span class="paren4">(<span class="code">second verts</span>)</span> <span class="paren4">(<span class="code">gensym <span class="string">"VERTICES"</span></span>)</span></span>)</span></span>)</span> <span class="comment">; &lt;--- Here!
+</span>                      <span class="paren2">(<span class="code">vbo
+                       <span class="paren3">(<span class="code">or <span class="paren4">(<span class="code">cadr <span class="paren5">(<span class="code">assoc <span class="keyword">:buffer</span> <span class="paren6">(<span class="code">cdar bind*</span>)</span></span>)</span></span>)</span> <span class="paren4">(<span class="code">gensym <span class="string">"VBO"</span></span>)</span></span>)</span></span>)</span> <span class="comment">; &lt;--- Here!
+</span>                      <span class="paren2">(<span class="code">uniforms
+                       <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">uniforms <span class="paren6">(<span class="code">cdr <span class="paren1">(<span class="code">assoc <span class="keyword">:uniform</span> <span class="paren2">(<span class="code">cdar bind*</span>)</span></span>)</span></span>)</span></span>)</span>
+                              <span class="paren5">(<span class="code">required <span class="paren6">(<span class="code">uniforms <span class="paren1">(<span class="code">prog-name prog bind*</span>)</span></span>)</span></span>)</span>
+                              <span class="paren5">(<span class="code">actual <span class="paren6">(<span class="code">mapcar #'ensure-second uniforms</span>)</span></span>)</span></span>)</span>
+                         <span class="paren4">(<span class="code">assert <span class="paren5">(<span class="code">null
+                                   <span class="paren6">(<span class="code">set-exclusive-or required actual
+                                                     <span class="keyword">:test</span> #'string=</span>)</span></span>)</span>
+                           <span class="paren5">(<span class="code"></span>)</span>
+                           <span class="string">"Mismatch uniforms. ~S but ~S"</span> required actual</span>)</span>
+                         <span class="paren4">(<span class="code">mapcar <span class="paren5">(<span class="code">&lt;uniform-binder&gt; prog</span>)</span> uniforms</span>)</span></span>)</span></span>)</span>
+                      <span class="paren2">(<span class="code">attr <span class="paren3">(<span class="code">second <span class="paren4">(<span class="code">clause <span class="keyword">:attributes</span> <span class="paren5">(<span class="code">car bind*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                 `<span class="paren1">(<span class="code"><i><span class="symbol">with-gl-vector</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">,vertices ,<span class="paren4">(<span class="code">third verts</span>)</span></span>)</span> ,@indices-bind</span>)</span>
+                    <span class="paren2">(<span class="code"><i><span class="symbol">with-buffer</span></i> ,<span class="paren3">(<span class="code">list* vbo ebo-bind</span>)</span>
+                      <span class="paren3">(<span class="code"><i><span class="symbol">with-vertex-array</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">,<span class="paren6">(<span class="code">caar bind*</span>)</span>
+                                           ,@<span class="paren6">(<span class="code">&lt;init-buffer&gt; <span class="paren1">(<span class="code">cdddr verts</span>)</span> vbo
+                                                            vertices</span>)</span>
+                                           <span class="paren6">(<span class="code">link-attributes ,attr ,prog</span>)</span>
+                                           ,@ebo-inits</span>)</span></span>)</span>
+                        ,@<span class="paren4">(<span class="code">&lt;may-uniform-bind&gt; uniforms bind*</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+             <span class="paren5">(<span class="code">prog-name <span class="paren6">(<span class="code">prog bind*</span>)</span>
+               <span class="paren6">(<span class="code">or <span class="paren1">(<span class="code">and <span class="paren2">(<span class="code">symbol-package prog</span>)</span> prog</span>)</span> <span class="paren1">(<span class="code">caar bind*</span>)</span></span>)</span></span>)</span>
+             <span class="paren5">(<span class="code">body <span class="paren6">(<span class="code">vec prog bind*</span>)</span>
+               <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> vec
+                   <span class="paren1">(<span class="code"><i><span class="symbol">alexandria:with-unique-names</span></i> <span class="paren2">(<span class="code">vector indices ebo</span>)</span>
+                     `<span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">,vector ,<span class="paren5">(<span class="code">second vec</span>)</span></span>)</span></span>)</span>
+                        ,<span class="paren3">(<span class="code"><i><span class="symbol">progn</span></i>
+                          <span class="paren4">(<span class="code">push <span class="paren5">(<span class="code">list <span class="paren6">(<span class="code">prog-name prog bind*</span>)</span> `',vector</span>)</span> refs</span>)</span>
+                          <span class="paren4">(<span class="code">&lt;body-form&gt; bind* prog `<span class="paren5">(<span class="code"><span class="paren6">(<span class="code">,indices ,vector</span>)</span></span>)</span>
+                                       <span class="paren5">(<span class="code">list ebo</span>)</span>
+                                       <span class="paren5">(<span class="code">&lt;init-buffer&gt; <span class="paren6">(<span class="code">cddr vec</span>)</span> ebo
+                                                      indices</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                   <span class="paren1">(<span class="code">&lt;body-form&gt; bind* prog</span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">values <span class="paren5">(<span class="code">rec bind*</span>)</span> refs</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>WITH-SHADER</h2>
+
+<p>vertex-array-objectを束縛する変数の指定を取り扱うのは<code>WITH-SHADER</code>にのみ必要なものです。
+一応簡単なシンタックスチェックを入れておきましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-shader</span></i> <span class="paren2">(<span class="code">&amp;whole whole <span class="paren3">(<span class="code">&amp;rest bind*</span>)</span> &amp;body body</span>)</span>
+  <span class="paren2">(<span class="code">check-bnf:check-bnf <span class="paren3">(<span class="code"><span class="keyword">:whole</span> whole</span>)</span>
+    <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">bind* <span class="paren5">(<span class="code">symbol option+</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">option+ <span class="paren5">(<span class="code">option-name option-form+</span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">option-name
+      <span class="paren5">(<span class="code">member <span class="keyword">:vertices</span>
+              <span class="keyword">:indices</span> <span class="keyword">:uniform</span>
+              <span class="keyword">:buffer</span> <span class="keyword">:attributes</span>
+              <span class="keyword">:shader</span> <span class="keyword">:vertex-array</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">option-form+ check-bnf:expression</span>)</span></span>)</span></span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">with-vao</span></i> ,<span class="paren3">(<span class="code">mapcar
+                <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">bind</span>)</span>
+                  <span class="paren5">(<span class="code">destructuring-bind
+                      <span class="paren6">(<span class="code">class &amp;rest clause*</span>)</span>
+                      bind
+                    `<span class="paren6">(<span class="code">,<span class="paren1">(<span class="code">or <span class="paren2">(<span class="code">cadr <span class="paren3">(<span class="code">assoc <span class="keyword">:vertex-array</span> <span class="paren4">(<span class="code">cdr bind</span>)</span></span>)</span></span>)</span> <span class="comment">; &lt;--- Here!
+</span>                           <span class="paren2">(<span class="code">gensym <span class="string">"VAO"</span></span>)</span></span>)</span>
+                      ,@<span class="paren1">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> clause <span class="keyword">:in</span> clause*
+                              <span class="keyword">:when</span> <span class="paren2">(<span class="code">eq <span class="keyword">:indices</span> <span class="paren3">(<span class="code">car clause</span>)</span></span>)</span>
+                                <span class="keyword">:collect</span> `<span class="paren2">(<span class="code"><span class="keyword">:indices</span>
+                                           <span class="paren3">(<span class="code">coerce ,<span class="paren4">(<span class="code">second clause</span>)</span>
+                                                   '<span class="paren4">(<span class="code">array <span class="paren5">(<span class="code">unsigned-byte 8</span>)</span>
+                                                     <span class="paren5">(<span class="code">*</span>)</span></span>)</span></span>)</span>
+                                           <span class="keyword">:target</span> <span class="keyword">:element-array-buffer</span></span>)</span>
+                              <span class="keyword">:else</span> <span class="keyword">:unless</span> <span class="paren2">(<span class="code">eq <span class="keyword">:vertex-array</span> <span class="paren3">(<span class="code">car clause</span>)</span></span>)</span> <span class="comment">; &lt;--- Here!
+</span>                                <span class="keyword">:collect</span> clause</span>)</span>
+                      <span class="paren1">(<span class="code"><span class="keyword">:attributes</span> ',<span class="paren2">(<span class="code">alexandria:ensure-car class</span>)</span></span>)</span>
+                      <span class="paren1">(<span class="code"><span class="keyword">:shader</span> ,class
+                       <span class="paren2">(<span class="code">vertex-shader ',<span class="paren3">(<span class="code">alexandria:ensure-car class</span>)</span></span>)</span>
+                       <span class="paren2">(<span class="code">fragment-shader ',<span class="paren3">(<span class="code">alexandria:ensure-car class</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+                bind*</span>)</span>
+     ,@body</span>)</span></span>)</span></span></code></pre>
+
+<h2>SHADER</h2>
+
+<p>シェーダーは以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defshader</span></i> glyph 330 <span class="paren2">(<span class="code">xy st</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:vertex</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">|texCoords| <span class="keyword">:vec2</span></span>)</span> &amp;uniform <span class="paren4">(<span class="code">projection <span class="keyword">:mat4</span></span>)</span></span>)</span>
+    <span class="string">"texCoords = st;"</span>
+    <span class="string">"gl_Position = projection * vec4(xy, 0.0, 1.0);"</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:fragment</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">color <span class="keyword">:vec4</span></span>)</span> &amp;uniform <span class="paren4">(<span class="code">text <span class="keyword">:|sampler2D|</span></span>)</span> <span class="paren4">(<span class="code">|textColor| <span class="keyword">:vec3</span></span>)</span></span>)</span>
+    <span class="string">"color = vec4(textColor, 1.0) * vec4(1.0, 1.0, 1.0, texture(text, texCoords).r);"</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>MAIN</h2>
+
+<p><code>MAIN</code>関数は以下の通り。
+どうせ<code>WITH-GLYPH</code>マクロを書かねばならないのなら<code>GLYPH</code>のための<code>WITH-SHADER</code>もまるっと隠蔽させるのもいいかもしれません。
+そうすれば<code>RENDER-TEXT</code>への引数も少なくできます。
+とりあえず動くので当面はこれで行くとします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> text-demo <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">uiop:nest
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren4">(<span class="code"><span class="keyword">:everything</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span> <span class="keyword">:w</span> 800 <span class="keyword">:h</span> 600</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren4">(<span class="code">context win</span>)</span>
+      <span class="paren4">(<span class="code">gl:enable <span class="keyword">:blend</span></span>)</span>
+      <span class="paren4">(<span class="code">gl:blend-func <span class="keyword">:src-alpha</span> <span class="keyword">:one-minus-src-alpha</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">glyph
+                    <span class="paren6">(<span class="code"><span class="keyword">:vertices</span> vertices
+                               <span class="paren1">(<span class="code">make-array <span class="paren2">(<span class="code">* 4 6</span>)</span>
+                                           <span class="keyword">:element-type</span> 'single-float
+                                           <span class="keyword">:initial-element</span> 0.0</span>)</span>
+                               <span class="keyword">:usage</span> <span class="keyword">:dynamic-draw</span></span>)</span>
+                    <span class="paren6">(<span class="code"><span class="keyword">:vertex-array</span> glyph-vao</span>)</span>
+                    <span class="paren6">(<span class="code"><span class="keyword">:buffer</span> buffer</span>)</span>
+                    <span class="paren6">(<span class="code"><span class="keyword">:uniform</span> projection text |textColor|</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-glyph</span></i> nil</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">send <span class="paren6">(<span class="code">matrix uniform</span>)</span>
+             <span class="paren6">(<span class="code">gl:uniform-matrix uniform 4 <span class="paren1">(<span class="code">vector <span class="paren2">(<span class="code">3d-matrices:marr matrix</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">send
+        <span class="paren5">(<span class="code">multiple-value-bind <span class="paren6">(<span class="code">w h</span>)</span>
+            <span class="paren6">(<span class="code">sdl2:get-window-size win</span>)</span>
+          <span class="paren6">(<span class="code">3d-matrices:mortho 0 w 0 h -1 1</span>)</span></span>)</span>
+        projection</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren4">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:quit</span> <span class="paren5">(<span class="code"></span>)</span>
+        t</span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:idle</span> <span class="paren5">(<span class="code"></span>)</span>
+        <span class="paren5">(<span class="code">sleep <span class="paren6">(<span class="code">/ 1 15</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren6">(<span class="code">win <span class="paren1">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">render-text <span class="string">"Hello world!"</span> glyph
+                       <span class="keyword">:color-uniform</span> |textColor|
+                       <span class="keyword">:vertices</span> vertices
+                       <span class="keyword">:vertex-array</span> glyph-vao
+                       <span class="keyword">:vertex-buffer</span> buffer</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/text-demo.png" alt="Image of the example above." /></p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
