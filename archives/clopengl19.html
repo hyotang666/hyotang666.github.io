@@ -1,0 +1,244 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl19</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 19.</h1>
+
+<h2>Metanotes.</h2>
+
+<h3>対象読者。</h3>
+
+<p><a href="clopengl18.html" >前章</a>を読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前章では音楽ファイルの再生を導入しました。
+本章ではテクストの描画を実装します。</p>
+
+<h2>ecosystem</h2>
+
+<p>OpenGLはグラフィックカードとやり取りする低レベルな仕様群です。
+フォントの取り扱いなどは埒外です。</p>
+
+<p>OpenGLでフォントの描画をする場合以下のライブラリ一択です。</p>
+
+<h3><a href="https://github.com/Shirakumo/cl-fond" >cl-fond</a></h3>
+
+<p>本シリーズではこれを不採用とし自作する道を選びます。</p>
+
+<p>不採用とする理由は<code>cl-fond</code>の設計にあります。</p>
+
+<p><code>cl-fond</code>では事前に使用する文字セットを文字列にして初期化関数に渡す必要があります。
+使用文字数の少ないアルファベット文化圏ではこの設計で問題ないでしょうが日本語話者としては不便きわまりない設計です。</p>
+
+<p>事前に必要な全文字の初期化を行うのではなく実行時にJIT的にフォントを生成することにします。
+これにより初期化は必要なくなり、例えばキャラクターのセリフを追加するたびに初期化すべき文字セットの更新をしなければならないというような事態を避けられます。</p>
+
+<h2>INITIALIZE-FONTS</h2>
+
+<p>指定されたディレクトリ下の全<code>ttf</code>ファイルの<code>PATHNAME</code>をリストにくくって返します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> initialize-fonts <span class="paren2">(<span class="code">root</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">ht <span class="paren5">(<span class="code">make-hash-table <span class="keyword">:test</span> #'equal</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">uiop:collect-sub*directories root #'identity <span class="comment">; always true.
+</span>                                  #'identity <span class="comment">; recurse all directories.
+</span>                                  <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">dir</span>)</span>
+                                    <span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> pathname
+                                               <span class="keyword">:in</span> <span class="paren6">(<span class="code">uiop:directory-files dir
+                                                                         <span class="string">"*.ttf"</span></span>)</span>
+                                          <span class="keyword">:do</span> <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">gethash
+                                                      <span class="paren2">(<span class="code">pathname-name pathname</span>)</span>
+                                                      ht</span>)</span>
+                                                      pathname</span>)</span></span>)</span></span>)</span></span>)</span>
+    ht</span>)</span></span>)</span></span></code></pre>
+
+<h2>*FONTS*</h2>
+
+<p>集めた<code>ttf</code>ファイルの<code>PATHNAME</code>群はグローバル変数に格納しておきます。
+（何度も探したくない。）</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*fonts*</span> <span class="paren2">(<span class="code">initialize-fonts <span class="string">"/usr/share/fonts/"</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>FIND-FONT LIST-ALL-FONTS</h2>
+
+<p>グローバル変数を直接参照しなくていいように簡単なヘルパを定義します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> find-font <span class="paren2">(<span class="code">name &amp;optional <span class="paren3">(<span class="code">errorp t</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">or <span class="paren3">(<span class="code">values <span class="paren4">(<span class="code">gethash name <span class="special">*fonts*</span></span>)</span></span>)</span>
+      <span class="paren3">(<span class="code">and errorp <span class="paren4">(<span class="code">error <span class="string">"Missing font named: ~S"</span> name</span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> list-all-fonts <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> k <span class="keyword">:being</span> <span class="keyword">:each</span> <span class="keyword">:hash-key</span> <span class="keyword">:of</span> <span class="special">*fonts*</span>
+        <span class="keyword">:collect</span> k</span>)</span></span>)</span></span></code></pre>
+
+<h2>FONT-LOADER</h2>
+
+<p>フォント名から<code>ZPB-TTF::FONT-LOADER</code>を取り出します。
+オープンした<code>ZPB-TTF::FONT-LOADER</code>は<code>PATHNAME</code>に変わりグローバル変数に格納しておきます。
+（何度もファイルシステムにアクセスしたくない。）</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> font-loader <span class="paren2">(<span class="code">font-name</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">loader <span class="paren5">(<span class="code">find-font font-name nil</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">typecase loader
+      <span class="paren4">(<span class="code">zpb-ttf::font-loader loader</span>)</span>
+      <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">or string pathname</span>)</span>
+       <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">gethash font-name <span class="special">*fonts*</span></span>)</span> <span class="paren6">(<span class="code">zpb-ttf::open-font-loader loader</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">otherwise
+       <span class="paren5">(<span class="code">error
+         <span class="string">"Unknown font. ~S ~:_Eval (fude-gl:list-all-fonts) for supported fonts."</span>
+         font-name</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>CHAR-GLYPH</h2>
+
+<p>必要なデータをまとめて管理できるように構造体を定義します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defstruct</span></i> char-glyph
+  <span class="paren2">(<span class="code">texture 0 <span class="keyword">:type</span> <span class="paren3">(<span class="code">unsigned-byte 32</span>)</span> <span class="keyword">:read-only</span> t</span>)</span>
+  w
+  h
+  bearing-x
+  bearing-y
+  advance</span>)</span></span></code></pre>
+
+<h2>*GLYPHS*</h2>
+
+<p>生成された<code>CHAR-GLYPH</code>オブジェクトはグローバル変数に格納して管理します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*glyphs*</span></span>)</span></span></code></pre>
+
+<h2>WITH-GLYPH</h2>
+
+<p>リソース管理のためにWITH系マクロを定義します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-glyph</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"></span>)</span> &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*fonts*</span> <span class="paren5">(<span class="code">alexandria:copy-hash-table <span class="special">*fonts*</span></span>)</span></span>)</span>
+         <span class="paren4">(<span class="code"><span class="special">*glyphs*</span> <span class="paren5">(<span class="code">make-hash-table</span>)</span></span>)</span></span>)</span>
+     <span class="paren3">(<span class="code"><i><span class="symbol">unwind-protect</span></i> <span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i> ,@body</span>)</span>
+       <span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> g <span class="keyword">:being</span> <span class="keyword">:each</span> <span class="keyword">:hash-value</span> of <span class="special">*glyphs*</span>
+             <span class="keyword">:do</span> <span class="paren5">(<span class="code">gl:delete-textures <span class="paren6">(<span class="code">list <span class="paren1">(<span class="code">char-glyph-texture g</span>)</span></span>)</span></span>)</span></span>)</span>
+       <span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> v <span class="keyword">:being</span> <span class="keyword">:each</span> <span class="keyword">:hash-value</span> of <span class="special">*fonts*</span>
+             <span class="keyword">:when</span> <span class="paren5">(<span class="code">typep v 'zpb-ttf::font-loader</span>)</span>
+               <span class="keyword">:do</span> <span class="paren5">(<span class="code">zpb-ttf::close-font-loader v</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>FONT-DATA</h2>
+
+<p>True type fontはベクタ画像であり描画するにはラスタ画像化する必要があります。
+ラスタ画像化にはライブラリ<a href="https://www.xach.com/lisp/vecto/" >vecto</a>を使うと便利です。
+注意点として<code>vecto</code>は<code>rgba</code>でラスタ画像化することが挙げられます。
+ここで欲しいのは<code>grayscale</code>なので簡便のために生成された<code>rgba</code>から<code>alpha</code>要素だけ抜き出すこととします。
+効率は著しく悪いですが実装の詳細には立ち入りたくないので効率が問題になるまではこれでokとします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> font-data <span class="paren2">(<span class="code">char loader size</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">non-zero-int <span class="paren5">(<span class="code">i</span>)</span>
+           <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren6">(<span class="code">zerop i</span>)</span>
+               1
+               i</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">string <span class="paren6">(<span class="code">string char</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">bbox <span class="paren6">(<span class="code">vecto:string-bounding-box string size loader</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">w
+            <span class="paren6">(<span class="code">ceiling
+              <span class="paren1">(<span class="code">non-zero-int <span class="paren2">(<span class="code">- <span class="paren3">(<span class="code">zpb-ttf:xmax bbox</span>)</span> <span class="paren3">(<span class="code">zpb-ttf:xmin bbox</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">h
+            <span class="paren6">(<span class="code">ceiling
+              <span class="paren1">(<span class="code">non-zero-int <span class="paren2">(<span class="code">- <span class="paren3">(<span class="code">zpb-ttf:ymax bbox</span>)</span> <span class="paren3">(<span class="code">zpb-ttf:ymin bbox</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="comment">;; TODO Implement gray scale rasterizer.
+</span>      <span class="paren4">(<span class="code"><i><span class="symbol">vecto:with-canvas</span></i> <span class="paren5">(<span class="code"><span class="keyword">:width</span> w <span class="keyword">:height</span> h</span>)</span>
+        <span class="paren5">(<span class="code">vecto:set-font loader size</span>)</span>
+        <span class="paren5">(<span class="code">vecto:draw-string 0 <span class="paren6">(<span class="code">- <span class="paren1">(<span class="code">zpb-ttf:ymin bbox</span>)</span></span>)</span> string</span>)</span>
+        <span class="paren5">(<span class="code">values <span class="paren6">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:with</span> vec = <span class="paren1">(<span class="code">vecto::image-data <span class="special">vecto::*graphics-state*</span></span>)</span>
+                      <span class="keyword">:with</span> new
+                            = <span class="paren1">(<span class="code">make-array <span class="paren2">(<span class="code">* w h</span>)</span>
+                                          <span class="keyword">:element-type</span> '<span class="paren2">(<span class="code">unsigned-byte 8</span>)</span>
+                                          <span class="keyword">:initial-element</span> 0</span>)</span>
+                      <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 3 <span class="keyword">:by</span> 4
+                      <span class="keyword">:while</span> <span class="paren1">(<span class="code">array-in-bounds-p vec i</span>)</span>
+                      <span class="keyword">:do</span> <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">aref new <span class="paren3">(<span class="code">floor i 4</span>)</span></span>)</span> <span class="paren2">(<span class="code">aref vec i</span>)</span></span>)</span>
+                      <span class="keyword">:finally</span> <span class="paren1">(<span class="code">return new</span>)</span></span>)</span>
+                w
+                h
+                <span class="paren6">(<span class="code">floor <span class="paren1">(<span class="code">zpb-ttf:xmin bbox</span>)</span></span>)</span>
+                <span class="paren6">(<span class="code">ceiling <span class="paren1">(<span class="code">zpb-ttf:ymax bbox</span>)</span></span>)</span>
+                <span class="paren6">(<span class="code">ceiling
+                  <span class="paren1">(<span class="code">* <span class="paren2">(<span class="code">zpb-ttf:advance-width <span class="paren3">(<span class="code">zpb-ttf:find-glyph char loader</span>)</span></span>)</span>
+                     <span class="paren2">(<span class="code">/ size <span class="paren3">(<span class="code">zpb-ttf:units/em loader</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>CHAR-GLYPH</h2>
+
+<p>文字を受け取り<code>CHAR-GLYPH</code>を返す関数です。
+初めての文字に出会った場合<code>CHAR-GLYPH</code>を生成します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> char-glyph <span class="paren2">(<span class="code">char font-name &amp;optional <span class="paren3">(<span class="code">size 16</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">loader <span class="paren5">(<span class="code">font-loader font-name</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren4">(<span class="code">not <span class="paren5">(<span class="code">zpb-ttf:glyph-exists-p char loader</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">error <span class="string">"~S is not exist in the font ~S."</span> char font-name</span>)</span>
+        <span class="paren4">(<span class="code">or <span class="paren5">(<span class="code">gethash char <span class="special">*glyphs*</span></span>)</span>
+            <span class="paren5">(<span class="code">multiple-value-bind <span class="paren6">(<span class="code">image w h bearing-x bearing-y advance</span>)</span>
+                <span class="paren6">(<span class="code">font-data char loader size</span>)</span>
+              <span class="paren6">(<span class="code">gl:pixel-store <span class="keyword">:unpack-alignment</span> 1</span>)</span>
+              <span class="paren6">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren1">(<span class="code"><span class="paren2">(<span class="code">texture <span class="paren3">(<span class="code">car <span class="paren4">(<span class="code">gl:gen-textures 1</span>)</span></span>)</span></span>)</span></span>)</span>
+                <span class="paren1">(<span class="code">gl:active-texture texture</span>)</span>
+                <span class="paren1">(<span class="code">gl:bind-texture <span class="keyword">:texture-2d</span> texture</span>)</span>
+                <span class="paren1">(<span class="code">gl:tex-image-2d <span class="keyword">:texture-2d</span> 0 <span class="keyword">:red</span> w h 0 <span class="keyword">:red</span>
+                                 <span class="keyword">:unsigned-byte</span> image</span>)</span>
+                <span class="paren1">(<span class="code">gl:tex-parameter <span class="keyword">:texture-2d</span> <span class="keyword">:texture-wrap-s</span> <span class="keyword">:clamp-to-edge</span></span>)</span>
+                <span class="paren1">(<span class="code">gl:tex-parameter <span class="keyword">:texture-2d</span> <span class="keyword">:texture-wrap-t</span> <span class="keyword">:clamp-to-edge</span></span>)</span>
+                <span class="paren1">(<span class="code">gl:tex-parameter <span class="keyword">:texture-2d</span> <span class="keyword">:texture-min-filter</span> <span class="keyword">:linear</span></span>)</span>
+                <span class="paren1">(<span class="code">gl:tex-parameter <span class="keyword">:texture-2d</span> <span class="keyword">:texture-mag-filter</span> <span class="keyword">:linear</span></span>)</span>
+                <span class="paren1">(<span class="code">setf <span class="paren2">(<span class="code">gethash char <span class="special">*glyphs*</span></span>)</span>
+                        <span class="paren2">(<span class="code">make-char-glyph <span class="keyword">:texture</span> texture
+                                         <span class="keyword">:w</span> w
+                                         <span class="keyword">:h</span> h
+                                         <span class="keyword">:bearing-x</span> bearing-x
+                                         <span class="keyword">:bearing-y</span> bearing-y
+                                         <span class="keyword">:advance</span> advance</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>RENDER-TEXT</h2>
+
+<p>描画関数は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> render-text
+       <span class="paren2">(<span class="code">text shader
+        &amp;key <span class="paren3">(<span class="code">x 0</span>)</span> <span class="paren3">(<span class="code">y 0</span>)</span> <span class="paren3">(<span class="code">scale 1</span>)</span> <span class="paren3">(<span class="code">color '<span class="paren4">(<span class="code">1 1 1</span>)</span></span>)</span> <span class="paren3">(<span class="code">font <span class="string">"Ubuntu-M"</span></span>)</span>
+        <span class="paren3">(<span class="code">vertices <span class="paren4">(<span class="code">error <span class="string">":VERTICES is required."</span></span>)</span></span>)</span>
+        <span class="paren3">(<span class="code">color-uniform <span class="paren4">(<span class="code">error <span class="string">":COLOR-UNIFORM is required."</span></span>)</span></span>)</span>
+        <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="keyword">:vertex-array</span> vao</span>)</span> <span class="paren4">(<span class="code">error <span class="string">":VERTEX-ARRAY is required."</span></span>)</span></span>)</span>
+        <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="keyword">:vertex-buffer</span> vbo</span>)</span> <span class="paren4">(<span class="code">error <span class="string">":VERTEX-BUFFER is required."</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">setf text <span class="paren3">(<span class="code">map 'list <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">c</span>)</span> <span class="paren5">(<span class="code">char-glyph c font</span>)</span></span>)</span> text</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">gl:use-program shader</span>)</span>
+  <span class="paren2">(<span class="code">apply #'gl:uniformf color-uniform color</span>)</span>
+  <span class="paren2">(<span class="code">gl:active-texture 0</span>)</span>
+  <span class="paren2">(<span class="code">gl:bind-vertex-array vao</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> glyph <span class="keyword">:in</span> text
+        <span class="keyword">:for</span> x-pos = <span class="paren3">(<span class="code">+ x <span class="paren4">(<span class="code">* <span class="paren5">(<span class="code">char-glyph-bearing-x glyph</span>)</span> scale</span>)</span></span>)</span>
+        <span class="keyword">:for</span> y-pos
+             = <span class="paren3">(<span class="code">- y
+                  <span class="paren4">(<span class="code">* <span class="paren5">(<span class="code">- <span class="paren6">(<span class="code">char-glyph-h glyph</span>)</span> <span class="paren6">(<span class="code">char-glyph-bearing-y glyph</span>)</span></span>)</span>
+                     scale</span>)</span></span>)</span>
+        <span class="keyword">:for</span> w = <span class="paren3">(<span class="code">* scale <span class="paren4">(<span class="code">char-glyph-w glyph</span>)</span></span>)</span>
+        <span class="keyword">:for</span> h = <span class="paren3">(<span class="code">* scale <span class="paren4">(<span class="code">char-glyph-h glyph</span>)</span></span>)</span>
+        <span class="keyword">:do</span> <span class="paren3">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> elt
+                       <span class="keyword">:in</span> <span class="paren4">(<span class="code">list x-pos <span class="paren5">(<span class="code">+ h y-pos</span>)</span> 0 0 <span class="comment">; first
+</span>                                 x-pos y-pos 0 1 <span class="comment">; second
+</span>                                 <span class="paren5">(<span class="code">+ w x-pos</span>)</span> y-pos 1 1 <span class="comment">; third
+</span>                                 x-pos <span class="paren5">(<span class="code">+ h y-pos</span>)</span> 0 0 <span class="comment">; fourth
+</span>                                 <span class="paren5">(<span class="code">+ w x-pos</span>)</span> y-pos 1 1 <span class="comment">; fifth
+</span>                                 <span class="paren5">(<span class="code">+ w x-pos</span>)</span> <span class="paren5">(<span class="code">+ h y-pos</span>)</span> 1 0</span>)</span>
+                  <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+                  <span class="keyword">:do</span> <span class="paren4">(<span class="code">setf <span class="paren5">(<span class="code">gl:glaref vertices i</span>)</span> <span class="paren5">(<span class="code">float elt</span>)</span></span>)</span></span>)</span>
+            <span class="paren3">(<span class="code">gl:bind-texture <span class="keyword">:texture-2d</span> <span class="paren4">(<span class="code">char-glyph-texture glyph</span>)</span></span>)</span>
+            <span class="paren3">(<span class="code">gl:bind-buffer <span class="keyword">:array-buffer</span> vbo</span>)</span>
+            <span class="paren3">(<span class="code">gl:buffer-sub-data <span class="keyword">:array-buffer</span> vertices</span>)</span>
+            <span class="paren3">(<span class="code">gl:draw-arrays <span class="keyword">:triangles</span> 0 6</span>)</span>
+            <span class="paren3">(<span class="code">incf x <span class="paren4">(<span class="code">* scale <span class="paren5">(<span class="code">char-glyph-advance glyph</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
