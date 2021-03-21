@@ -1,0 +1,285 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl18</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 18.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者。</h3>
+
+<p><a href="clopengl17.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前章では衝突判定を導入してゲームらしくなりました。
+本章では音楽を導入します。</p>
+
+<h2>Ecosystems</h2>
+
+<p>Common Lispで音楽を再生しようとする場合かつそれがゲームエンジンでの使用とする場合選択肢は二つです。</p>
+
+<h3><a href="https://github.com/Shirakumo/harmony" >harmony</a></h3>
+
+<p>本シリーズではこれを採用します。</p>
+
+<p>比較的新しく活発に開発されています。
+OSを問わず使えるように設計されておりバックエンドも豊富です。
+ただ悪く言うとまだ枯れておらずドキュメントは皆無です。
+使いたい場合はソースを読まなければなりません。</p>
+
+<h3><a href="https://github.com/ahefner/mixalot" >mixalot</a></h3>
+
+<p>こちらは古くあまりメンテナンスされておりません（最新コミットが2015年ころ）。
+ただよく言えば枯れているともみなせドキュメントも丁寧です。</p>
+
+<p>harmonyを採用した理由は何よりもチームshirakumoのプロダクトであるという点に尽きます。
+またゲームエンジンのために作られたという点も評価できます。</p>
+
+<h2>ENSURE-SOUND</h2>
+
+<p>必要な音楽ファイルを本家から導入しましょう。
+各ファイルにはキーワードによる名前をつけて管理します。
+（不測の事態を招きたくない。）</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">pathnames <span class="paren4">(<span class="code">make-hash-table</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">def <span class="paren5">(<span class="code">name url</span>)</span>
+           <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">pathname
+                  <span class="paren2">(<span class="code">ensure-directories-exist
+                    <span class="paren3">(<span class="code">merge-pathnames
+                      <span class="paren4">(<span class="code">format nil <span class="string">"sounds/~A"</span>
+                              <span class="paren5">(<span class="code">subseq url <span class="paren6">(<span class="code">1+ <span class="paren1">(<span class="code">position <span class="character">#\/</span> url <span class="keyword">:from-end</span> t</span>)</span></span>)</span></span>)</span></span>)</span>
+                      <span class="paren4">(<span class="code">asdf:system-source-directory
+                        <span class="paren5">(<span class="code">asdf:find-system <span class="keyword">:breakout-cl</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+             <span class="paren6">(<span class="code">unless <span class="paren1">(<span class="code">probe-file pathname</span>)</span>
+               <span class="paren1">(<span class="code">uiop:format! <span class="special">*trace-output*</span> <span class="string">"~&amp;Downloading ~S"</span> url</span>)</span>
+               <span class="paren1">(<span class="code">dex:fetch url pathname</span>)</span></span>)</span>
+             <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">gethash name pathnames</span>)</span> pathname</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:breakout</span> <span class="string">"https://learnopengl.com/audio/in-practice/breakout/breakout.mp3"</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:break</span> <span class="string">"https://learnopengl.com/audio/in-practice/breakout/bleep.mp3"</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:solid</span> <span class="string">"https://learnopengl.com/audio/in-practice/breakout/solid.wav"</span></span>)</span>
+    <span class="paren3">(<span class="code">def <span class="keyword">:bounce</span> <span class="string">"https://learnopengl.com/audio/in-practice/breakout/bleep.wav"</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">defun</span></i> ensure-sound <span class="paren4">(<span class="code">name</span>)</span>
+      <span class="paren4">(<span class="code">or <span class="paren5">(<span class="code">gethash name pathnames</span>)</span>
+          <span class="paren5">(<span class="code">error <span class="string">"Unknown file name ~S: ~S"</span> name
+                 <span class="paren6">(<span class="code">alexandria:hash-table-keys pathnames</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>WITH-HARMONY</h2>
+
+<p>harmonyはサーバーです。
+リソース管理のためいつもどおりWITH系マクロを定義しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-harmony</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">var</span>)</span> &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">symbol-macrolet</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">,var <span class="special">org.shirakumo.fraf.harmony:*server*</span></span>)</span></span>)</span>
+     <span class="paren3">(<span class="code">org.shirakumo.fraf.harmony:maybe-start-simple-server</span>)</span>
+     <span class="paren3">(<span class="code"><i><span class="symbol">unwind-protect</span></i> <span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i> ,@body</span>)</span> <span class="paren4">(<span class="code">org.shirakumo.fraf.harmony:stop ,var</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>PLAY</h2>
+
+<p>簡便のため<code>ORG.SHIRAKUMO.FRAF.HARMONY:PLAY</code>関数をラップしましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> play <span class="paren2">(<span class="code">name &amp;key repeat <span class="paren3">(<span class="code">mixer <span class="keyword">:effect</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">org.shirakumo.fraf.harmony:play <span class="paren3">(<span class="code">ensure-sound name</span>)</span>
+                                   <span class="keyword">:name</span> name
+                                   <span class="keyword">:mixer</span> mixer
+                                   <span class="keyword">:if-exists</span> <span class="keyword">:restart</span>
+                                   <span class="keyword">:repeat</span> repeat</span>)</span></span>)</span></span></code></pre>
+
+<h2>OBJECTS</h2>
+
+<p>ゲームロジックに関係のない副作用目当てのコードを紛れ込ませるのは嫌です。
+音楽再生は総称関数の<code>:BEFORE</code>メソッドに担わせましょう。</p>
+
+<p>そのためにはオブジェクトを少々変更する必要があります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defstruct</span></i> <span class="paren2">(<span class="code">normal-block <span class="paren3">(<span class="code"><span class="keyword">:include</span> blocks</span>)</span></span>)</span> <span class="paren2">(<span class="code">brokenp nil <span class="keyword">:type</span> boolean</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defstruct</span></i> <span class="paren2">(<span class="code">solid-block <span class="paren3">(<span class="code"><span class="keyword">:include</span> blocks</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>COLLIDEP</h2>
+
+<p><code>COLLIDEP</code>を総称関数に変更します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defgeneric</span></i> collidep <span class="paren2">(<span class="code">subject object</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">circle ball</span>)</span> <span class="paren4">(<span class="code">rect game-object</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-slots</span></i> <span class="paren4">(<span class="code">radius x y</span>)</span>
+        circle
+      <span class="paren4">(<span class="code"><i><span class="symbol">with-slots</span></i> <span class="paren5">(<span class="code">w h <span class="paren6">(<span class="code">rect-x x</span>)</span> <span class="paren6">(<span class="code">rect-y y</span>)</span></span>)</span>
+          rect
+        <span class="paren5">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">center <span class="paren2">(<span class="code">3d-vectors:vec <span class="paren3">(<span class="code">+ x radius</span>)</span> <span class="paren3">(<span class="code">+ y radius</span>)</span></span>)</span></span>)</span>
+               <span class="paren1">(<span class="code">aabb-half-extents <span class="paren2">(<span class="code">3d-vectors:vec <span class="paren3">(<span class="code">/ w 2</span>)</span> <span class="paren3">(<span class="code">/ h 2</span>)</span></span>)</span></span>)</span>
+               <span class="paren1">(<span class="code">aabb-center
+                <span class="paren2">(<span class="code">3d-vectors:nv+ <span class="paren3">(<span class="code">3d-vectors:vec rect-x rect-y</span>)</span>
+                                aabb-half-extents</span>)</span></span>)</span>
+               <span class="paren1">(<span class="code">difference
+                <span class="paren2">(<span class="code">3d-vectors:v-
+                  <span class="paren3">(<span class="code">3d-vectors:v+ aabb-center
+                                 <span class="paren4">(<span class="code">3d-vectors:vclamp
+                                   <span class="paren5">(<span class="code">3d-vectors:v- center aabb-center</span>)</span>
+                                   <span class="paren5">(<span class="code">3d-vectors:v- aabb-half-extents</span>)</span>
+                                   aabb-half-extents</span>)</span></span>)</span>
+                  center</span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren1">(<span class="code">&lt; <span class="paren2">(<span class="code">3d-vectors:vlength difference</span>)</span> radius</span>)</span>
+              <span class="paren1">(<span class="code">values t <span class="paren2">(<span class="code">vector-direction difference</span>)</span> difference</span>)</span>
+              <span class="paren1">(<span class="code">values nil <span class="keyword">:up</span> <span class="paren2">(<span class="code">3d-vectors:vec 0 0</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">ball ball</span>)</span> <span class="paren4">(<span class="code"><i><span class="symbol">block</span></i> normal-block</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">unless <span class="paren4">(<span class="code">normal-block-brokenp <i><span class="symbol">block</span></i></span>)</span>
+      <span class="paren4">(<span class="code">call-next-method</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">subject ball</span>)</span> <span class="paren4">(<span class="code">object null</span>)</span></span>)</span> <span class="comment">; Do nothing
+</span>    </span>)</span></span>)</span></span></code></pre>
+
+<h2>RESPONSE</h2>
+
+<p>衝突応答を担う総称関数です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defgeneric</span></i> response <span class="paren2">(<span class="code">subject object &amp;key</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:before</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">ball ball</span>)</span> <span class="paren4">(<span class="code">player player</span>)</span> &amp;key</span>)</span> <span class="paren3">(<span class="code">play <span class="keyword">:bounce</span></span>)</span></span>)</span> <span class="comment">; &lt;--- Side effect!
+</span>  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">ball ball</span>)</span> <span class="paren4">(<span class="code">player player</span>)</span> &amp;key</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-slots</span></i> <span class="paren4">(<span class="code">x w</span>)</span>
+        player
+      <span class="paren4">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">center-board <span class="paren1">(<span class="code">+ x <span class="paren2">(<span class="code">/ w 2</span>)</span></span>)</span></span>)</span>
+             <span class="paren6">(<span class="code">distance <span class="paren1">(<span class="code">- <span class="paren2">(<span class="code">+ <span class="paren3">(<span class="code">ball-x ball</span>)</span> <span class="paren3">(<span class="code">ball-radius ball</span>)</span></span>)</span> center-board</span>)</span></span>)</span>
+             <span class="paren6">(<span class="code">percentage <span class="paren1">(<span class="code">/ distance <span class="paren2">(<span class="code">/ w 2</span>)</span></span>)</span></span>)</span>
+             <span class="paren6">(<span class="code">strength 2</span>)</span>
+             <span class="paren6">(<span class="code">length <span class="paren1">(<span class="code">3d-vectors:vlength <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">3d-vectors:vsetf <span class="paren6">(<span class="code">ball-velocity ball</span>)</span>
+                          <span class="paren6">(<span class="code">* <span class="paren1">(<span class="code">car <span class="special">*initial-velocity*</span></span>)</span> percentage strength</span>)</span>
+                          <span class="paren6">(<span class="code">* -1
+                             <span class="paren1">(<span class="code">abs <span class="paren2">(<span class="code">- <span class="paren3">(<span class="code">3d-vectors:vy <span class="paren4">(<span class="code">ball-velocity ball</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">ball-velocity ball</span>)</span>
+                <span class="paren6">(<span class="code">3d-vectors:v* <span class="paren1">(<span class="code">3d-vectors:vunit <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span>
+                               length</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">ball ball</span>)</span> <span class="paren4">(<span class="code"><i><span class="symbol">block</span></i> blocks</span>)</span> &amp;key direction difference</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren4">(<span class="code">find direction '<span class="paren5">(<span class="code"><span class="keyword">:left</span> <span class="keyword">:right</span></span>)</span></span>)</span>
+        <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">penetration
+               <span class="paren1">(<span class="code">- <span class="paren2">(<span class="code">ball-radius ball</span>)</span> <span class="paren2">(<span class="code">abs <span class="paren3">(<span class="code">3d-vectors:vx difference</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">3d-vectors:vx <span class="paren1">(<span class="code">ball-velocity ball</span>)</span></span>)</span>
+                  <span class="paren6">(<span class="code">- <span class="paren1">(<span class="code">3d-vectors:vx <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren6">(<span class="code">eq <span class="keyword">:left</span> direction</span>)</span>
+              <span class="paren6">(<span class="code">incf <span class="paren1">(<span class="code">3d-vectors:vx <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span> penetration</span>)</span>
+              <span class="paren6">(<span class="code">decf <span class="paren1">(<span class="code">3d-vectors:vx <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span> penetration</span>)</span></span>)</span></span>)</span>
+        <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">penetration
+               <span class="paren1">(<span class="code">- <span class="paren2">(<span class="code">ball-radius ball</span>)</span> <span class="paren2">(<span class="code">abs <span class="paren3">(<span class="code">3d-vectors:vy difference</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">3d-vectors:vy <span class="paren1">(<span class="code">ball-velocity ball</span>)</span></span>)</span>
+                  <span class="paren6">(<span class="code">- <span class="paren1">(<span class="code">3d-vectors:vy <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren6">(<span class="code">eq <span class="keyword">:up</span> direction</span>)</span>
+              <span class="paren6">(<span class="code">incf <span class="paren1">(<span class="code">3d-vectors:vx <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span> penetration</span>)</span>
+              <span class="paren6">(<span class="code">decf <span class="paren1">(<span class="code">3d-vectors:vx <span class="paren2">(<span class="code">ball-velocity ball</span>)</span></span>)</span> penetration</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:before</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">ball ball</span>)</span> <span class="paren4">(<span class="code"><i><span class="symbol">block</span></i> normal-block</span>)</span> &amp;key</span>)</span> <span class="paren3">(<span class="code">play <span class="keyword">:break</span></span>)</span></span>)</span> <span class="comment">; &lt;--- Side effect!
+</span>  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">ball ball</span>)</span> <span class="paren4">(<span class="code"><i><span class="symbol">block</span></i> normal-block</span>)</span> &amp;key</span>)</span>
+    <span class="paren3">(<span class="code">setf <span class="paren4">(<span class="code">normal-block-brokenp <i><span class="symbol">block</span></i></span>)</span> t</span>)</span>
+    <span class="paren3">(<span class="code">call-next-method</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:before</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">ball ball</span>)</span> <span class="paren4">(<span class="code"><i><span class="symbol">block</span></i> solid-block</span>)</span> &amp;key</span>)</span> <span class="paren3">(<span class="code">play <span class="keyword">:solid</span></span>)</span></span>)</span></span>)</span> <span class="comment">; &lt;--- Side effect!</span></span></code></pre>
+
+<h2>CHECK-COLLISION</h2>
+
+<p>上記ヘルパーを使うことで<code>CHECK-COLLISIOIN</code>は以下の通りの短さになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> check-collision <span class="paren2">(<span class="code">ball player level</span>)</span>
+  <span class="paren2">(<span class="code">unless <span class="paren3">(<span class="code">ball-stuckp ball</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren4">(<span class="code">collidep ball player</span>)</span>
+        <span class="paren4">(<span class="code">response ball player</span>)</span>
+        <span class="paren4">(<span class="code">response ball level</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>DRAW</h2>
+
+<p>特に必要に迫られたわけではないですが設計がオブジェクト志向的になってきたので<code>DRAW</code>も総称関数にしておきます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defgeneric</span></i> draw <span class="paren2">(<span class="code">object model image texture &amp;key</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code">model model-mat image texture &amp;key</span>)</span>
+    <span class="string">"Default method to draw."</span>
+    <span class="paren3">(<span class="code">gl:uniform-matrix model 4 model-mat</span>)</span>
+    <span class="paren3">(<span class="code">gl:uniformi image texture</span>)</span>
+    <span class="paren3">(<span class="code">gl:draw-arrays <span class="keyword">:triangles</span> 0 6</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">bg <span class="paren5">(<span class="code">eql <span class="keyword">:background</span></span>)</span></span>)</span> model image texture &amp;key
+            <span class="paren4">(<span class="code">win <span class="paren5">(<span class="code">alexandria:required-argument <span class="keyword">:win</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">call-next-method model
+     <span class="paren4">(<span class="code"><i><span class="symbol">multiple-value-call</span></i> #'model-matrix 0 0 <span class="paren5">(<span class="code">sdl2:get-window-size win</span>)</span></span>)</span> image
+     texture</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:before</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">o blocks</span>)</span> model image texture &amp;key
+                    <span class="paren4">(<span class="code">splite-color
+                     <span class="paren5">(<span class="code">alexandria:required-argument <span class="keyword">:splite-color</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">3d-vectors:with-vec3</span></i> <span class="paren4">(<span class="code">r g b</span>)</span>
+        <span class="paren4">(<span class="code">blocks-color o</span>)</span>
+      <span class="paren4">(<span class="code">gl:uniformf splite-color r g b</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">o game-object</span>)</span> model image texture &amp;key</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-slots</span></i> <span class="paren4">(<span class="code">x y w h</span>)</span>
+        o
+      <span class="paren4">(<span class="code">call-next-method model <span class="paren5">(<span class="code">model-matrix x y w h</span>)</span> image texture</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">level array</span>)</span> model image <span class="paren4">(<span class="code">textures list</span>)</span> &amp;key
+            <span class="paren4">(<span class="code">splite-color <span class="paren5">(<span class="code">alexandria:required-argument <span class="keyword">:splite-color</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">dotimes <span class="paren4">(<span class="code">i <span class="paren5">(<span class="code">array-total-size level</span>)</span> <span class="paren5">(<span class="code">gl:uniformf splite-color 1 1 1</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">o <span class="paren1">(<span class="code">row-major-aref level i</span>)</span></span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">draw o model image <span class="paren6">(<span class="code">getf textures <span class="paren1">(<span class="code">type-of o</span>)</span></span>)</span>
+              <span class="keyword">:splite-color</span> splite-color</span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><i><span class="symbol">block</span></i> normal-block</span>)</span> model image textures &amp;key</span>)</span>
+    <span class="paren3">(<span class="code">unless <span class="paren4">(<span class="code">normal-block-brokenp <i><span class="symbol">block</span></i></span>)</span>
+      <span class="paren4">(<span class="code">call-next-method</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">n null</span>)</span> model image texture &amp;key &amp;allow-other-keys</span>)</span></span>)</span> <span class="comment">; Do nothing.
+</span>  </span>)</span></span></code></pre>
+
+<h2>MAIN</h2>
+
+<p><code>MAIN</code>関数は以下の通り。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">uiop:nest
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-harmony</span></i> <span class="paren4">(<span class="code">server</span>)</span> <span class="comment">; &lt;--- New!
+</span>      <span class="paren4">(<span class="code">play <span class="keyword">:breakout</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren4">(<span class="code"><span class="keyword">:everything</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600
+                           <span class="keyword">:title</span> <span class="string">"Breakout-CL"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren4">(<span class="code">context win</span>)</span>
+      <span class="paren4">(<span class="code">gl:enable <span class="keyword">:blend</span></span>)</span>
+      <span class="paren4">(<span class="code">gl:blend-func <span class="keyword">:src-alpha</span> <span class="keyword">:one-minus-src-alpha</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">fude-gl:with-shader</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">splite
+                            <span class="paren6">(<span class="code"><span class="keyword">:vertices</span> <span class="special">*quads*</span></span>)</span>
+                            <span class="paren6">(<span class="code"><span class="keyword">:uniform</span> model projection |spliteColor| image</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">fude-gl:with-textures</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">background <span class="keyword">:texture-2d</span>
+                                        <span class="keyword">:init</span> <span class="paren6">(<span class="code">fude-gl:tex-image-2d
+                                                <span class="paren1">(<span class="code">ensure-image <span class="keyword">:background</span></span>)</span></span>)</span></span>)</span>
+                            <span class="paren5">(<span class="code"><i><span class="symbol">block</span></i> <span class="keyword">:texture-2d</span>
+                                   <span class="keyword">:init</span> <span class="paren6">(<span class="code">fude-gl:tex-image-2d
+                                           <span class="paren1">(<span class="code">ensure-image <span class="keyword">:block</span></span>)</span></span>)</span></span>)</span>
+                            <span class="paren5">(<span class="code">block-solid <span class="keyword">:texture-2d</span>
+                                         <span class="keyword">:init</span> <span class="paren6">(<span class="code">fude-gl:tex-image-2d
+                                                 <span class="paren1">(<span class="code">ensure-image <span class="keyword">:block-solid</span></span>)</span></span>)</span></span>)</span>
+                            <span class="paren5">(<span class="code">paddle <span class="keyword">:texture-2d</span>
+                                    <span class="keyword">:init</span> <span class="paren6">(<span class="code">fude-gl:tex-image-2d
+                                            <span class="paren1">(<span class="code">ensure-image <span class="keyword">:paddle</span></span>)</span></span>)</span></span>)</span>
+                            <span class="paren5">(<span class="code">ball-tex <span class="keyword">:texture-2d</span>
+                                      <span class="keyword">:init</span> <span class="paren6">(<span class="code">fude-gl:tex-image-2d
+                                              <span class="paren1">(<span class="code">ensure-image <span class="keyword">:face</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">level <span class="paren6">(<span class="code">level <span class="special">*level1*</span> win</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">player <span class="paren6">(<span class="code">make-player win</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">ball <span class="paren6">(<span class="code">make-ball player</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">gl:uniform-matrix projection 4 <span class="paren5">(<span class="code">ortho win</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren4">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:quit</span> <span class="paren5">(<span class="code"></span>)</span>
+        t</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:idle</span> nil <span class="paren4">(<span class="code">sleep <span class="paren5">(<span class="code">/ 1 60</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">fude-gl:with-clear</span></i> <span class="paren4">(<span class="code">win <span class="paren5">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">move player 0.025 <span class="paren5">(<span class="code">sdl2:get-window-size win</span>)</span> <span class="keyword">:ball</span> ball</span>)</span>
+      <span class="paren4">(<span class="code">move ball 0.025 <span class="paren5">(<span class="code">sdl2:get-window-size win</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">check-collision ball player level</span>)</span>
+      <span class="paren4">(<span class="code">draw <span class="keyword">:background</span> model image background <span class="keyword">:win</span> win</span>)</span>
+      <span class="paren4">(<span class="code">draw level model image `<span class="paren5">(<span class="code">normal-block ,<i><span class="symbol">block</span></i> solid-block ,block-solid</span>)</span>
+            <span class="keyword">:splite-color</span> |spliteColor|</span>)</span>
+      <span class="paren4">(<span class="code">draw ball model image ball-tex</span>)</span>
+      <span class="paren4">(<span class="code">draw player model image paddle</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
