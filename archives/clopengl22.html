@@ -1,0 +1,311 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl22</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 22</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl21.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction</h2>
+
+<p>前章ではデバッグしやすいようにリファクタリングを行いました。
+本章ではゲームシーケンス遷移を実装します。</p>
+
+<h2>Condition system.</h2>
+
+<p>ゲームシーケンス遷移はCondition systemで行うものとします。
+理由はなんとなくそれが簡単そうだからくらいのものです。</p>
+
+<h2>SEQUENCE-TRANSITION</h2>
+
+<p>コンディションを定義します。</p>
+
+<p>不具合が起きているわけではないので<code>CL:ERROR</code>等を継承していないのが特徴です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-condition</span></i> sequence-transition <span class="paren2">(<span class="code"></span>)</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">next <span class="keyword">:reader</span> next <span class="keyword">:initarg</span> <span class="keyword">:next</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>Each state.</h2>
+
+<p>各ゲームシーケンスは単なる関数として実装します。</p>
+
+<p>テスト用に簡単な関数を定義してみましょう。</p>
+
+<p>以下の関数<code>RED</code>では画面を赤でリセットします。
+キーが何かしら押されると<code>SEQUENCE-TRANSITION</code>をシグナルします。
+発されるコンディションには次のゲームシーケンスである<code>GREEN</code>関数が<code>NEXT</code>スロットに格納されてます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> red <span class="paren2">(<span class="code">win</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren3">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:quit</span> <span class="paren4">(<span class="code"></span>)</span>
+      t</span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:keydown</span> <span class="paren4">(<span class="code"></span>)</span> <span class="comment">; &lt;--- When any key pressed...
+</span>      <span class="paren4">(<span class="code">signal 'sequence-transition <span class="keyword">:next</span> #'green</span>)</span></span>)</span> <span class="comment">; &lt;--- Signal condition!
+</span>    <span class="paren3">(<span class="code"><span class="keyword">:idle</span> <span class="paren4">(<span class="code"></span>)</span>
+      <span class="paren4">(<span class="code">sleep <span class="paren5">(<span class="code">/ 1 15</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren5">(<span class="code">win <span class="paren6">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span> <span class="keyword">:color</span> '<span class="paren6">(<span class="code">1 0 0 1</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span> <span class="comment">; &lt;--- Red!</span></span></code></pre>
+
+<p>同様に<code>GREEN</code>、<code>BLUE</code>も定義します。
+<code>GREEN</code>は<code>BLUE</code>に遷移し、<code>BLUE</code>は<code>RED</code>に遷移するものとします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> green <span class="paren2">(<span class="code">win</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren3">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:quit</span> <span class="paren4">(<span class="code"></span>)</span>
+      t</span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:keydown</span> <span class="paren4">(<span class="code"></span>)</span>
+      <span class="paren4">(<span class="code">signal 'sequence-transition <span class="keyword">:next</span> #'blue</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:idle</span> <span class="paren4">(<span class="code"></span>)</span>
+      <span class="paren4">(<span class="code">sleep <span class="paren5">(<span class="code">/ 1 15</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren5">(<span class="code">win <span class="paren6">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span> <span class="keyword">:color</span> '<span class="paren6">(<span class="code">0 1 0 1</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> blue <span class="paren2">(<span class="code">win</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren3">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:quit</span> <span class="paren4">(<span class="code"></span>)</span>
+      t</span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:keydown</span> <span class="paren4">(<span class="code"></span>)</span>
+      <span class="paren4">(<span class="code">signal 'sequence-transition <span class="keyword">:next</span> #'red</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:idle</span> <span class="paren4">(<span class="code"></span>)</span>
+      <span class="paren4">(<span class="code">sleep <span class="paren5">(<span class="code">/ 1 15</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren5">(<span class="code">win <span class="paren6">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span> <span class="keyword">:color</span> '<span class="paren6">(<span class="code">0 0 1 1</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>MAIN</code>関数内では<code>SEQUENCE-TRANSITION</code>を待ち受けるハンドラを立ち上げ捕捉すると変数を更新します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> demo <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">uiop:nest
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren4">(<span class="code"><span class="keyword">:everything</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600
+                           <span class="keyword">:title</span> <span class="string">"Demo"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren4">(<span class="code">context win</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">scene #'red</span>)</span></span>)</span> <span class="comment">; &lt;--- Initial sequence is RED!
+</span>      <span class="paren4">(<span class="code"><i><span class="symbol">tagbody</span></i>
+       <span class="keyword">:top</span>
+        <span class="paren5">(<span class="code">handler-bind <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">sequence-transition <span class="comment">; &lt;--- When SEQUENCE-TRANSITION is signaled...
+</span>                        <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren3">(<span class="code">condition</span>)</span>
+                          <span class="paren3">(<span class="code">setf scene <span class="paren4">(<span class="code">next condition</span>)</span></span>)</span> <span class="comment">; &lt;--- Var is updated!
+</span>                          <span class="paren3">(<span class="code"><i><span class="symbol">go</span></i> <span class="keyword">:top</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code">funcall scene win</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/sequence-transition.gif" alt="GIF of the example above." /></p>
+
+<h2>SEQUENCE-HANDLER-BIND</h2>
+
+<p>ハンドラの詳細はマクロでラップしてしまいましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> sequence-handler-bind <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">var init-form</span>)</span> &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">,var ,init-form</span>)</span></span>)</span>
+     <span class="paren3">(<span class="code"><i><span class="symbol">tagbody</span></i>
+      <span class="keyword">:top</span>
+       <span class="paren4">(<span class="code">handler-bind <span class="paren5">(<span class="code"><span class="paren6">(<span class="code">sequence-transition
+                       <span class="paren1">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren2">(<span class="code">condition</span>)</span>
+                         <span class="paren2">(<span class="code">setf ,var <span class="paren3">(<span class="code">next condition</span>)</span></span>)</span>
+                         <span class="paren2">(<span class="code"><i><span class="symbol">go</span></i> <span class="keyword">:top</span></span>)</span></span>)</span></span>)</span></span>)</span>
+         ,@body</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>これで<code>MAIN</code>関数は以下のようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> demo <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">uiop:nest
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren4">(<span class="code"><span class="keyword">:everything</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600
+                           <span class="keyword">:title</span> <span class="string">"Demo"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren4">(<span class="code">context win</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">sequence-handler-bind <span class="paren4">(<span class="code">scene #'red</span>)</span>
+      <span class="paren4">(<span class="code">funcall scene win</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>BREAKOUT</h2>
+
+<p><code>MAIN</code>関数は以下の通り。
+テキストを描画する機能はどこでも必要になるのでここで定義して引数で関数を渡すことにします。
+これにより<code>CL:FUNCALL</code>が必要になってしまいますが煩わしい引数を省略できます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> main <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code">uiop:nest
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-harmony</span></i> <span class="paren4">(<span class="code">server</span>)</span>
+      <span class="paren4">(<span class="code">play <span class="keyword">:breakout</span> <span class="keyword">:repeat</span> t</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-init</span></i> <span class="paren4">(<span class="code"><span class="keyword">:everything</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-window</span></i> <span class="paren4">(<span class="code">win <span class="keyword">:flags</span> '<span class="paren5">(<span class="code"><span class="keyword">:shown</span> <span class="keyword">:opengl</span></span>)</span>
+                           <span class="keyword">:x</span> 100
+                           <span class="keyword">:y</span> 100
+                           <span class="keyword">:w</span> 800
+                           <span class="keyword">:h</span> 600
+                           <span class="keyword">:title</span> <span class="string">"Breakout-CL"</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-gl-context</span></i> <span class="paren4">(<span class="code">context win</span>)</span>
+      <span class="paren4">(<span class="code">gl:enable <span class="keyword">:blend</span></span>)</span>
+      <span class="paren4">(<span class="code">gl:blend-func <span class="keyword">:src-alpha</span> <span class="keyword">:one-minus-src-alpha</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">glyph
+                    <span class="paren6">(<span class="code"><span class="keyword">:vertices</span> vertices
+                               <span class="paren1">(<span class="code">make-array <span class="paren2">(<span class="code">* 4 6</span>)</span>
+                                           <span class="keyword">:element-type</span> 'single-float
+                                           <span class="keyword">:initial-element</span> 0.0</span>)</span>
+                               <span class="keyword">:usage</span> <span class="keyword">:dynamic-draw</span></span>)</span>
+                    <span class="paren6">(<span class="code"><span class="keyword">:vertex-array</span> glyph-setting</span>)</span>
+                    <span class="paren6">(<span class="code"><span class="keyword">:buffer</span> buffer</span>)</span>
+                    <span class="paren6">(<span class="code"><span class="keyword">:uniform</span> <span class="paren1">(<span class="code">text-projection projection</span>)</span> text
+                              |textColor|</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">in-shader glyph</span>)</span>
+      <span class="paren4">(<span class="code">gl:uniform-matrix text-projection 4
+                         <span class="paren5">(<span class="code">multiple-value-bind <span class="paren6">(<span class="code">w h</span>)</span>
+                             <span class="paren6">(<span class="code">sdl2:get-window-size win</span>)</span>
+                           <span class="paren6">(<span class="code">vector
+                             <span class="paren1">(<span class="code">3d-matrices:marr
+                               <span class="paren2">(<span class="code">3d-matrices:mortho 0 w 0 h -1 1</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-glyph</span></i> <span class="paren4">(<span class="code"><span class="keyword">:size</span> 64</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">text-renderer <span class="paren6">(<span class="code">string &amp;key <span class="paren1">(<span class="code">x 0</span>)</span> <span class="paren1">(<span class="code">y 0</span>)</span> <span class="paren1">(<span class="code">scale 1</span>)</span></span>)</span>
+             <span class="paren6">(<span class="code">render-text string glyph
+                          <span class="keyword">:color-uniform</span> |textColor|
+                          <span class="keyword">:vertices</span> vertices
+                          <span class="keyword">:vertex-array</span> glyph-setting
+                          <span class="keyword">:vertex-buffer</span> buffer
+                          <span class="keyword">:scale</span> scale
+                          <span class="keyword">:x</span> x
+                          <span class="keyword">:y</span> y
+                          <span class="keyword">:win</span> win</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">sequence-handler-bind <span class="paren4">(<span class="code">scene #'entry-point</span>)</span>
+      <span class="paren4">(<span class="code">funcall scene win #'text-renderer</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>ENTRY-POINT</h2>
+
+<p>初期シーケンスは以下の通り。
+何かしらキーが押されるとゲーム本体に遷移します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> entry-point <span class="paren2">(<span class="code">win text-renderer</span>)</span>
+  <span class="paren2">(<span class="code">uiop:nest
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">splite <span class="paren6">(<span class="code"><span class="keyword">:vertices</span> nil <span class="special">*quads*</span></span>)</span>
+                          <span class="paren6">(<span class="code"><span class="keyword">:uniform</span> model projection |spliteColor| image</span>)</span>
+                          <span class="paren6">(<span class="code"><span class="keyword">:vertex-array</span> splite-setting</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-textures</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">background <span class="keyword">:texture-2d</span>
+                                <span class="keyword">:init</span> <span class="paren6">(<span class="code">tex-image-2d
+                                        <span class="paren1">(<span class="code">ensure-image <span class="keyword">:background</span></span>)</span></span>)</span></span>)</span>
+                    <span class="paren5">(<span class="code">ball-tex <span class="keyword">:texture-2d</span>
+                              <span class="keyword">:init</span> <span class="paren6">(<span class="code">tex-image-2d
+                                      <span class="paren1">(<span class="code">ensure-image <span class="keyword">:face</span></span>)</span></span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">in-shader splite</span>)</span>
+      <span class="paren4">(<span class="code">gl:uniform-matrix projection 4 <span class="paren5">(<span class="code">ortho win</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">gl:uniformf |spliteColor| 1 1 1</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">title <span class="string">"Breakout!"</span></span>)</span>
+           <span class="paren5">(<span class="code">bbox
+            <span class="paren6">(<span class="code">vecto:string-bounding-box title <span class="paren1">(<span class="code">* 2 <span class="special">*font-size*</span></span>)</span>
+                                       <span class="paren1">(<span class="code">font-loader <span class="string">"Ubuntu-M"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren4">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:quit</span> <span class="paren5">(<span class="code"></span>)</span>
+        t</span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:keydown</span> <span class="paren5">(<span class="code"><span class="keyword">:keysym</span> keysym</span>)</span>
+        <span class="paren5">(<span class="code">case <span class="paren6">(<span class="code">sdl2:scancode keysym</span>)</span>
+          <span class="paren6">(<span class="code">otherwise <span class="paren1">(<span class="code">signal 'sequence-transition <span class="keyword">:next</span> #'game</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:idle</span> nil <span class="paren4">(<span class="code">sleep <span class="paren5">(<span class="code">/ 1 15</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren4">(<span class="code">win <span class="paren5">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">in-shader splite</span>)</span>
+      <span class="paren4">(<span class="code">in-vertex-array splite-setting</span>)</span>
+      <span class="paren4">(<span class="code">draw <span class="keyword">:background</span> model image background <span class="keyword">:win</span> win</span>)</span>
+      <span class="paren4">(<span class="code">funcall text-renderer title
+               <span class="keyword">:x</span> <span class="keyword">:center</span>
+               <span class="keyword">:y</span> <span class="paren5">(<span class="code">- <span class="paren6">(<span class="code">* <span class="paren1">(<span class="code">floor <span class="paren2">(<span class="code">nth-value 1 <span class="paren3">(<span class="code">sdl2:get-window-size win</span>)</span></span>)</span> 4</span>)</span> 3</span>)</span>
+                     <span class="paren6">(<span class="code">floor <span class="paren1">(<span class="code">- <span class="paren2">(<span class="code">zpb-ttf:ymax bbox</span>)</span> <span class="paren2">(<span class="code">zpb-ttf:ymin bbox</span>)</span></span>)</span> 2</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">funcall text-renderer <span class="string">"Push any key to start."</span>
+               <span class="keyword">:x</span> <span class="keyword">:center</span>
+               <span class="keyword">:y</span> <span class="keyword">:center</span>
+               <span class="keyword">:scale</span> 0.25</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/entry-point.png" alt="Image of the example above." /></p>
+
+<h2>GAME</h2>
+
+<p>ゲーム本体は以下の通り。
+<code>WITH-CLEAR</code>は最初に画面を規定の色で塗りつぶしてしまうので<code>DRAW</code>を終えてから遷移処理をしているのが特徴です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> game <span class="paren2">(<span class="code">win text-renderer</span>)</span>
+  <span class="paren2">(<span class="code">uiop:nest
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">splite
+                    <span class="paren6">(<span class="code"><span class="keyword">:vertices</span> nil <span class="special">*quads*</span></span>)</span>
+                    <span class="paren6">(<span class="code"><span class="keyword">:uniform</span> model projection |spliteColor| image</span>)</span>
+                    <span class="paren6">(<span class="code"><span class="keyword">:vertex-array</span> splite-setting</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-textures</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">background <span class="keyword">:texture-2d</span>
+                                <span class="keyword">:init</span> <span class="paren6">(<span class="code">tex-image-2d
+                                        <span class="paren1">(<span class="code">ensure-image <span class="keyword">:background</span></span>)</span></span>)</span></span>)</span>
+                    <span class="paren5">(<span class="code"><i><span class="symbol">block</span></i> <span class="keyword">:texture-2d</span>
+                           <span class="keyword">:init</span> <span class="paren6">(<span class="code">tex-image-2d
+                                   <span class="paren1">(<span class="code">ensure-image <span class="keyword">:block</span></span>)</span></span>)</span></span>)</span>
+                    <span class="paren5">(<span class="code">block-solid <span class="keyword">:texture-2d</span>
+                                 <span class="keyword">:init</span> <span class="paren6">(<span class="code">tex-image-2d
+                                         <span class="paren1">(<span class="code">ensure-image <span class="keyword">:block-solid</span></span>)</span></span>)</span></span>)</span>
+                    <span class="paren5">(<span class="code">paddle <span class="keyword">:texture-2d</span>
+                            <span class="keyword">:init</span> <span class="paren6">(<span class="code">tex-image-2d
+                                    <span class="paren1">(<span class="code">ensure-image <span class="keyword">:paddle</span></span>)</span></span>)</span></span>)</span>
+                    <span class="paren5">(<span class="code">ball-tex <span class="keyword">:texture-2d</span>
+                              <span class="keyword">:init</span> <span class="paren6">(<span class="code">tex-image-2d
+                                      <span class="paren1">(<span class="code">ensure-image <span class="keyword">:face</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">level <span class="paren6">(<span class="code">level <span class="special">*level1*</span> win</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">player <span class="paren6">(<span class="code">make-player win</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">ball <span class="paren6">(<span class="code">make-ball player</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">in-shader splite</span>)</span>
+      <span class="paren4">(<span class="code">gl:uniform-matrix projection 4 <span class="paren5">(<span class="code">ortho win</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren4">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:quit</span> <span class="paren5">(<span class="code"></span>)</span>
+        t</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:idle</span> nil <span class="paren4">(<span class="code">sleep <span class="paren5">(<span class="code">/ 1 60</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren4">(<span class="code">win <span class="paren5">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">move player 0.025 <span class="paren5">(<span class="code">sdl2:get-window-size win</span>)</span> <span class="keyword">:ball</span> ball</span>)</span>
+      <span class="paren4">(<span class="code">move ball 0.025 <span class="paren5">(<span class="code">sdl2:get-window-size win</span>)</span> <span class="keyword">:player</span> player <span class="keyword">:win</span> win</span>)</span>
+      <span class="paren4">(<span class="code">check-collision ball player level</span>)</span>
+      <span class="paren4">(<span class="code">in-shader splite</span>)</span>
+      <span class="paren4">(<span class="code">in-vertex-array splite-setting</span>)</span>
+      <span class="paren4">(<span class="code">draw <span class="keyword">:background</span> model image background <span class="keyword">:win</span> win</span>)</span>
+      <span class="paren4">(<span class="code">draw level model image `<span class="paren5">(<span class="code">normal-block ,<i><span class="symbol">block</span></i> solid-block ,block-solid</span>)</span>
+            <span class="keyword">:splite-color</span> |spliteColor|</span>)</span>
+      <span class="paren4">(<span class="code">draw ball model image ball-tex</span>)</span>
+      <span class="paren4">(<span class="code">draw player model image paddle</span>)</span>
+      <span class="paren4">(<span class="code">funcall text-renderer <span class="paren5">(<span class="code">format nil <span class="string">"Lives: ~S"</span> <span class="paren6">(<span class="code">player-life player</span>)</span></span>)</span>
+               <span class="keyword">:y</span> <span class="paren5">(<span class="code">- 600 <span class="paren6">(<span class="code">floor <span class="special">*font-size*</span> 2</span>)</span></span>)</span>
+               <span class="keyword">:scale</span> 0.5</span>)</span>
+      <span class="paren4">(<span class="code">when <span class="paren5">(<span class="code">zerop <span class="paren6">(<span class="code">player-life player</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code">signal 'sequence-transition <span class="keyword">:next</span> #'game-over</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/game-over.png" alt="Image of the example above." /></p>
+
+<h2>GAME-OVER</h2>
+
+<p><code>GAME-OVER</code>は以下の通り。
+<code>WITH-CLEAR</code>を呼んでいないのが特徴です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> game-over <span class="paren2">(<span class="code">win text-renderer</span>)</span>
+  <span class="paren2">(<span class="code">uiop:nest
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">title <span class="string">"Game over!"</span></span>)</span>
+           <span class="paren5">(<span class="code">bbox
+            <span class="paren6">(<span class="code">vecto:string-bounding-box title <span class="paren1">(<span class="code">* 2 <span class="special">*font-size*</span></span>)</span>
+                                       <span class="paren1">(<span class="code">font-loader <span class="string">"Ubuntu-M"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren4">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:quit</span> <span class="paren5">(<span class="code"></span>)</span>
+        t</span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:keydown</span> <span class="paren5">(<span class="code"><span class="keyword">:keysym</span> keysym</span>)</span>
+        <span class="paren5">(<span class="code">case <span class="paren6">(<span class="code">sdl2:scancode keysym</span>)</span>
+          <span class="paren6">(<span class="code">otherwise <span class="paren1">(<span class="code">signal 'sequence-transition <span class="keyword">:next</span> #'entry-point</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:idle</span> nil
+     <span class="paren4">(<span class="code">funcall text-renderer title
+              <span class="keyword">:x</span> <span class="keyword">:center</span>
+              <span class="keyword">:y</span> <span class="paren5">(<span class="code">- <span class="paren6">(<span class="code">* <span class="paren1">(<span class="code">floor <span class="paren2">(<span class="code">nth-value 1 <span class="paren3">(<span class="code">sdl2:get-window-size win</span>)</span></span>)</span> 4</span>)</span> 3</span>)</span>
+                    <span class="paren6">(<span class="code">floor <span class="paren1">(<span class="code">- <span class="paren2">(<span class="code">zpb-ttf:ymax bbox</span>)</span> <span class="paren2">(<span class="code">zpb-ttf:ymin bbox</span>)</span></span>)</span> 2</span>)</span></span>)</span></span>)</span>
+     <span class="paren4">(<span class="code">funcall text-renderer <span class="string">"Push any key."</span> <span class="keyword">:x</span> <span class="keyword">:center</span> <span class="keyword">:y</span> <span class="keyword">:center</span> <span class="keyword">:scale</span> 0.25</span>)</span>
+     <span class="paren4">(<span class="code">sdl2:gl-swap-window win</span>)</span> <span class="paren4">(<span class="code">sleep 2</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
