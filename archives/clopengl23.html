@@ -1,0 +1,272 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>clopengl23</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Fight against cl-opengl 23.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<p><a href="clopengl22.html" >前章</a>読了済みの方。</p>
+
+<h2>Introduction.</h2>
+
+<p>前章ではシーケンス遷移を実装しました。
+本章ではアニメーションする<code>texture</code>を実装します。</p>
+
+<p>なお本章からは前章までの<a href="https://github.com/hyotang666/breakout-cl" >breakout-cl</a>に代わり新たにプロジェクトを立ち上げます。
+そもそも筆者が作りたかったのは古の聖剣伝説やゼルダの伝説のような見下ろし型ARPGだったのでそれ用に必要になった知見をオマケ的に書き残しておきます。</p>
+
+<h2>Image size constraint.</h2>
+
+<p>制限はグラフィックカードの実装によりけりです。
+最新のハイエンドカードの場合制限は無いらしいです（要出典）。
+通常（？）は<code>width</code>、<code>height</code>共に２の冪乗である必要があります。
+古い（？）グラフィックカードの場合は更に正方形でなければならないという制限も追加されるようです（一敗）。</p>
+
+<p>ここでは以下の画像を使うとします。</p>
+
+<p><img src="../img/fude-gl/romius.png" alt="Image of the texture." /></p>
+
+<p>見ての通り隙間ががら空き（右クリックからの画像を表示で確認するとなおわかりやすいです）ですがここではヨシとします。
+というのもそもそもサイズが小さいからです。（１２８＊１２８）
+筆者はドット絵に謎のロマンを感じる癖の持ち主であり高解像度のグラフィックを使う気がないので無問題です。
+なお同じ絵が二つ並んでいるのは<a href="https://pipoya.net/rpg/material-format/#%E7%94%BB%E5%83%8F%E3%82%B5%E3%82%A4%E3%82%BA-3" >ウディタの仕様</a>（八方向）に互換性を持たせようと考えていたからです。
+斜めの絵は難しいので一旦四方向のものをコピペしてあるだけです。</p>
+
+<h2>Design.</h2>
+
+<p><code>texture</code>をアニメーションさせるためには<code>texture</code>の座標を変更してあげればいいだけです。
+頂点情報をゴリゴリ書き換えるという手法はテクストレンダリングを実装する時に行いました。
+既に学習済みの手法を流用するだけです。</p>
+
+<h2>4-DIRECTIOINAL</h2>
+
+<p>向きやインデックスを管理するための構造体を定義しましょう。
+各キャラ絵は１６＊１６でファイルサイズは１２８＊１２８です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defstruct</span></i> 4-directional
+  <span class="paren2">(<span class="code">unit 1/8 <span class="keyword">:type</span> real <span class="keyword">:read-only</span> t</span>)</span>
+  <span class="paren2">(<span class="code">last-direction 'up <span class="keyword">:type</span> <span class="paren3">(<span class="code">member up right left down</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">up <span class="paren3">(<span class="code">alexandria:circular-list '<span class="paren4">(<span class="code">0 0</span>)</span> '<span class="paren4">(<span class="code">1 0</span>)</span> '<span class="paren4">(<span class="code">2 0</span>)</span> '<span class="paren4">(<span class="code">1 0</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">right <span class="paren3">(<span class="code">alexandria:circular-list '<span class="paren4">(<span class="code">0 1</span>)</span> '<span class="paren4">(<span class="code">1 1</span>)</span> '<span class="paren4">(<span class="code">2 1</span>)</span> '<span class="paren4">(<span class="code">1 1</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">left <span class="paren3">(<span class="code">alexandria:circular-list '<span class="paren4">(<span class="code">0 2</span>)</span> '<span class="paren4">(<span class="code">1 2</span>)</span> '<span class="paren4">(<span class="code">2 2</span>)</span> '<span class="paren4">(<span class="code">1 2</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">down <span class="paren3">(<span class="code">alexandria:circular-list '<span class="paren4">(<span class="code">0 3</span>)</span> '<span class="paren4">(<span class="code">1 3</span>)</span> '<span class="paren4">(<span class="code">2 3</span>)</span> '<span class="paren4">(<span class="code">1 3</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>*QUAD*</h2>
+
+<p>頂点を保持するグローバル変数です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defparameter</span></i> <span class="special">*quad*</span>
+  <span class="paren2">(<span class="code">concatenate '<span class="paren3">(<span class="code">array single-float <span class="paren4">(<span class="code">*</span>)</span></span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'splite <span class="keyword">:x</span> 0.0 <span class="keyword">:y</span> 1.0 <span class="keyword">:s</span> 0.0 <span class="keyword">:t</span> 1.0</span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'splite <span class="keyword">:x</span> 1.0 <span class="keyword">:y</span> 0.0 <span class="keyword">:s</span> 1.0 <span class="keyword">:t</span> 0.0</span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'splite <span class="keyword">:x</span> 0.0 <span class="keyword">:y</span> 0.0 <span class="keyword">:s</span> 0.0 <span class="keyword">:t</span> 0.0</span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'splite <span class="keyword">:x</span> 0.0 <span class="keyword">:y</span> 1.0 <span class="keyword">:s</span> 0.0 <span class="keyword">:t</span> 1.0</span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'splite <span class="keyword">:x</span> 1.0 <span class="keyword">:y</span> 1.0 <span class="keyword">:s</span> 1.0 <span class="keyword">:t</span> 1.0</span>)</span>
+               <span class="paren3">(<span class="code">make-instance 'splite <span class="keyword">:x</span> 1.0 <span class="keyword">:y</span> 0.0 <span class="keyword">:s</span> 1.0 <span class="keyword">:t</span> 0.0</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>WITH-SHADER</h2>
+
+<p>頂点は順次書き換えますが初期状態も欲しくなるので<code>CL:COPY-SEQ</code>しておくのが特徴です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">fude-gl:with-shader</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">splite
+                        <span class="paren4">(<span class="code"><span class="keyword">:vertices</span> vertices <span class="paren5">(<span class="code">copy-seq <span class="special">*quad*</span></span>)</span> <span class="keyword">:usage</span>
+                                   <span class="keyword">:dynamic-draw</span></span>)</span>
+                        <span class="paren4">(<span class="code"><span class="keyword">:vertex-array</span> vao</span>)</span>
+                        <span class="paren4">(<span class="code"><span class="keyword">:buffer</span> vbo</span>)</span>
+                        <span class="paren4">(<span class="code"><span class="keyword">:uniform</span> image projection model</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">fude-gl:in-shader splite</span>)</span></span>)</span></span></code></pre>
+
+<h2>STEP-VBO</h2>
+
+<p>更新された頂点リストを返す関数です。
+毎回リストをアロケートするのはガベコレ負荷も高く馬鹿らしいですが当面これでヨシとします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> step-vbo <span class="paren2">(<span class="code">directional</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind
+      <span class="paren3">(<span class="code">%s %t</span>)</span>
+      <span class="paren3">(<span class="code">car <span class="paren4">(<span class="code">slot-value directional <span class="paren5">(<span class="code">slot-value directional 'last-direction</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">setf <span class="paren4">(<span class="code">slot-value directional <span class="paren5">(<span class="code">slot-value directional 'last-direction</span>)</span></span>)</span>
+            <span class="paren4">(<span class="code">cdr
+              <span class="paren5">(<span class="code">slot-value directional
+                          <span class="paren6">(<span class="code">slot-value directional 'last-direction</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">unit <span class="paren6">(<span class="code">slot-value directional 'unit</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">pos-x <span class="paren6">(<span class="code">* unit %s</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">pos-w <span class="paren6">(<span class="code">+ unit pos-x</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">pos-y <span class="paren6">(<span class="code">* unit %t</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">pos-h <span class="paren6">(<span class="code">+ unit pos-y</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">list 0.0 1.0 pos-x pos-h <span class="comment">; Top left
+</span>            1.0 0.0 pos-w pos-y <span class="comment">; Bottom right
+</span>            0.0 0.0 pos-x pos-y <span class="comment">; Bottom left
+</span>            0.0 1.0 pos-x pos-h <span class="comment">; Top left
+</span>            1.0 1.0 pos-w pos-h <span class="comment">; Top right
+</span>            1.0 0.0 pos-w pos-y</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>DRAW</h2>
+
+<p>描画関数は以下の通り。
+<code>RENDER-TEXT</code>の中身とそっくりなのがわかります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defgeneric</span></i> draw <span class="paren2">(<span class="code">object model image texture shader vertices vao vbo</span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code">model-matrix model image <span class="paren4">(<span class="code">texture texture</span>)</span>
+            <span class="paren4">(<span class="code">shader program</span>)</span> vertices <span class="paren4">(<span class="code">vao vertex-array</span>)</span>
+            <span class="paren4">(<span class="code">vbo buffer</span>)</span>
+    <span class="paren4">(<span class="code">gl:uniform-matrix model 4 model-matrix</span>)</span>
+    <span class="paren4">(<span class="code">in-shader shader</span>)</span>
+    <span class="paren4">(<span class="code">in-vertex-array vao</span>)</span>
+    <span class="paren4">(<span class="code">gl:active-texture 0</span>)</span>
+    <span class="paren4">(<span class="code">gl:bind-texture <span class="paren5">(<span class="code">texture-target texture</span>)</span>
+                     <span class="paren5">(<span class="code">texture-id texture</span>)</span></span>)</span>
+    <span class="paren4">(<span class="code">in-buffer vbo</span>)</span>
+    <span class="paren4">(<span class="code">gl:buffer-sub-data <span class="paren5">(<span class="code">buffer-target vbo</span>)</span> vertices</span>)</span>
+    <span class="paren4">(<span class="code">gl:draw-arrays <span class="keyword">:triangles</span> 0 6</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:method</span> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">o 4-directional</span>)</span> model image <span class="paren4">(<span class="code">tex texture</span>)</span>
+            <span class="paren4">(<span class="code">shader program</span>)</span> vertices <span class="paren4">(<span class="code">vao vertex-array</span>)</span>
+            <span class="paren4">(<span class="code">vbo buffer</span>)</span>
+    <span class="paren4">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> elt <span class="keyword">:in</span> <span class="paren5">(<span class="code">step-vbo o</span>)</span>
+          <span class="keyword">:for</span> i <span class="keyword">:upfrom</span> 0
+          <span class="keyword">:do</span> <span class="paren5">(<span class="code">setf <span class="paren6">(<span class="code">gl:glaref vertices i</span>)</span> <span class="paren6">(<span class="code">float elt</span>)</span></span>)</span></span>)</span>
+    <span class="paren4">(<span class="code">call-next-method <span class="paren5">(<span class="code">model-matrix 0 0 64 64</span>)</span> model image tex shader
+     vertices vao vbo</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>TEST sequence.</h2>
+
+<p><code>TEST</code>シーケンス関数は以下の通り。
+ドット絵がくっきりするように<code>texture</code>のフィルタを<code>:NEAREST</code>で指定しているのが特徴です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> test <span class="paren2">(<span class="code">win</span>)</span>
+  <span class="paren2">(<span class="code">uiop:nest
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-shader</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">splite
+                    <span class="paren6">(<span class="code"><span class="keyword">:vertices</span> vertices <span class="paren1">(<span class="code">copy-seq <span class="special">*quad*</span></span>)</span> <span class="keyword">:usage</span>
+                               <span class="keyword">:dynamic-draw</span></span>)</span>
+                    <span class="paren6">(<span class="code"><span class="keyword">:vertex-array</span> vao</span>)</span>
+                    <span class="paren6">(<span class="code"><span class="keyword">:buffer</span> vbo</span>)</span>
+                    <span class="paren6">(<span class="code"><span class="keyword">:uniform</span> image projection model</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">in-shader splite</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-textures</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">romius <span class="keyword">:texture-2d</span>
+                            <span class="keyword">:init</span> <span class="paren6">(<span class="code">tex-image-2d <span class="paren1">(<span class="code">load-image <span class="keyword">:romius</span></span>)</span></span>)</span>
+                            <span class="keyword">:params</span> <span class="paren6">(<span class="code"><span class="keyword">:texture-min-filter</span> <span class="keyword">:nearest</span>
+                                     <span class="keyword">:texture-mag-filter</span> <span class="keyword">:nearest</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">ortho
+           <span class="paren6">(<span class="code">multiple-value-bind <span class="paren1">(<span class="code">w h</span>)</span>
+               <span class="paren1">(<span class="code">sdl2:get-window-size win</span>)</span>
+             <span class="paren1">(<span class="code">vector <span class="paren2">(<span class="code">3d-matrices:marr <span class="paren3">(<span class="code">3d-matrices:mortho 0 w 0 h -1 1</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+          <span class="paren5">(<span class="code">4-directional <span class="paren6">(<span class="code">make-4-directional</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">gl:uniform-matrix projection 4 ortho</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">sdl2:with-event-loop</span></i> <span class="paren4">(<span class="code"><span class="keyword">:method</span> <span class="keyword">:poll</span></span>)</span>
+      <span class="paren4">(<span class="code"><span class="keyword">:quit</span> <span class="paren5">(<span class="code"></span>)</span>
+        t</span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><span class="keyword">:idle</span> nil</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">with-clear</span></i> <span class="paren4">(<span class="code">win <span class="paren5">(<span class="code"><span class="keyword">:color-buffer-bit</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">keypress-case
+        <span class="paren5">(<span class="code"><span class="keyword">:up</span> <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">4-directional-last-direction 4-directional</span>)</span> 'up</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><span class="keyword">:down</span> <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">4-directional-last-direction 4-directional</span>)</span> 'down</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><span class="keyword">:left</span> <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">4-directional-last-direction 4-directional</span>)</span> 'left</span>)</span></span>)</span>
+        <span class="paren5">(<span class="code"><span class="keyword">:right</span> <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">4-directional-last-direction 4-directional</span>)</span> 'right</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">draw 4-directional model image romius splite vertices vao vbo</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/animation.gif" alt="GIF of the example above." /></p>
+
+<h2>TIMER</h2>
+
+<p>上のGIFからは分かりにくいですがアニメーションが速すぎます。
+現在６０FPSなのですが毎フレームアニメーションしているのでこのような事態になっている訳です。
+アニメーション事態は数フレーム起きに行うほうがいいでしょう。</p>
+
+<p>そこで<code>TIMER</code>を導入するとします。</p>
+
+<h3>N-BITS-MAX</h3>
+
+<p>任意のビット数で表せる最大整数を返します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> n-bits-max <span class="paren2">(<span class="code">n</span>)</span>
+  <span class="paren2">(<span class="code">values <span class="paren3">(<span class="code">read-from-string <span class="paren4">(<span class="code">format nil <span class="string">"#B~V,,,'1A"</span> n <span class="character">#\1</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>TIMER</h3>
+
+<p><code>TIMER</code>関数は状態を持つ必要があるので<code>FUNCALLABLE-OBJECT</code>として実装します。
+<code>FUNCALLABLE-OBJECT</code>とは変数へのアクセスが容易になった<code>closure</code>だと思えばよろしゅうございます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> timer <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">time <span class="keyword">:initform</span> <span class="paren4">(<span class="code">n-bits-max 7</span>)</span> <span class="keyword">:reader</span> time&lt;-timer</span>)</span>
+   <span class="paren3">(<span class="code">count <span class="keyword">:initform</span> 0 <span class="keyword">:accessor</span> count&lt;-timer</span>)</span>
+   <span class="paren3">(<span class="code">turn <span class="keyword">:initform</span> 0 <span class="keyword">:accessor</span> turn&lt;-timer</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:metaclass</span> c2mop:funcallable-standard-class</span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> initialize-instance <span class="keyword">:after</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o timer</span>)</span> &amp;key speed</span>)</span>
+  <span class="paren2">(<span class="code">c2mop:set-funcallable-instance-function
+   o
+   <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren4">(<span class="code"></span>)</span>
+     <span class="paren4">(<span class="code">incf <span class="paren5">(<span class="code">count&lt;-timer o</span>)</span> speed</span>)</span>
+     <span class="paren4">(<span class="code">multiple-value-bind <span class="paren5">(<span class="code">turn rem</span>)</span>
+         <span class="paren5">(<span class="code">floor <span class="paren6">(<span class="code">count&lt;-timer o</span>)</span> <span class="paren6">(<span class="code">time&lt;-timer o</span>)</span></span>)</span>
+       <span class="paren5">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren6">(<span class="code">plusp turn</span>)</span>
+           <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">count&lt;-timer o</span>)</span> rem
+                 <span class="paren1">(<span class="code">turn&lt;-timer o</span>)</span> turn</span>)</span>
+           <span class="paren6">(<span class="code">setf <span class="paren1">(<span class="code">count&lt;-timer o</span>)</span> rem
+                 <span class="paren1">(<span class="code">turn&lt;-timer o</span>)</span> 0</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> make-timer <span class="paren2">(<span class="code">speed</span>)</span> <span class="paren2">(<span class="code">make-instance 'timer <span class="keyword">:speed</span> speed</span>)</span></span>)</span></span></code></pre>
+
+<h3>UPDATEP</h3>
+
+<p>更新すべきか訊ねる述語です。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> updatep <span class="paren2">(<span class="code">directional</span>)</span> <span class="paren2">(<span class="code">&lt; 0 <span class="paren3">(<span class="code">funcall <span class="paren4">(<span class="code">slot-value directional 'timer</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>4-DIRECTIONAL</h3>
+
+<p><code>TIMER</code>を持つように定義を変更します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defstruct</span></i> 4-directional
+  <span class="paren2">(<span class="code">unit 1/8 <span class="keyword">:type</span> real <span class="keyword">:read-only</span> t</span>)</span>
+  <span class="paren2">(<span class="code">timer <span class="paren3">(<span class="code">make-timer 16</span>)</span> <span class="keyword">:type</span> <i><span class="symbol">function</span></i></span>)</span>
+  <span class="paren2">(<span class="code">last-direction 'up <span class="keyword">:type</span> <span class="paren3">(<span class="code">member up right left down</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">up <span class="paren3">(<span class="code">alexandria:circular-list '<span class="paren4">(<span class="code">0 0</span>)</span> '<span class="paren4">(<span class="code">1 0</span>)</span> '<span class="paren4">(<span class="code">2 0</span>)</span> '<span class="paren4">(<span class="code">1 0</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">right <span class="paren3">(<span class="code">alexandria:circular-list '<span class="paren4">(<span class="code">0 1</span>)</span> '<span class="paren4">(<span class="code">1 1</span>)</span> '<span class="paren4">(<span class="code">2 1</span>)</span> '<span class="paren4">(<span class="code">1 1</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">left <span class="paren3">(<span class="code">alexandria:circular-list '<span class="paren4">(<span class="code">0 2</span>)</span> '<span class="paren4">(<span class="code">1 2</span>)</span> '<span class="paren4">(<span class="code">2 2</span>)</span> '<span class="paren4">(<span class="code">1 2</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">down <span class="paren3">(<span class="code">alexandria:circular-list '<span class="paren4">(<span class="code">0 3</span>)</span> '<span class="paren4">(<span class="code">1 3</span>)</span> '<span class="paren4">(<span class="code">2 3</span>)</span> '<span class="paren4">(<span class="code">1 3</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h3>STEP-VBO</h3>
+
+<p><code>TIMER</code>を使うように変更します。</p>
+
+<p>現在<code>TIMER</code>オブジェクトは<code>(n-bits-max 7)</code>=<code>127</code>で初期化されており、<code>SPEED</code>は１６で初期化されております。
+これはすなわち８フレームに一度アニメーションを起こすことを表します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> step-vbo <span class="paren2">(<span class="code">directional</span>)</span>
+  <span class="paren2">(<span class="code">destructuring-bind
+      <span class="paren3">(<span class="code">%s %t</span>)</span>
+      <span class="paren3">(<span class="code">car <span class="paren4">(<span class="code">slot-value directional <span class="paren5">(<span class="code">slot-value directional 'last-direction</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">when <span class="paren4">(<span class="code">updatep directional</span>)</span>
+      <span class="paren4">(<span class="code">setf <span class="paren5">(<span class="code">slot-value directional <span class="paren6">(<span class="code">slot-value directional 'last-direction</span>)</span></span>)</span>
+              <span class="paren5">(<span class="code">cdr
+                <span class="paren6">(<span class="code">slot-value directional
+                            <span class="paren1">(<span class="code">slot-value directional 'last-direction</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let*</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">unit <span class="paren6">(<span class="code">slot-value directional 'unit</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">pos-x <span class="paren6">(<span class="code">* unit %s</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">pos-w <span class="paren6">(<span class="code">+ unit pos-x</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">pos-y <span class="paren6">(<span class="code">* unit %t</span>)</span></span>)</span>
+           <span class="paren5">(<span class="code">pos-h <span class="paren6">(<span class="code">+ unit pos-y</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">list 0.0 1.0 pos-x pos-h <span class="comment">; Top left
+</span>            1.0 0.0 pos-w pos-y <span class="comment">; Bottom right
+</span>            0.0 0.0 pos-x pos-y <span class="comment">; Bottom left
+</span>            0.0 1.0 pos-x pos-h <span class="comment">; Top left
+</span>            1.0 1.0 pos-w pos-h <span class="comment">; Top right
+</span>            1.0 0.0 pos-w pos-y</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><img src="../img/fude-gl/timer.gif" alt="GIF of the example above." /></p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
