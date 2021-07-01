@@ -31,8 +31,7 @@
 <h2><a href="https://github.com/fare/fare-csv" >fare-csv</a></h2>
 
 <p>速度も遅くGC負荷も高いものの、<a href="https://datatracker.ietf.org/doc/html/rfc4180" >rfc4180</a>のサポートを明言している唯一（？）の実装。
-安心安全に傾けたい場合の候補でしょう。
-第一候補で良いのでは？</p>
+安心安全に傾けたい場合の候補でしょう。</p>
 
 <h2><a href="https://github.com/WarrenWilkinson/read-csv" >read-csv</a></h2>
 
@@ -51,12 +50,8 @@ Public DomainライセンスなのでCSVベースの独自フォーマットを�
 
 <h2>Summary</h2>
 
-<p>第一候補はfare-csv、速度等不満が出てきたら他の物を試すって方向で良いのでは？</p>
-
-<p>今回試したのは小さな処理を１００回まわすという形でした。
-大きなファイルを一度まわすという形なら、また違った結果になる可能性もあります。</p>
-
-<p>とはいえ仕様が明言されているというのは大きい。
+<p>第一候補はfare-csv、速度に不満が出てきたらread-csvを試すって方向で良いのでは？
+仕様が明言されているというのは大きい。
 運悪く何かしらバグを踏んだときに仕様をもとに議論を進められるのは心強い。
 「俺のいうCSVはお前のいうCSVとは違う」とか「我々の言うCSVとはなにか」についてすり合わせる必要がないというのは割と重要かと思います。</p>
 
@@ -107,6 +102,11 @@ Public DomainライセンスなのでCSVベースの独自フォーマットを�
 
 228,809,147 processor cycles
 13,268,288 bytes consed</span></code></pre>
+
+<p><img src="../img/csv-bench.png" alt="benchmark graph" /></p>
+
+<p>上のグラフは短いほうが成績が良いものです。
+なお、processor-cyclesとbyte-consedの表示バランスを取るため、processor-cyclesは実際の数値の1/10に調整してあります。</p>
 
     </MAIN>
     <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
