@@ -1,0 +1,114 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>csv-libraries</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>CSV libralies in Common Lisp comunity.</h1>
+
+<h2>Metanotes</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>CSV ライブラリーを探しているCLer</li>
+</ul>
+
+<h2>Introduction.</h2>
+
+<p>CSVを解釈するライブラリーの実装が話題になっているので、Common Lisp界隈にあるCSV系ライブラリーをざっくり比較してみました。</p>
+
+<h2><a href="https://github.com/AccelerationNet/cl-csv" >cl-csv</a></h2>
+
+<p>速度は遅いもののConsing効率は大変良いもの。
+なによりもGC負荷を下げたい場合の候補でしょう。</p>
+
+<h2><a href="https://github.com/fare/fare-csv" >fare-csv</a></h2>
+
+<p>速度も遅くGC負荷も高いものの、<a href="https://datatracker.ietf.org/doc/html/rfc4180" >rfc4180</a>のサポートを明言している唯一（？）の実装。
+安心安全に傾けたい場合の候補でしょう。
+第一候補で良いのでは？</p>
+
+<h2><a href="https://github.com/WarrenWilkinson/read-csv" >read-csv</a></h2>
+
+<p>最も速い実装。
+Public DomainライセンスなのでCSVベースの独自フォーマットを作りたい場合などのフォーク元におすすめ。
+ソースも80行と短い。</p>
+
+<h2><a href="https://github.com/sharplispers/clawk" >clawk</a></h2>
+
+<p>AWKをLisp上の埋め込み言語として実装したライブラリー。
+けしてCSV用のものではないため、たとえば改行を含むカラムとかは解釈できないという欠点がある。
+ただし「顧客が本当に欲しかったもの」になる可能性があるので一応列挙。
+ライブラリーというよりは言語に近いので把握は困難（エクスポートされているシンボルは173個）なもののマスターしたら手放せなくなるかも。
+すでにAWKに慣れ親しんでいるならおすすめ。
+速度、GC負荷、ともに二位というなかなか優秀な成績なのも好印象。</p>
+
+<h2>Summary</h2>
+
+<p>第一候補はfare-csv、速度等不満が出てきたら他の物を試すって方向で良いのでは？</p>
+
+<p>今回試したのは小さな処理を１００回まわすという形でした。
+大きなファイルを一度まわすという形なら、また違った結果になる可能性もあります。</p>
+
+<p>とはいえ仕様が明言されているというのは大きい。
+運悪く何かしらバグを踏んだときに仕様をもとに議論を進められるのは心強い。
+「俺のいうCSVはお前のいうCSVとは違う」とか「我々の言うCSVとはなにか」についてすり合わせる必要がないというのは割と重要かと思います。</p>
+
+<h2>Bench</h2>
+
+<p>With <code>(time (dotimes (x 100) ...))</code>.</p>
+
+<h3>cl-csv</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">count 0</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">cl-csv:do-csv <span class="paren3">(<span class="code">row #P<span class="string">"/proc/cpuinfo"</span> <span class="keyword">:separator</span> <span class="character">#\:</span></span>)</span>
+    <span class="paren3">(<span class="code">when <span class="paren4">(<span class="code">uiop:string-prefix-p <span class="string">"processor"</span> <span class="paren5">(<span class="code">nth 0 row</span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">incf count</span>)</span></span>)</span></span>)</span>
+  count</span>)</span>
+
+1,170,493,080 processor cycles
+5,324,864 bytes consed</span></code></pre>
+
+<h3>fare-csv</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="special">fare-csv:*separator*</span> <span class="character">#\:</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> row <span class="keyword">:in</span> <span class="paren3">(<span class="code">fare-csv:read-csv-file <span class="string">"/proc/cpuinfo"</span></span>)</span>
+        <span class="keyword">:when</span> <span class="paren3">(<span class="code">uiop:string-prefix-p <span class="string">"processor"</span> <span class="paren4">(<span class="code">nth 0 row</span>)</span></span>)</span>
+    <span class="keyword">:count</span> <span class="keyword">:it</span></span>)</span></span>)</span>
+
+376,556,049 processor cycles
+21,989,248 bytes consed</span></code></pre>
+
+<h3>read-csv</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">with-open-file</span></i> <span class="paren2">(<span class="code">s <span class="string">"/proc/cpuinfo"</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> row <span class="keyword">:=</span> <span class="paren3">(<span class="code">read-csv:read-csv s <span class="character">#\:</span> nil</span>)</span>
+        <span class="keyword">:while</span> row
+    <span class="keyword">:when</span> <span class="paren3">(<span class="code">uiop:string-prefix-p <span class="string">"processor"</span> <span class="paren4">(<span class="code">nth 0 row</span>)</span></span>)</span>
+    <span class="keyword">:count</span> <span class="keyword">:it</span></span>)</span></span>)</span>
+
+155,720,821 processor cycles
+17,479,760 bytes consed</span></code></pre>
+
+<h3>clawk</h3>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">count 0</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">clawk:for-file-lines <span class="paren3">(<span class="code"><span class="string">"/proc/cpuinfo"</span> s line</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">clawk:with-fields</span></i> <span class="paren4">(<span class="code">nil line <span class="string">":"</span></span>)</span>
+      <span class="paren4">(<span class="code">when <span class="paren5">(<span class="code">uiop:string-prefix-p <span class="string">"processor"</span> line</span>)</span>
+        <span class="paren5">(<span class="code">incf count</span>)</span></span>)</span></span>)</span></span>)</span>
+  count</span>)</span>
+
+228,809,147 processor cycles
+13,268,288 bytes consed</span></code></pre>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
