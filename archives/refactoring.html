@@ -1,0 +1,156 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>refactoring</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Refactoring in common lisp.</h1>
+
+<h2>Introdunction</h2>
+
+<p>Common LispはASTを人間が書く言語です。</p>
+
+<p>そしてASTは本質的に醜くなるものです。
+もしそうでないなら今頃あらゆるプログラミング言語がLisp系言語になっていたことでしょう。</p>
+
+<p>では、そのような本質的に醜くなりうるASTを直接書き下す言語（すなわちLisp）としては、どのようにASTをハンドルすれば（すなわちコードを書けば）醜さに陥っていくのを防げるでしょうか。</p>
+
+<p>本稿では著者が知り得ている典型的なリファクタリングパターンを初心者向けに紹介していきます。</p>
+
+<h1>Local function.</h1>
+
+<p>インデントが深くなりコードが醜くなる一因として、関数に切り出すべき処理を直接書き下してしまっている場合があります。
+そのような場合、ローカル/グローバル問わず、独立した関数に書き出すことでコードを美しくできます。</p>
+
+<p>関数に切り出すという行為には、関数呼び出しそのものに実行コストがかかる、という反論が想定されますが、それは実際に呼び出しがボトルネックになるまでは気にするべきではありません。</p>
+
+<p>また、コメントとともに処理を書いている場合、そのコメント内容を関数名にして切り出したほうが良い場合があります。
+もしコメントの内容が「何をしているのか」についてのものであるなら関数への切り出しを検討しましょう。
+コメントの内容が「なぜしているのか」の場合はこの限りではありません。</p>
+
+<p>また、スコープを区切って変数を定義しようとした結果ネストが深くなるという場合も関数に切り出したほうが良いかもしれません。</p>
+
+<p>では具体例として、ASDFのメンテナでもあらせられるfareさんの<a href="https://github.com/fare/fare-csv/blob/39fcada5db2899af172454899ff13a07c62ebdb9/csv.lisp#L232-L354" >コードを見てみましょう。</a>
+これはCSVをパースするライブラリのコードですが、ローカル関数が大量に定義され本体ではそのうちのエントリポイントとなる関数を呼び出しているだけです。
+大変美しく、処理も追いやすいものです。
+大いに参考にするべきです。</p>
+
+<h1>Conditional diverging.</h1>
+
+<p>条件分岐もコードが醜くなる一因です。</p>
+
+<p>著者の印象では条件分岐は主に三種類に大別できます。
+なお、以下の条件分岐名三種は、筆者がかってに名付けたものです。
+正式名称をご存知の方はご一報を！</p>
+
+<h2>Sequential condition.</h2>
+
+<p>もっとも一般的で分かりやすいのは線形条件分岐です。
+グラフで表すと以下のようになります。</p>
+
+<p><img src="../img/refactoring/sequential-condition.svg" alt="Graph of sequential condition." /></p>
+
+<h2>Balanced binary tree condition.</h2>
+
+<p>もっとも難解なのは平衡二分木条件分岐です。
+グラフで表すと以下のようになります。</p>
+
+<p><img src="../img/refactoring/ballanced-binary-condition.svg" alt="Graph of ballanced bynary condition." /></p>
+
+<h2>Unballanced binary tree condition.</h2>
+
+<p>頻出するパターンとして非平衡二分木条件分岐があります。
+名前は苦肉の策でつけたものでもっと良い名前があれば良いのですが。。。</p>
+
+<p>グラフで表すと以下のようになります。</p>
+
+<p><img src="../img/refactoring/unballanced-binary-condition.svg" alt="Graph of unballanced bynary condition." /></p>
+
+<p>これは主に再帰関数で見かけるものです。
+一番上の<code>pred1</code>が再帰終了条件で、再帰中は左の枝を辿りますが、終了する場合は右の枝に行きます。
+<code>pred3</code>が行っているのは返り値を処理するための分岐です。</p>
+
+<h2>IF rather than COND.</h2>
+
+<p>もっとも一般的で分かりやすいのが線形条件分岐なのは上に見たとおりです。
+通常これを書くのには<code>COND</code>が使われます。
+先のグラフを<code>COND</code>を使って書くと以下のようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">cond</span></i>
+  <span class="paren2">(<span class="code">pred1 then1</span>)</span>
+  <span class="paren2">(<span class="code">pred2 then2</span>)</span>
+  <span class="paren2">(<span class="code">pred3 then3</span>)</span>
+  <span class="paren2">(<span class="code">t finally</span>)</span></span>)</span></span></code></pre>
+
+<p>陥りがちな罠として、とりあえず線形条件分岐で書こうとするものです。
+中でも本来平衡二分木条件分岐であるものを線形条件分岐として書こうとするのは悪手です。</p>
+
+<p>先の平衡二分木条件分岐をLispコードにするなら<code>IF</code>を使って以下のようになるでしょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> pred1
+    <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> pred2
+        then2
+        else2</span>)</span>
+    <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> pred3
+        then3
+        else3</span>)</span></span>)</span></span></code></pre>
+
+<p>上のコードを<code>COND</code>を使って無理に線形条件分岐に変更すると以下のコードとなります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">cond</span></i>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">and pred1 pred2</span>)</span> then2</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">and pred1 <span class="paren4">(<span class="code">not pred2</span>)</span></span>)</span> else2</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">and <span class="paren4">(<span class="code">not pred1</span>)</span> pred2</span>)</span> then3</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">and <span class="paren4">(<span class="code">not pred1</span>)</span> <span class="paren4">(<span class="code">not pred2</span>)</span></span>)</span> else3</span>)</span></span>)</span></span></code></pre>
+
+<p><code>IF</code>を使った前者のコードは条件が網羅的である（すべての<code>IF</code>の<code>then</code>部と<code>else</code>部が埋まっている）のが簡単に見て取れます。
+<code>COND</code>を使った後者のコードで条件が網羅的であるのを読み取るのは困難です。</p>
+
+<p>条件分岐は通常<code>IF</code>を使って書き始めるべきです。
+なお、「通常」というからには例外があって、それは<code>TYPECASE</code>を使う場合などです。</p>
+
+<h3>Tips.</h3>
+
+<p><code>IF</code>を書くときのコツは<code>then</code>部に<code>IF</code>をネストさせないことです。
+悪い例を以下に挙げます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> pred1
+    <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> pred2
+        <span class="paren3">(<span class="code">do-a</span>)</span>
+        <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> pred3
+            <span class="paren4">(<span class="code">do-b</span>)</span>
+            <span class="paren4">(<span class="code">do-c</span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">do-d</span>)</span></span>)</span></span></code></pre>
+
+<p><code>then</code>部にある<code>IF</code>は<code>NOT</code>を使えば簡単に<code>else</code>部と入れ替えられます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren2">(<span class="code">not pred1</span>)</span>
+    <span class="paren2">(<span class="code">do-d</span>)</span>
+    <span class="paren2">(<span class="code"><i><span class="symbol">if</span></i> pred2
+        <span class="paren3">(<span class="code">do-a</span>)</span>
+        <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> pred3
+            <span class="paren4">(<span class="code">do-b</span>)</span>
+            <span class="paren4">(<span class="code">do-c</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上記のように<code>else</code>部に<code>IF</code>が続くコードは線形条件分岐であり、これは<code>COND</code>に変換したほうが読みやすいかもしれません。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">cond</span></i>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">not pred1</span>)</span> <span class="paren3">(<span class="code">do-d</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">pred2 <span class="paren3">(<span class="code">do-a</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">pred3 <span class="paren3">(<span class="code">do-b</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">t <span class="paren3">(<span class="code">do-c</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上の条件分岐三例はどれも同じコードですが、読みやすさは各々異なります。
+特に第一の例から条件分岐が線形になっていることを読み解くのは困難です。</p>
+
+<p><code>IF</code>がネストしてインデントが深くなってしまっているコードは第一の例のようなコードを書いてしまっている場合が考えられます。</p>
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
