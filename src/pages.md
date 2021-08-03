@@ -72,7 +72,8 @@ yourname.github.io/
  |    +---css.css
  |
  +--- img/
- +--- index.html
+ +--- indexes/
+      +---index.html
  +--- src/
       +--- blog.md
 ```
@@ -86,7 +87,7 @@ markdownからhtmlへのコンパイルはmarkdownがindex.htmlより新しい�
 Rosスクリプトが書かれているのでROSWELL経由でインストールするのが推奨です。
 
 ```shell
-ros install hyotang666/dynamic-package
+ros install hyotang666/markup-functions
 ros install hyotang666/pages
 ```
 
@@ -94,7 +95,7 @@ ros install hyotang666/pages
 
 なお、shellから叩きたくない人はREPLから`(PAGES:COMPILE)`を評価していただければ良いです。
 
-現在はmarkdownしか対応していませんし、今後もtexやorgといった他の物に対応する気はありませんが、`PAGES:COMPILE`のキーワード引数`:PATTERN`に拡張子のパターン文字列を（規定値は`"*.md"`）、`:COMPILER`にパスネームを引数に受け取り`*STANDARD-OUTPUT*`に`<body>`の中身を出力する無引数関数（ようするにthunk）を返す関数を渡してあげればそれで動きますので拡張は簡単だろうと思います。
+現在はmarkdownしか対応していませんし、今後もtexやorgといった他の物に対応する気はありませんが、`PAGES:COMPILE`のキーワード引数`:PATTERN`に拡張子のパターン文字列を（規定値は`"*.md"`）、`:COMPILER`にパスネームを引数に受け取り<dec>`*STANDARD-OUTPUT*`に`<body>`の中身を出力する</del>文字列を返す無引数関数（ようするにthunk）を返す関数を渡してあげればそれで動きますので拡張は簡単だろうと思います。
 
 以下にhtmlを受け取ってhtmlへコンパイルする`IDENTITY`的なものの例を書いときますね。
 
@@ -102,10 +103,7 @@ ros install hyotang666/pages
 (pages:compile :pattern "*.html"
                :compiler (lambda(pathname)
                            (lambda()
-                             (with-open-file(s pathname)
-                               (loop :for line = (read-line s nil)
-                                     :while line
-                                     :do (write-line line))))))
+                             (uiop:read-file-string pathname))))
 ```
 
 ## 作ってみて。
@@ -113,18 +111,21 @@ ros install hyotang666/pages
 
 関数を返す関数をこんなにも書いたのは初めてかもしれない。
 
-htmlのマークアップにはCL-WHOを使っています。（特に不満がないので。）
-深町氏のcl-markupや2017/5のquicklisp-updateで入ってきたCl-whyも気になるっちゃ気になりますが。
+<del>htmlのマークアップにはCL-WHOを使っています。（特に不満がないので。）
+深町氏のcl-markupや2017/5のquicklisp-updateで入ってきたCl-whyも気になるっちゃ気になりますが。</del><br>
+htmlのマークアップには自作のHTMLgeneratorである[markup-functions](https://github.com/hyotang666/markup-functions)を使っています。
+プリティプリントのサポートとコンパイル時のHTML文法チェックに力を入れてあります。
 
 cssのコンパイルにはcl-cssを使っています。
 
 markdownからhtmlへのコンパイルには3bmdを使っています。
-（3bmdはclispで動かないバグがあるのでpagesもclispでは動きません。）
+<del>（3bmdはclispで動かないバグがあるのでpagesもclispでは動きません。）</del>
+(3bmdがclispで動こないバグはPRを送ったので多分動くようになってます。テストはしてません)
 2017/5のquicklisp-updateで入ってきたmarkdown.clも気になりますが、まだアルファクオリティとのこで敬遠しました。
 cl-markdown？
 そんな子いましたかねぇ？
 
-なお[前回の記事](https://hyotang666.github.io/archives/dynamic-package)で書いた`DYNAMIC-PACKAGE`を試験的に使用しています。
+<del>なお[前回の記事](https://hyotang666.github.io/archives/dynamic-package)で書いた`DYNAMIC-PACKAGE`を試験的に使用しています。</del>（試験の結果使いづらいという結論に達したので依存は外しました）
 
 ## 今後。
 ご覧の通りのへっぽこCSSなので、見た目をもう少し何とかしたいかなぁとは思いつつ、必要充分だよなぁとも思いつつ。
@@ -137,3 +138,7 @@ JSは、べつに、いらない、、かなぁ？
 将来的にアレコレしたくなったときに、このPagesを拡張していくのか、さっさと捨てて作りなおすのか、それともjekyllなどに鞍替えするのか、何もかも未定です。
 
 という訳でPagesの使用は非推奨です。
+
+### 2021年追記
+なんだかんだで使い続けてはいます。
+リファクタリング等でコードの内容と記事が噛み合わなくなって来たので修正。
