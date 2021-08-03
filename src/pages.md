@@ -95,7 +95,7 @@ ros install hyotang666/pages
 
 なお、shellから叩きたくない人はREPLから`(PAGES:COMPILE)`を評価していただければ良いです。
 
-現在はmarkdownしか対応していませんし、今後もtexやorgといった他の物に対応する気はありませんが、`PAGES:COMPILE`のキーワード引数`:PATTERN`に拡張子のパターン文字列を（規定値は`"*.md"`）、`:COMPILER`にパスネームを引数に受け取り<dec>`*STANDARD-OUTPUT*`に`<body>`の中身を出力する</del>文字列を返す無引数関数（ようするにthunk）を返す関数を渡してあげればそれで動きますので拡張は簡単だろうと思います。
+現在はmarkdownしか対応していませんし、今後もtexやorgといった他の物に対応する気はありませんが、`PAGES:COMPILE`のキーワード引数`:PATTERN`に拡張子のパターン文字列を（規定値は`"*.md"`）、`:COMPILER`にパスネームを引数に受け取り`*STANDARD-OUTPUT*`に`<body>`の中身を出力する無引数関数（ようするにthunk）を返す関数を渡してあげればそれで動きますので拡張は簡単だろうと思います。
 
 以下にhtmlを受け取ってhtmlへコンパイルする`IDENTITY`的なものの例を書いときますね。
 
@@ -103,7 +103,7 @@ ros install hyotang666/pages
 (pages:compile :pattern "*.html"
                :compiler (lambda(pathname)
                            (lambda()
-                             (uiop:read-file-string pathname))))
+                             (write-string (uiop:read-file-string pathname)))))
 ```
 
 ## 作ってみて。
