@@ -1,0 +1,307 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>cl-yesql-asdf</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1><a href="https://github.com/ruricolist/cl-yesql" >cl-yesql</a> hacks or <a href="https://gitlab.common-lisp.net/asdf/asdf" >asdf</a> extension.</h1>
+
+<h2>対象読者</h2>
+
+<ul>
+<li><a href="https://github.com/ruricolist/cl-yesql" >cl-yesql</a>のユーザ。</li>
+<li><a href="https://gitlab.common-lisp.net/asdf/asdf" >asdf</a>の拡張に興味のあるCLer。</li>
+</ul>
+
+<h2>Introduction.</h2>
+
+<p><a href="https://github.com/ruricolist/cl-yesql" >cl-yesql</a>を愛用しているのですが、気に食わない点として独自のシステムビルダを使用している点が挙げられます。
+できればCommon Lisp界のデファクトスタンダードシステムビルダである<a href="https://gitlab.common-lisp.net/asdf/asdf" >asdf</a>でビルドしたい。</p>
+
+<p>個人的に<a href="https://gitlab.common-lisp.net/asdf/asdf" >asdf</a>の魅力の一つは、ファイルやライブラリの依存を一ヶ所にまとめて書ける点にあると思っています。
+（なので<code>package-infered-system</code>は好みでない。）
+この点は特に（将来の自分を含む）第三者がシステムの全体像をざっくり把握したい場合役立ちます。</p>
+
+<p>そんなわけでSQLファイルもasdファイルの<code>defsystem</code>フォームに記したい。</p>
+
+<p>たとえば以下のようなディレクトリ構造のプロジェクトがあるとします。</p>
+
+<pre><code>+ myproject.asd
++ src
+   |--- package.lisp
+   |--- main.lisp
+   |--- util.lisp
++ sql
+   |--- user.sql
+   |--- entry.sql</code></pre>
+
+<p><code>defsystem</code>フォームはたとえば以下のように書きたい。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defsystem</span></i> <span class="string">"myproject"</span>
+  <span class="keyword">:components</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="keyword">:module</span> <span class="string">"src"</span>
+                <span class="keyword">:components</span>
+                <span class="paren4">(<span class="code"><span class="paren5">(<span class="code"><span class="keyword">:file</span> <span class="string">"package"</span></span>)</span>
+                 <span class="paren5">(<span class="code"><span class="keyword">:file</span> <span class="string">"util"</span> <span class="keyword">:depends-on</span> <span class="paren6">(<span class="code"><span class="string">"package"</span></span>)</span></span>)</span>
+                 <span class="paren5">(<span class="code"><span class="keyword">:file</span> <span class="string">"main"</span> <span class="keyword">:depends-on</span> <span class="paren6">(<span class="code"><span class="string">"util"</span> <span class="string">"package"</span></span>)</span></span>)</span></span>)</span></span>)</span>
+               <span class="paren3">(<span class="code"><span class="keyword">:module</span> <span class="string">"sql"</span>
+                <span class="keyword">:depends-on</span> <span class="paren4">(<span class="code"><span class="string">"src"</span></span>)</span>
+                <span class="keyword">:components</span> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">yesql <span class="string">"user"</span></span>)</span>
+                             <span class="paren5">(<span class="code">yesql <span class="string">"entry"</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>本稿ではこれを実現するためのコードを備忘録として記しておきます。</p>
+
+<h2>asdf:source-file</h2>
+
+<p>まず必要になるのは独自の<code>component</code>クラスです。
+asdfは様々な<code>component</code>クラスを提供してくれています。</p>
+
+<p>cl-yesqlではSQLファイルを書くことになります。
+またそれらSQLファイルは<code>cl-yesql:import</code>によりLisp環境に関数群としてロードされます。
+すなわちSQLファイルは形を変えたLispソースコードとみなせます。</p>
+
+<p>そのようなソースコードファイルは<code>asdf:source-file</code>で表します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> yesql <span class="paren2">(<span class="code">asdf:source-file</span>)</span> <span class="paren2">(<span class="code"></span>)</span>
+  <span class="paren2">(<span class="code"><span class="keyword">:default-initargs</span> <span class="keyword">:type</span> <span class="string">"sql"</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>:default-initargs</code>でファイルの拡張子を<code>sql</code>に指定している点要注目。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">asdf:file-type <span class="paren2">(<span class="code">make-instance 'yesql <span class="keyword">:name</span> <span class="string">"dummy"</span></span>)</span></span>)</span> =&gt; "sql"</span></code></pre>
+
+<h2>asdf:perform</h2>
+
+<p><code>asdf:source-file</code>を継承した<code>component</code>クラスを定義した場合、<code>asdf:compile-op</code>と<code>asdf:load-op</code>に特定化された<code>asdf:perform</code>メソッドを各々定義しなくてはなりません。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> asdf:perform <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o asdf:compile-op</span>)</span> <span class="paren3">(<span class="code">c yesql</span>)</span></span>)</span>
+  <span class="keyword">:TODO</span></span>)</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> asdf:perform <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o asdf:load-op</span>)</span> <span class="paren3">(<span class="code">c yesql</span>)</span></span>)</span>
+  <span class="keyword">:TODO</span></span>)</span></span></code></pre>
+
+<h2>Compiling with universal.lisp</h2>
+
+<p>Lispファイルをコンパイルする場合、<a href="https://gitlab.common-lisp.net/asdf/asdf" >asdf</a>は<code>asdf::perform-lisp-compilation</code>関数を使っています。</p>
+
+<p>問題は我々が扱っているファイルはSQLファイルであってLispファイルではない点です。</p>
+
+<p><a href="https://github.com/ruricolist/cl-yesql" >cl-yesql</a>が依存している埋め込み言語モジュールシステムである<a href="https://github.com/ruricolist/vernacular" >vernacular</a>では<code>universal.lisp</code>ファイルを使いこの問題を解決しています。</p>
+
+<p>大変興味深いので解説します。</p>
+
+<h3>univesal.lisp</h3>
+
+<p><code>universal.lisp</code>の中身は大変短いので引用しましょう。</p>
+
+<pre><code><span class="code">#.vernacular/specials:*program-preamble*
+#.vernacular/specials:*program*</span></code></pre>
+
+<p>ご覧の通り読み込み時に変数を参照するだけです。</p>
+
+<p><code>universal.lisp</code>ファイルが<code>cl:compile-file</code>に渡されると、Lispはファイルの中身を読み込もうとします。</p>
+
+<p>読み込み時評価である<code>#.</code>というディスパッチマクロがあるので変数を評価します。
+これら変数は動的なスペシャル変数ですので、その次点で束縛されている値が読み込み時評価の結果としてLisp環境に読み込まれます。</p>
+
+<p>すなわち変数に<code>(defun main () (print :hello))</code>というリストが束縛されていれば、あたかもファイルに<code>(defun main () (print :hello))</code>と書かれてあるかのようにLispは解釈します。</p>
+
+<p>これにより、SQLファイルをLisp関数群としてコンパイルするにあたり、各SQLファイルに対応したLispファイルを作る必要なく、ただ一枚<code>universal.lisp</code>ファイルがありさえすれば後は逐次任意のフォームを変数に束縛するだけで事足ります。</p>
+
+<p>賢い。</p>
+
+<h3>compile-op</h3>
+
+<p>コンパイルは以下のようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> asdf:perform <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o asdf:compile-op</span>)</span> <span class="paren3">(<span class="code">c yesql</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">progv</span></i> <span class="paren3">(<span class="code">list <span class="paren4">(<span class="code">uiop:find-symbol* '<span class="keyword">#:*program-preamble*</span> '<span class="keyword">#:vernacular/specials</span></span>)</span>
+               <span class="paren4">(<span class="code">uiop:find-symbol* '<span class="keyword">#:*program*</span> '<span class="keyword">#:vernacular/specials</span></span>)</span></span>)</span>
+         <span class="paren3">(<span class="code">list <span class="keyword">:TODO</span> <span class="keyword">:TODO</span></span>)</span>
+    <span class="paren3">(<span class="code">asdf::perform-lisp-compilation o c</span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>パッケージ<code>vernacular/specials</code>はasdファイルのロード時には未だ存在していないので、<code>cl:progv</code>を使ってメソッド呼び出し時に動的に束縛を作る点、また、<code>uiop:find-symbol*</code>でメソッド呼び出し時にシンボルを探している点、要注目。</p>
+
+<h3>load-op</h3>
+
+<p>ロードは以下のようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> asdf:perform <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o asdf:load-op</span>)</span> <span class="paren3">(<span class="code">c yesql</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">asdf::perform-lisp-load-fasl o c</span>)</span></span>)</span></span></code></pre>
+
+<h2>asdf:input-files, asdf:output-files and operation object.</h2>
+
+<p>コンパイルやロードを行うためには、<code>component</code>オブジェクトからしかるべき<code>pathname</code>を作れなければいけません。
+asdfは入/出力用の<code>pathname</code>を取り出すためのメソッド<code>asdf:input-files</code>、<code>asdf:output-files</code>を提供しています。</p>
+
+<p>既定の振る舞いは以下のようになります。</p>
+
+<pre><code><span class="code"><span class="comment">;;;; For compile.
+</span>* <span class="paren1">(<span class="code">asdf:input-files 'asdf:compile-op <span class="paren2">(<span class="code">asdf:find-component <span class="keyword">:myproject</span> '<span class="paren3">(<span class="code"><span class="string">"sql"</span> <span class="string">"user"</span></span>)</span></span>)</span></span>)</span>
+=&gt; <span class="paren1">(<span class="code">#P<span class="string">"/home/hyotang666/.roswell/local-projects/myproject/sql/user.sql"</span></span>)</span>
+
+* <span class="paren1">(<span class="code">asdf:output-files 'asdf:compile-op <span class="paren2">(<span class="code">asdf:find-component <span class="keyword">:myproject</span> '<span class="paren3">(<span class="code"><span class="string">"sql"</span> <span class="string">"user"</span></span>)</span></span>)</span></span>)</span>
+NIL
+T
+
+<span class="comment">;;;; For load.
+</span>* <span class="paren1">(<span class="code">asdf:input-files 'asdf:load-op <span class="paren2">(<span class="code">asdf:find-component <span class="keyword">:myproject</span> '<span class="paren3">(<span class="code"><span class="string">"sql"</span> <span class="string">"user"</span></span>)</span></span>)</span></span>)</span>
+=&gt; <span class="paren1">(<span class="code">#P<span class="string">"/home/hyotang666/.roswell/local-projects/myproject/sql/user.sql"</span></span>)</span>
+
+* <span class="paren1">(<span class="code">asdf:output-files 'asdf:load-op <span class="paren2">(<span class="code">asdf:find-component <span class="keyword">:myproject</span> '<span class="paren3">(<span class="code"><span class="string">"sql"</span> <span class="string">"user"</span></span>)</span></span>)</span></span>)</span>
+NIL
+T</span></code></pre>
+
+<p>通常は難しく考えずこれらメソッドを実装すればよろしゅうございます。</p>
+
+<p>今回われわれがコンパイルしたいのはつまるところLispなので、<a href="https://gitlab.common-lisp.net/asdf/asdf" >asdf</a>が持つ内部関数を便利に使わせてもらいましょう。
+<a href="https://gitlab.common-lisp.net/asdf/asdf" >asdf</a>に多くの仕事を任せることで、Lisp処理系依存による多くの問題を肩代わりさせられます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> asdf:output-files <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o asdf:compile-op</span>)</span> <span class="paren3">(<span class="code">c yesql</span>)</span></span>)</span>
+  <span class="string">"Generate output fasl pathnames."</span>
+  <span class="paren2">(<span class="code">asdf::lisp-compilation-output-files o c</span>)</span></span>)</span></span></code></pre>
+
+<p>上記メソッドの追加により、振る舞いは以下のようになります。</p>
+
+<pre><code><span class="code"><span class="comment">;;;; For compile.
+</span>* <span class="paren1">(<span class="code">asdf:input-files 'asdf:compile-op <span class="paren2">(<span class="code">asdf:find-component <span class="keyword">:myproject</span> '<span class="paren3">(<span class="code"><span class="string">"sql"</span> <span class="string">"user"</span></span>)</span></span>)</span></span>)</span>
+=&gt; <span class="paren1">(<span class="code">#P<span class="string">"/home/hyotang666/.roswell/local-projects/myproject/sql/user.sql"</span></span>)</span>
+
+* <span class="paren1">(<span class="code">asdf:output-files 'asdf:compile-op <span class="paren2">(<span class="code">asdf:find-component <span class="keyword">:myproject</span> '<span class="paren3">(<span class="code"><span class="string">"sql"</span> <span class="string">"user"</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">#P<span class="string">"/home/hyotang666/.cache/common-lisp/sbcl-2.2.0-linux-x64/home/hyotang666/.roswell/local-projects/myproject/sql/user.fasl"</span></span>)</span>
+T
+
+<span class="comment">;;;; For load.
+</span>* <span class="paren1">(<span class="code">asdf:input-files 'asdf:load-op <span class="paren2">(<span class="code">asdf:find-component <span class="keyword">:myproject</span> '<span class="paren3">(<span class="code"><span class="string">"sql"</span> <span class="string">"user"</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">#P<span class="string">"/home/hyotang666/.cache/common-lisp/sbcl-2.2.0-linux-x64/home/hyotang666/.roswell/local-projects/myproject/sql/user.fasl"</span></span>)</span>
+
+* <span class="paren1">(<span class="code">asdf:output-files 'asdf:load-op <span class="paren2">(<span class="code">asdf:find-component <span class="keyword">:myproject</span> '<span class="paren3">(<span class="code"><span class="string">"sql"</span> <span class="string">"user"</span></span>)</span></span>)</span></span>)</span>
+NIL
+T</span></code></pre>
+
+<p>コンパイルのための出力ファイルとロードのための入力ファイルが変わった点要注目。</p>
+
+<p>さて、ここからが厄介です。
+我々は出力ファイルパスの生成に<code>asdf::lisp-compilation-output-files</code>を使いました。
+そして<code>asdf::lisp-compilation-output-files</code>は<code>asdf:input-files</code>の振る舞いに依存しています。</p>
+
+<p>ですが、われわれが<code>asdf::perform-lisp-compilation</code>経由で<code>cl:compile-file</code>に渡したいのは<code>universal.lisp</code>へのファイルパスです。
+すなわち<code>asdf:input-files</code>の返り値をあるときはSQLファイル、あるときは<code>universal.lisp</code>と状況によって切り替えたい。
+通常そのような場合は、たとえば引数でフラグを渡して切り替えるなどするのですが、<code>asdf:input-files</code>は<a href="https://gitlab.common-lisp.net/asdf/asdf" >asdf</a>の総称関数であって自前のものではないのでAPIシグネチャの変更などはできません。
+なら、スペシャル変数を宣言し、その値によって振る舞いを切り替えたいところですが、残念ながら<code>asdf:input-files</code>はメモ化されているのでこの手段も取れません。</p>
+
+<p>よって今回は新たに<code>compile-yesql-op</code>という<code>operation</code>オブジェクトを導入することで対応します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> compile-yesql-op <span class="paren2">(<span class="code">asdf:compile-op</span>)</span> <span class="paren2">(<span class="code"></span>)</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> asdf:input-files <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o compile-yesql-op</span>)</span> <span class="paren3">(<span class="code">c yesql</span>)</span></span>)</span>
+  <span class="string">"Return universal file path."</span>
+  <span class="paren2">(<span class="code">list <span class="paren3">(<span class="code">make-pathname <span class="keyword">:name</span> <span class="string">"universal"</span>
+                       <span class="keyword">:type</span> <span class="string">"lisp"</span>
+                       <span class="keyword">:defaults</span> <span class="paren4">(<span class="code">asdf:system-source-directory
+                                   <span class="paren5">(<span class="code">asdf:find-system <span class="keyword">:vernacular</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>振る舞いは以下のようになります。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">asdf:input-files 'compile-yesql-op <span class="paren2">(<span class="code">asdf:find-component <span class="keyword">:myproject</span> '<span class="paren3">(<span class="code"><span class="string">"sql"</span> <span class="string">"user"</span></span>)</span></span>)</span></span>)</span>
+=&gt; <span class="paren1">(<span class="code">#P<span class="string">"/home/hyotang666/.roswell/lisp/quicklisp/dists/quicklisp/software/vernacular-20211020-git/universal.lisp"</span></span>)</span>
+
+* <span class="paren1">(<span class="code">asdf:output-files 'compile-yesql-op <span class="paren2">(<span class="code">asdf:find-component <span class="keyword">:myproject</span> '<span class="paren3">(<span class="code"><span class="string">"sql"</span> <span class="string">"user"</span></span>)</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">#P<span class="string">"/home/hyotang666/.cache/common-lisp/sbcl-2.2.0-linux-x64/home/hyotang666/.roswell/lisp/quicklisp/dists/quicklisp/software/vernacular-20211020-git/universal.fasl"</span></span>)</span>
+T</span></code></pre>
+
+<p><code>asdf:input-files</code>が<code>universal.lisp</code>になったのは歓迎ですが、<code>asdf:output-files</code>が<code>universal.fasl</code>なのはいただけません。
+クラスにスロットを追加し、対応しましょう。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defclass</span></i> compile-yesql-op <span class="paren2">(<span class="code">asdf:compile-op</span>)</span>
+  <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">op <span class="keyword">:accessor</span> op</span>)</span></span>)</span></span>)</span> <span class="comment">; &lt;--- this!
+</span>
+<span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> output-files <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o compile-yesql-op</span>)</span> <span class="paren3">(<span class="code">c yesql</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">asdf:output-files <span class="paren3">(<span class="code">op o</span>)</span> c</span>)</span></span>)</span></span></code></pre>
+
+<p>呼び出しがわ、すなわち<code>asdf:perform</code>の実装は以下のようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> asdf:perform <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o asdf:compile-op</span>)</span> <span class="paren3">(<span class="code">c yesql</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">progv</span></i> <span class="paren3">(<span class="code">list <span class="paren4">(<span class="code">find-symbol* '<span class="keyword">#:*program-preamble*</span> '<span class="keyword">#:vernacular/specials</span></span>)</span>
+               <span class="paren4">(<span class="code">find-symbol* '<span class="keyword">#:*program*</span> '<span class="keyword">#:vernacular/specials</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">list <span class="keyword">:TODO</span> <span class="keyword">:TODO</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">op <span class="paren6">(<span class="code">asdf:make-operation 'compile-yesql-op</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">setf <span class="paren5">(<span class="code">op op</span>)</span> o</span>)</span>
+      <span class="paren4">(<span class="code">asdf::perform-lisp-compilation op c</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p><code>operation</code>オブジェクトの作成には<code>asdf:make-operation</code>を使わねばならないとマニュアルにありますので、スロットの値はオブジェクト作成後に<code>setf</code>するかたちで行っています。</p>
+
+<h2>Generate lisp functions.</h2>
+
+<p>残すはTODOの中身です。</p>
+
+<p><code>vernacular/specials:*program-preamble*</code>は<code>NIL</code>に束縛することとします。
+ここは<code>defpackage</code>やら<code>in-package</code>フォームやらに束縛するべきものですが、今回は使いません。</p>
+
+<p><code>vernacular/specials:*program*</code>は<code>vernacular/lang:expand-module</code>の返り値をゴニョゴニョした<code>progn</code>フォームで束縛することとします。</p>
+
+<p>筆者は<a href="https://github.com/ruricolist/vernacular" >vernacular</a>というライブラリの振る舞いに明るくありません。
+本当はもっといいやり方があるような気がしています。</p>
+
+<p>ですがわずかながらソースを掘り返した結果、<a href="https://github.com/ruricolist/vernacular" >vernacular</a>は<a href="https://github.com/ruricolist/overlord" >overlord</a>というビルドシステムと密接に結びついており、<a href="https://gitlab.common-lisp.net/asdf/asdf" >asdf</a>との結合がうまく行かなそうでした。</p>
+
+<p>今回は多少無理やりな方法で、やりたいことを実現します。</p>
+
+<p><code>vernacular/lang:expand-module</code>は<code>cl-yesql/postmodern:module-progn</code>フォームを生成します。
+（&ldquo;#lang cl-yesql/postmodern&rdquo;の場合。）</p>
+
+<p>フォームの<code>cdr</code>部には<code>cl-yesql/postmodern:defquery</code>フォームが詰まっています。
+<code>cl-yesql/postmodern:defquery</code>マクロは<code>defun</code>フォームを生成するマクロです。</p>
+
+<p><code>cl-yesql/postmodern:module-progn</code>マクロを展開させてしまうと<a href="https://github.com/ruricolist/vernacular" >vernacular</a>の内部に深く入り込む必要が生じてしまうようでした。</p>
+
+<p><code>cl-yesql/postmodern:defquery</code>フォームさえあればわれわれが行いたいことは可能なようですので、思い切って<code>cl-yesql/postmodern:module-progn</code>マクロは<code>cl:progn</code>で置き換えることとします。</p>
+
+<p><code>cl-yesql/postmodern:defquery</code>フォームの第一引数は<code>defun</code>フォームの第一引数となるべきシンボルで、不幸にも<code>cl-yesql/postmodern</code>パッケージにインターンされてしまっています。
+これを強引に<code>myproject</code>パッケージにインターンさせることとします。
+これでSQLファイルに書かれたコードは無事Lisp関数となり、すべて<code>myproject</code>パッケージにインターンされます。</p>
+
+<p>なお、<a href="https://github.com/ruricolist/vernacular" >vernacular</a>はこの編のインターン周りをより丁寧に行ってくれているようです。
+ですがそのためにコードが著しく複雑になっているようなので筆者は把握するのを諦めました。</p>
+
+<p><code>asdf:perform</code>メソッドは以下のようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> asdf:perform <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o asdf:compile-op</span>)</span> <span class="paren3">(<span class="code">c yesql</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">progv</span></i> <span class="paren3">(<span class="code">list <span class="paren4">(<span class="code">uiop:find-symbol* '<span class="keyword">#:*program-preamble*</span> '<span class="keyword">#:vernacular/specials</span></span>)</span>
+               <span class="paren4">(<span class="code">uiop:find-symbol* '<span class="keyword">#:*program*</span> '<span class="keyword">#:vernacular/specials</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">list nil `<span class="paren4">(<span class="code"><i><span class="symbol">progn</span></i> ,@<span class="paren5">(<span class="code"><i><span class="symbol">loop</span></i> <span class="keyword">:for</span> <span class="paren6">(<span class="code">op name . rest</span>)</span>
+                              <span class="keyword">:in</span> <span class="paren6">(<span class="code">cdr <span class="paren1">(<span class="code">uiop:symbol-call '<span class="keyword">#:vernacular/lang</span> '<span class="keyword">#:expand-module</span>
+                                                         <span class="paren2">(<span class="code">asdf:component-pathname c</span>)</span></span>)</span></span>)</span>
+                          <span class="keyword">:collect</span> `<span class="paren6">(<span class="code">,op ,<span class="paren1">(<span class="code">intern <span class="paren2">(<span class="code">symbol-name name</span>)</span> '<span class="keyword">#:myproject</span></span>)</span>
+                                         ,@rest</span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">op <span class="paren6">(<span class="code">asdf:make-operation 'compile-yesql-op</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">setf <span class="paren5">(<span class="code">op op</span>)</span> o</span>)</span>
+      <span class="paren4">(<span class="code">asdf::perform-lisp-compilation op c</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>なお、<code>vernacular/lang:expand-module</code>はパス名からシステム名とパッケージ名を推測するようで、失敗するとエラーを投げます。
+これに対応するためには<code>overlord:set-package-base</code>を呼ぶ必要があります。
+残念ながら<code>overlord:set-package-base</code>はマクロで<code>uiop:symbol-call</code>が使えないので、最終手段として<code>eval</code>を使います。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> asdf:perform <span class="keyword">:before</span> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">o asdf:compile-op</span>)</span> <span class="paren3">(<span class="code">c yesql</span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">eval
+  `<span class="paren3">(<span class="code">,<span class="paren4">(<span class="code">uiop:find-symbol* '<span class="keyword">#:set-package-base</span> '<span class="keyword">#:overlord</span></span>)</span>
+     ,<span class="paren4">(<span class="code">make-pathname <span class="keyword">:directory</span> <span class="paren5">(<span class="code">list <span class="keyword">:relative</span> <span class="paren6">(<span class="code">asdf:component-name <span class="paren1">(<span class="code">asdf:component-parent c</span>)</span></span>)</span></span>)</span></span>)</span>
+     ,<span class="paren4">(<span class="code">asdf:primary-system-name c</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>実装は以上です。
+これで冒頭のasdファイルをロードすることができるようになっているはずです。</p>
+
+<p>SQL関数を<code>myproject</code>パッケージにインターンさせるため、&ldquo;sql&rdquo;モジュールを&ldquo;src&rdquo;モジュールに<code>:depends-on</code>させるのがコツです。</p>
+
+<p><a href="https://github.com/ruricolist/cl-yesql/issues/27" >cl-yesqlをasdfに統合させるissue</a>もあるので、こんなの自前で書かなくてもよくなると嬉しいのにな。</p>
+
+<p>今回のコードは<a href="https://gist.github.com/hyotang666/e54d4be187a9485a67dd24fc6f6a3dbf" >ここ</a>にまとめておきます。</p>
+
+<!-- Links -->
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
