@@ -4,6 +4,10 @@
 ### 対象読者
 * 他人の環境に興味のあるCLer
 
+## NOTE
+筆者はcavemanを捨て[snooze](https://github.com/joaotavora/snooze)を使うようになった。
+詳細は[ここ](why-snooze.html)に記してある。
+
 ## Introduction
 本稿は[原著](https://book.impress.co.jp/books/1117101135)の各章をCommon Lispに翻訳するシリーズの第一章である。
 本章では開発環境構築とcavemanの簡単な導入紹介を行う。

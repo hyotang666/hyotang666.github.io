@@ -13,18 +13,16 @@
         <DIV>
           <HEADER>
             <H2>
-              <A HREF='../archives/github-pages-pitfalls.html'>
-                github pages pitfalls
+              <A HREF='../archives/zdl1.html'>
+                ゼロから作るDeep Learning. Common Lispで学ぶディープラーニングの理論と実装(1)
               </A>
             </H2>
           </HEADER>
           <MAIN>
             <P>
-              Github pagesを使用している方。
+              ゼロから作るDeep LearningのコードをCommon Lispに移植しながら学習していくシリーズです。
               <BR>
-              Github pagesを利用していて陥ったPitfall群をまとめていきます。
-              <BR>
-              ...
+              ここではイン...
             </P>
           </MAIN>
           <FOOTER>2021/7/18</FOOTER>
@@ -34,16 +32,14 @@
         <DIV>
           <HEADER>
             <H2>
-              <A HREF='../archives/einsum.html'>Summary of numcl:einsum.</A>
+              <A HREF='../archives/warn-in-cl.html'>warnの出力抑制はどうやって実現しているのか</A>
             </H2>
           </HEADER>
           <MAIN>
             <P>
-              筆者自信は線形代数にもnumpyにも、もちろんnumpyのeinsumにも暗い人間である。
+              このような記事を目にしたのですが、いろいろと 勘違いなさっているご様子なので僕自身の言葉で解説をしてみようと思う。
               <BR>
-              ここでは
-              <BR>
-              をnumclで再現する形...
+              初心者C...
             </P>
           </MAIN>
           <FOOTER>2021/7/18</FOOTER>
@@ -53,18 +49,14 @@
         <DIV>
           <HEADER>
             <H2>
-              <A HREF='../archives/dynamic-package.html'>
-                Dynamic-packageあるいはpackage-inferred-systemに期待したもの
+              <A HREF='../archives/uiop.html'>
+                To query OS distribution with Common Lisp especially UIOP.
               </A>
             </H2>
           </HEADER>
           <MAIN>
             <P>
-              DEFPACKAGE IN-PACKAGEを書くの面倒臭いなぁと思っているCLer。
-              <BR>
-              このようなブログがありました。
-              <BR>
-              ここで触...
+              このような記事を読み、脊髄反射でこのように返信してしまったのだけど、よく読んでみたらUIOP:RUN-PROGRAM要らな...
             </P>
           </MAIN>
           <FOOTER>2021/7/18</FOOTER>
@@ -74,33 +66,18 @@
         <DIV>
           <HEADER>
             <H2>
-              <A HREF='../archives/docs-in-cl.html'>Docs in Common Lisp</A>
-            </H2>
-          </HEADER>
-          <MAIN>
-            <P>
-              Common Lispには、例えば関数定義構文にドキュメンテーション文字列を挿入できる機能がある。
-              <BR>
-              たとえば以下のようにする。
-              <BR>
-              ...
-            </P>
-          </MAIN>
-          <FOOTER>2021/7/18</FOOTER>
-        </DIV>
-      </LI>
-      <LI>
-        <DIV>
-          <HEADER>
-            <H2>
-              <A HREF='../archives/csv-libraries.html'>
-                CSV libralies in Common Lisp comunity.
+              <A HREF='../archives/structure-vs-class.html'>
+                Structure vs Class, case in Common Lisp.
               </A>
             </H2>
           </HEADER>
           <MAIN>
             <P>
-              CSVを解釈するライブラリーの実装が話題になっているので、Common Lisp界隈にあるCSV系ライブラリーをざっくり比...
+              対象読者。
+              <BR>
+              Common Lispにはユーザが定義できる合成型として構造体とクラスの２種がサポートされている。
+              <BR>
+              これはしばしば...
             </P>
           </MAIN>
           <FOOTER>2021/7/18</FOOTER>
@@ -110,18 +87,16 @@
         <DIV>
           <HEADER>
             <H2>
-              <A HREF='../archives/common-lisp-pitfalls.html'>
-                Common Lisp Pitfalls
+              <A HREF='../archives/scope-and-block.html'>
+                Scope, block and extent in Common Lisp.
               </A>
             </H2>
           </HEADER>
           <MAIN>
             <P>
-              複数の処理系で可能な限り可搬的になるようコードを書きたい初級〜中級CLer。
+              Common Lispという言語でもスコープという言葉は使われます。
               <BR>
-              SBCL、CLISP、ECL、CCL
-              <BR>
-              僕がハマっ...
+              ですがブロックという言葉はCommon Lispでは異...
             </P>
           </MAIN>
           <FOOTER>2021/7/18</FOOTER>
@@ -131,20 +106,16 @@
         <DIV>
           <HEADER>
             <H2>
-              <A HREF='../archives/clopengl9.html'>
-                Fight against cl-opengl 9.
+              <A HREF='../archives/resignal-bind.html'>
+                Resignal-bindあるいはよりよいエラーメッセージを求めて
               </A>
             </H2>
           </HEADER>
           <MAIN>
             <P>
-              前章読了済みの方。
+              エラーメッセージに対して「分かりにくい！」「で、どうしろと？」などと思った経験のあるCLer。
               <BR>
-              前回はuniformの取り扱い方を学びました。
-              <BR>
-              本章ではtextureの取り扱い方を学びます。
-              <BR>
-              textur...
+              長文ですのでお暇な時にビール...
             </P>
           </MAIN>
           <FOOTER>2021/7/18</FOOTER>
@@ -154,20 +125,37 @@
         <DIV>
           <HEADER>
             <H2>
-              <A HREF='../archives/clopengl8.html'>
-                Fight against cl-opengl 8.
+              <A HREF='../archives/replayer.html'>
+                Common Lisp製Audio File Player “REPLAYER” の紹介。
               </A>
             </H2>
           </HEADER>
           <MAIN>
             <P>
-              前章読了済みの方。
+              Twitterでこのようなやりとりがあってですね。
               <BR>
-              前回はDEFSHADERマクロを実装しました。
+              残念ながらCommon Lispは選ばれなかったっぽいので見切り発車で勝...
+            </P>
+          </MAIN>
+          <FOOTER>2021/7/18</FOOTER>
+        </DIV>
+      </LI>
+      <LI>
+        <DIV>
+          <HEADER>
+            <H2>
+              <A HREF='../archives/refactoring.html'>
+                Refactoring in common lisp.
+              </A>
+            </H2>
+          </HEADER>
+          <MAIN>
+            <P>
+              Common LispはASTを人間が書く言語です。
               <BR>
-              今回は改良を施しuniformを取り扱えるようにします。
+              そしてASTは本質的に醜くなるものです。
               <BR>
-              u...
+              もしそうでないなら今頃あらゆる...
             </P>
           </MAIN>
           <FOOTER>2021/7/18</FOOTER>

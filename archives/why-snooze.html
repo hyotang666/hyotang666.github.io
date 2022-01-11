@@ -1,0 +1,100 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>why-snooze</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Escape from the cave, dive into the bed!</h1>
+
+<h2>Metanote</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Common Lispでweb-frameworkを探している/使っている人。</li>
+</ul>
+
+<h2>Introduction.</h2>
+
+<p><a href="https://github.com/fukamachi/caveman" >caveman</a>を使っていたのですが<a href="https://github.com/joaotavora/snooze" >snooze</a>に乗り換えたのでその理由を記しておきます。</p>
+
+<h1>What is <a href="https://github.com/fukamachi/caveman" >caveman</a>?</h1>
+
+<p>まずは<a href="https://github.com/fukamachi/caveman" >caveman</a>とは何かというお話から。</p>
+
+<p><a href="https://github.com/fukamachi/caveman" >caveman</a>は<a href="https://github.com/fukamachi/ningle" >ningle</a>の上に組み立てられた&ldquo;microでない&rdquo;web-frameworkです。
+&ldquo;microでない&rdquo;、は、この場合</p>
+
+<ul>
+<li><a href="https://github.com/fukamachi/cl-dbi" >cl-dbi</a>/<a href="https://github.com/fukamachi/datafly" >datafly</a>/<a href="https://github.com/fukamachi/sxql" >sxql</a>によるデータベースサポート。</li>
+<li><a href="https://github.com/mmontone/djula" >djula</a>によるhtmlテンプレートエンジンサポート。</li>
+<li><a href="https://github.com/fukamachi/envy" >envy</a>によるコンフィグレーションサポート。</li>
+</ul>
+
+<p>を含むことを意味します。</p>
+
+<p>これは言葉を変えるなら、上記みっつの機能に不満があるなら、<a href="https://github.com/fukamachi/caveman" >caveman</a>を使うより<a href="https://github.com/fukamachi/ningle" >ningle</a>上に自分の好むデータベース、テンプレートエンジン、コンフィグレーションを組み込んでいくほうが良いということです。</p>
+
+<h1>What is <a href="https://github.com/fukamachi/ningle" >ningle</a>?</h1>
+
+<p>次に<a href="https://github.com/fukamachi/ningle" >ningle</a>とは何かというお話。</p>
+
+<p><a href="https://github.com/fukamachi/ningle" >ningle</a>は<a href="https://github.com/fukamachi/clack" >clack</a>の上に組み立てられた&ldquo;micro&rdquo; web-frameworkです。
+&ldquo;micro&rdquo;、は、この場合。</p>
+
+<ul>
+<li><a href="https://github.com/fukamachi/myway/" >myway</a>によるルーティングサポート。</li>
+</ul>
+
+<p>くらいしか<a href="https://github.com/fukamachi/clack" >clack</a>に追加していないことを意味します。</p>
+
+<p>これは言葉を変えるなら、ルーティングに不満があるなら、<a href="https://github.com/fukamachi/ningle" >ningle</a>を使うより<a href="https://github.com/fukamachi/clack" >clack</a>上に自分の好むルーティングシステムを組み込んでいくほうが良いということです。</p>
+
+<h1>Altenatives.</h1>
+
+<h2><a href="https://github.com/ruricolist/cl-yesql" >cl-yesql</a></h2>
+
+<p>データベースサポートは<a href="https://github.com/ruricolist/cl-yesql" >cl-yesql</a>を使うことにしました。</p>
+
+<p><a href="https://github.com/ruricolist/cl-yesql" >cl-yesql</a>は<a href="https://clojure.org/" >clojure</a>の<a href="https://github.com/krisajenkins/yesql" >yesql</a>から本歌取りしたものです。</p>
+
+<p>なぜ<a href="https://github.com/ruricolist/cl-yesql" >cl-yesql</a>か、についてはこの<a href="https://github.com/krisajenkins/yesql#rationale" >本家のREADME</a>に理由が記されてあります。
+これがまさに膝を打つ内容でした。</p>
+
+<h2><a href="https://github.com/hyotang666/markup-functions" >markup-functions</a></h2>
+
+<p>htmlテンプレートエンジンは<a href="https://github.com/hyotang666/markup-functions" >markup-functions</a>を使うことにしました。</p>
+
+<p><a href="https://github.com/mmontone/djula" >djula</a>の<a href="https://mmontone.github.io/djula/djula/Introduction.html#Introduction" >哲学</a>はある程度共感できましたが、今の自分には必要がないと判断しました。</p>
+
+<p><a href="https://ja.wikipedia.org/wiki/%E3%83%89%E3%83%A1%E3%82%A4%E3%83%B3%E5%9B%BA%E6%9C%89%E8%A8%80%E8%AA%9E" >DSL</a>の学習コストが高いという印象が強うございます。</p>
+
+<p>有力な代替案は<a href="https://edicl.github.io/cl-who/" >cl-who</a>でしたが、様々な不満があったので自作しました。
+不満点については<a href="https://github.com/hyotang666/markup-functions" >README</a>にあるのでそちらをご覧ください。</p>
+
+<h2><a href="https://github.com/joaotavora/snooze" >snooze</a></h2>
+
+<p><a href="https://github.com/fukamachi/caveman" >caveman</a>の主要機能みっつのうち、ふたつを変えるとなると、<a href="https://github.com/fukamachi/caveman" >caveman</a>を使う理由は乏しくなります。
+<a href="https://github.com/fukamachi/ningle" >ningle</a>上に再構築しようかとリサーチをしたところ<a href="https://github.com/joaotavora/snooze" >snooze</a>と出会いました。</p>
+
+<p><a href="https://github.com/joaotavora/snooze" >snooze</a>は大変筋が良いように見えましたので思いきって乗り換えてみました。</p>
+
+<p><a href="https://github.com/joaotavora/snooze" >snooze</a>のどこを「筋が良い」と判断したかについては、主に<a href="https://github.com/joaotavora/snooze#rationale" >READMEのここ</a>にございます。</p>
+
+<h1>Conclusion.</h1>
+
+<p>今の所、大変満足しております。</p>
+
+<p>今後の課題は<a href="https://github.com/fukamachi/clack" >clack</a>/<a href="https://github.com/fukamachi/lack" >lack</a>のインターフェイスを使い続けるのか思い切って直接<a href="https://github.com/edicl/hunchentoot" >hunchentoot</a>に依存してしまうかです。</p>
+
+<!-- Links -->
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>

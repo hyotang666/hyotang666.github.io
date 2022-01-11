@@ -4,6 +4,10 @@
 ### 対象読者
 * CavemanでScope制御を行いたいCLer
 
+## NOTE
+筆者はcavemanを捨て[snooze](https://github.com/joaotavora/snooze)を使うようになった。
+詳細は[ここ](why-snooze.html)に記してある。
+
 ## Introduction
 本稿は[原著](https://book.impress.co.jp/books/1117101135)の各章をCommon Lispに翻訳するシリーズの第9章である。
 本章ではCavemanでのScope制御を修めていく。

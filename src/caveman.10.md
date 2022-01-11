@@ -5,6 +5,10 @@
 * Cavemanでネストしたルーティングを設計したいCLer
 * MitoでRelationshipを表したいCLer
 
+## NOTE
+筆者はcavemanを捨て[snooze](https://github.com/joaotavora/snooze)を使うようになった。
+詳細は[ここ](why-snooze.html)に記してある。
+
 ## Introduction
 本稿は[原著](https://book.impress.co.jp/books/1117101135)の各章をCommon Lispに翻訳するシリーズの第10章である。
 本章では１対多となるモデル間の関連付けを通して、ネストしたルーティングを設計していく。

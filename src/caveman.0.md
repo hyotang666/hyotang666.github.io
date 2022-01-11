@@ -3,6 +3,10 @@
 ### 対象読者
 * 本稿のタイトルを見て興味を持った暇人。
 
+## NOTE
+筆者はcavemanを捨て[snooze](https://github.com/joaotavora/snooze)を使うようになった。
+詳細は[ここ](why-snooze.html)に記してある。
+
 ## Introduction
 web周りの技術に興味が出てきたのだが、ご承知の通りweb周りの技術は非常に広範な領域を持つ。
 そのへんを一通りまるっとカバーしてくれる書籍を探したのだが、どうやらRuby on Rails本しかないようだった。
