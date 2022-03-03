@@ -1,0 +1,216 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>xy-debug</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='STYLESHEET' HREF='https://unpkg.com/@picocss/pico@latest/css/pico.min.css'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>XY-DEBUG, or XY-problem in the debug phase. <br><sub>A case study in common lisp.</sub></h1>
+
+<h2>Meta notes.</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>エラーハンドリングに興味のあるCLer。</li>
+<li>わけのわからないエラーメッセージに憎しみを覚えた経験のある方。</li>
+<li>Common Lispにおけるエラーハンドリングに関心のある他言語ユーザー。</li>
+</ul>
+
+<h1><a href="https://en.wikipedia.org/wiki/XY_problem" >XY-PROBLEM</a></h1>
+
+<p><a href="https://en.wikipedia.org/wiki/XY_problem" >XY-PROBLEM</a>をご存知でしょうか？
+wikipediaによると<a href="https://www.kinokuniya.co.jp/f/dsg-01-9784904807026" >伽藍とバザール</a>の著者である<a href="http://www.catb.org/esr/" >Eric S. Raymond</a>氏が著作<a href="https://d.cxcore.net/Eric%20S%20Raymond/How%20To%20Ask%20Questions%20The%20Smart%20Way.pdf" >How To Ask Questions The Smart Way</a>の「べからず集(Questions Not To Ask)」に於いて示したものらしいです。
+<a href="https://xyproblem.info/" >xyproblem.info</a>による具体例として「ファイルの拡張子を取り出したくて(Y)文字列から最後３つの文字を取り出す方法(X)を質問する」などが挙げられています。
+分かりやすい。</p>
+
+<h2>Case in programming.</h2>
+
+<p><a href="https://en.wikipedia.org/wiki/XY_problem" >XY-PROBLEM</a>はなにも人と人との対話においてのみ現出する問題ではありません。
+プログラムを書いたことのある方なら、この<a href="https://en.wikipedia.org/wiki/XY_problem" >XY-PROBLEM</a>には割とよく悩まされているのではないでしょうか。
+すなわちエラーメッセージです。</p>
+
+<p>具体例をいくつか示しましょう。</p>
+
+<h3><a href="http://clhs.lisp.se/Body/e_unbo_1.htm" ><code>UNBOUND-VARIABLE</code></a></h3>
+
+<p>ある関数を呼び出したところ<a href="http://clhs.lisp.se/Body/e_unbo_1.htm" ><code>UNBOUND-VARIABLE</code></a>型の<a href="http://www.lispworks.com/documentation/HyperSpec/Body/e_cnd.htm" ><code>CONDITION</code></a>が発せられたが、エラーメッセージは「The variable foo is unbound.」というものでしかなく、<strong>どうするべきだったのかについては何も教えてくれない</strong>。</p>
+
+<h3><a href="http://clhs.lisp.se/Body/f_no_app.htm" ><code>NO-APPLICABLE-METHOD</code></a></h3>
+
+<p>ある総称関数を呼び出したところ<a href="http://clhs.lisp.se/Body/f_no_app.htm" ><code>NO-APPLICABLE-METHOD</code></a>エラーに陥ったが、では<strong>どのようなクラスに特定化されたメソッドが存在しているのかについては何も教えてくれない</strong>。</p>
+
+<h1>Case study in common lisp.</h1>
+
+<p>上に見たようなエラーメッセージにおける<a href="https://en.wikipedia.org/wiki/XY_problem" >XY-PROBLEM</a>は可能な限り排除するのが良策です。
+開発中は関数同士がどのように呼び出し合っているかというプログラムの構造をある程度把握できているのでXというエラーメッセージを目にしてもそのようなエラーが出るということはYに問題があるんだな、と憶測しやすいのですが（将来の自分を含む）第三者はその限りではありません。</p>
+
+<p>丁寧なエラーハンドリングは丁寧なドキュメンテーション以上に（将来の自分を含む）ユーザーに利益をもたらすものです。
+ドキュメンテーションを読まないユーザーでもエラーメッセージ自体は読むでしょうから。</p>
+
+<p>以下、Common Lispにおける簡単な対処方を記しておきます。</p>
+
+<h2>Pseudo variable with symbol-macro.</h2>
+
+<p><a href="http://clhs.lisp.se/Body/f_error.htm" ><code>ERROR</code></a>を捕捉する場合<a href="http://clhs.lisp.se/Body/m_handle.htm" ><code>HANDLER-BIND</code></a>なり<a href="http://www.lispworks.com/documentation/HyperSpec/Body/m_hand_1.htm" ><code>HANDLER-CASE</code></a>なりを使うものですが、これらのフォームがソース上にゴテゴテとあると可読性が著しく損なわれます。
+そのような場合、シンボルマクロが便利に使えます。
+シンボルマクロは<a href="http://clhs.lisp.se/Body/m_defi_1.htm" ><code>DEFINE-SYMBOL-MACRO</code></a>ないし<a href="http://www.lispworks.com/documentation/HyperSpec/Body/s_symbol.htm" ><code>SYMBOL-MACROLET</code></a>で定義します。</p>
+
+<p>スペシャル変数があるとします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> <span class="special">*special*</span></span>)</span></span></code></pre>
+
+<p>このスペシャル変数はマクロによって束縛を作られるよう設計されているとします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-special</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">bind</span>)</span> &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code"><span class="special">*special*</span> ,bind</span>)</span></span>)</span>
+    ,@body</span>)</span></span>)</span></span></code></pre>
+
+<p>各補助関数群は、そのスコープの外側で上記マクロによってある種の環境が構築済みであると期待しているものとします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> helper <span class="paren2">(<span class="code">something</span>)</span>
+  <span class="paren2">(<span class="code">compute <span class="special">*special*</span> something</span>)</span></span>)</span></span></code></pre>
+
+<p>（自分を含む）ある人がうっかりマクロでラップするのを忘れて(Y)直接上記<code>HELPER</code>を呼び出した場合、エラーメッセージは「The variable *special* is unbound.」というもの(X)となり、<code>WITH-SPECIAL</code>でコードをラップすべきことまでは伝わりません。</p>
+
+<p>以下のようにリファクタリングすることで適切なエラーメッセージを示しつつソースコードの可読性を保持できます。</p>
+
+<p>まずはスペシャル変数を改名します。
+たんに耳あてを取り除くだけです。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defvar</span></i> special</span>)</span></span></code></pre>
+
+<p>それに合わせてマクロも修正します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmacro</span></i> <i><span class="symbol">with-special</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">bind</span>)</span> &amp;body body</span>)</span>
+  `<span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">special ,bind</span>)</span></span>)</span>
+    ,@body</span>)</span></span>)</span></span></code></pre>
+
+<p>シンボルマクロで擬似変数を定義します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">define-symbol-macro</span></i> <span class="special">*special*</span>
+  <span class="paren2">(<span class="code">handler-case special
+    <span class="paren3">(<span class="code">unbound-variable <span class="paren4">(<span class="code">condition</span>)</span>
+      <span class="paren4">(<span class="code">error <span class="string">"The variable ~S is unbound. ~:@_Hint: Forgot to wrap your code with ~S?"</span>
+             <span class="paren5">(<span class="code">cell-error-name condition</span>)</span>
+             '<i><span class="symbol">with-special</span></i></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>補助関数<code>HELPER</code>は修正の必要がない点要注目。</p>
+
+<p>副作用として代入や束縛ができなくなっている点要注意。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">setf <span class="special">*special*</span> <span class="keyword">:will-fail</span></span>)</span>
+
+<span class="paren1">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code"><span class="special">*special*</span> <span class="keyword">:will-fail</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">helper <span class="keyword">:something</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上記２例はいずれもエラーになります。
+前者は<code>(setf handler-case)</code>というSETF関数が存在しないため、後者は背後にあるスペシャル変数<code>SPECIAL</code>は未束縛なままなためです。</p>
+
+<p>むしろ人によってはこの直接の代入や束縛を難しくさせる副作用にこそ魅力を感じる方もいるかもしれません。</p>
+
+<h2>Listing up applicable methods.</h2>
+
+<p>Applicableなメソッドを示すには<a href="http://clhs.lisp.se/Body/f_no_app.htm" ><code>NO-APPLICABLE-METHOD</code></a>を定義し、<a href="https://github.com/pcostanza/closer-mop" >closer-mop</a>でリストアップします。</p>
+
+<p>総称関数<code>DEMO</code>があるとします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defgeneric</span></i> demo <span class="paren2">(<span class="code">x</span>)</span></span>)</span></span></code></pre>
+
+<p>メソッドはシンボルだけ定義されているとします。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> demo <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">x symbol</span>)</span></span>)</span> x</span>)</span></span></code></pre>
+
+<p><a href="http://clhs.lisp.se/Body/f_no_app.htm" ><code>NO-APPLICABLE-METHOD</code></a>の実装は以下のようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defmethod</span></i> no-applicable-method <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">this <span class="paren4">(<span class="code">eql #'demo</span>)</span></span>)</span> &amp;rest args</span>)</span>
+  <span class="paren2">(<span class="code">handler-case <span class="paren3">(<span class="code">call-next-method</span>)</span>
+    <span class="paren3">(<span class="code">error <span class="paren4">(<span class="code">condition</span>)</span>
+      <span class="paren4">(<span class="code">error <span class="string">"~A ~I~:@_Applicable methods: ~2I~_~S"</span>
+             condition
+             <span class="paren5">(<span class="code">mapcar <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren1">(<span class="code">m</span>)</span> <span class="paren1">(<span class="code">mapcar #'class-name <span class="paren2">(<span class="code">c2mop:method-specializers m</span>)</span></span>)</span></span>)</span>
+                     <span class="paren6">(<span class="code">c2mop:generic-function-methods this</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>エラーメッセージは以下のようになります。（於SBCL。）</p>
+
+<pre><code>#&lt;THREAD "main thread" RUNNING {xxxxxxx}&gt;:
+  There is no applicable method for the generic function
+    #&lt;STANDARD-GENERIC-FUNCTION DEMO (1)&gt;
+  when called with arguments
+    (666)
+See also:
+  The ANSI Standard, Section 7,6,6
+Applicable methods:
+  ((SYMBOL))</code></pre>
+
+<h3>Using <a href="https://github.com/vindarel/fuzzy-match" >fuzzy-match</a>.</h3>
+
+<p>同様の事例で、ユーザーが指定したオプションが（タイポなどにより）存在しないというものがあります。
+そのような場合も上記同様にサポートされているオプションがエラーメッセージに含まれていると助かります。
+ただし、オプションが多い場合、それらを網羅的に列挙するのはかえって不便です。
+そのような場合<a href="https://github.com/vindarel/fuzzy-match" >fuzzy-match</a>が便利に使えるかもしれません。</p>
+
+<p><a href="https://github.com/vindarel/fuzzy-match" >fuzzy-match</a>の振る舞いは以下のようなものです。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">fuzzy-match:fuzzy-match <span class="string">"sato"</span> '<span class="paren2">(<span class="code"><span class="string">"tanaka"</span> <span class="string">"saito"</span> <span class="string">"yoshida"</span> <span class="string">"watanabe"</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"saito"</span> <span class="string">"watanabe"</span> <span class="string">"tanaka"</span> <span class="string">"yoshida"</span></span>)</span>
+
+* <span class="paren1">(<span class="code">fuzzy-match:fuzzy-match <span class="string">"abe"</span> '<span class="paren2">(<span class="code"><span class="string">"tanaka"</span> <span class="string">"saito"</span> <span class="string">"yoshida"</span> <span class="string">"watanabe"</span></span>)</span></span>)</span>
+<span class="paren1">(<span class="code"><span class="string">"watanabe"</span></span>)</span></span></code></pre>
+
+<p><a href="http://www.lispworks.com/documentation/lw50/CLHS/Body/22_cgb.htm" ><code>FORMAT</code></a>は以下を参考にしてください。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">dolist <span class="paren2">(<span class="code">name '<span class="paren3">(<span class="code"><span class="string">"sato"</span> <span class="string">"abe"</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">apply #'format t <span class="string">"Missing ~S. ~:@_Did you mean ~#[~;~S~;~S or ~S~:;~S, ~S or ~S~]?"</span>
+           name <span class="paren3">(<span class="code">fuzzy-match:fuzzy-match name '<span class="paren4">(<span class="code"><span class="string">"tanaka"</span> <span class="string">"saito"</span> <span class="string">"yoshida"</span> <span class="string">"watanabe"</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren2">(<span class="code">terpri</span>)</span></span>)</span>
+Missing "sato". Did you mean "saito", "watanabe" or "tanaka"?
+Missing "abe". Did you mean "watanabe"?
+NIL</span></code></pre>
+
+<p>（自分自身を含む）ユーザーというものはわがままなもので、親切なエラーメッセージを表示してあげているとさらにつけあがって「そこまで分かっているならいい具合にしてくれよ」と思うものです。
+<a href="https://github.com/vindarel/fuzzy-match" >fuzzy-match</a>の候補が一つしかない場合は<a href="http://www.lispworks.com/documentation/HyperSpec/Body/09_adb.htm" >restart</a>を提供してもいいかもしれません。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">flet</span></i> <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">fail <span class="paren4">(<span class="code">name possibilities</span>)</span>
+         <span class="paren4">(<span class="code">apply #'error <span class="string">"Missing ~S. ~:@_Did you mean ~#[~;~S~;~S or ~S~:;~S, ~S or ~S~]?"</span>
+                name possibilities</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">possibilities <span class="paren5">(<span class="code">fuzzy-match:fuzzy-match name '<span class="paren6">(<span class="code"><span class="string">"tanaka"</span> <span class="string">"saito"</span> <span class="string">"yoshida"</span> <span class="string">"watanabe"</span></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">if</span></i> <span class="paren4">(<span class="code">= 1 <span class="paren5">(<span class="code">length possibilities</span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">restart-case <span class="paren5">(<span class="code">fail name possibilities</span>)</span>
+          <span class="paren5">(<span class="code">continue <span class="paren6">(<span class="code"></span>)</span> <span class="keyword">:report</span> <span class="paren6">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren1">(<span class="code">s</span>)</span> <span class="paren1">(<span class="code">format s <span class="string">"Use ~S"</span> <span class="paren2">(<span class="code">car possibilities</span>)</span></span>)</span></span>)</span>
+            <span class="paren6">(<span class="code">car possibilities</span>)</span></span>)</span></span>)</span>
+        <span class="paren4">(<span class="code">fail name possibilities</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h2>Adding error message with <a href="http://www.lispworks.com/documentation/HyperSpec/Body/f_reinit.htm" ><code>REINITIALIZE-INSTANCE</code></a>.</h2>
+
+<p>補足した<a href="http://clhs.lisp.se/Body/f_error.htm" ><code>ERROR</code></a>が<a href="http://www.lispworks.com/documentation/HyperSpec/Body/e_smp_tp.htm" ><code>SIMPLE-ERROR</code></a>のサブタイプである場合、エラーメッセージの拡張は<a href="http://www.lispworks.com/documentation/HyperSpec/Body/f_reinit.htm" ><code>REINITIALIZE-INSTANCE</code></a>を使う方が便利な場合もあるかもしれません。
+その場合は<a href="http://clhs.lisp.se/Body/m_handle.htm" ><code>HANDLER-BIND</code></a>で補足した<a href="http://www.lispworks.com/documentation/HyperSpec/Body/e_cnd.htm" ><code>CONDITION</code></a>を再初期化します。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">handler-bind <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">simple-error <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">e</span>)</span>
+                               <span class="paren5">(<span class="code">reinitialize-instance e
+                                 <span class="keyword">:format-control</span> <span class="paren6">(<span class="code">concatenate 'string
+                                                              <span class="paren1">(<span class="code">simple-condition-format-control e</span>)</span>
+                                                              <span class="string">"Additional message."</span></span>)</span>
+                                 <span class="keyword">:format-arguments</span> <span class="paren6">(<span class="code">append <span class="paren1">(<span class="code">simple-condition-format-arguments e</span>)</span>
+                                                           '<span class="paren1">(<span class="code">additional args</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code">the-form-which-may-signal-simple-error</span>)</span></span>)</span></span></code></pre>
+
+<h1>Conclusion.</h1>
+
+<p>エラーメッセージXから原因Yを推測せねばならない状況を筆者は特別に「XY-DEBUG」と名付けています。
+開発中にふと「あれ、俺今XY-DEBUGをしたな？」と思った時はエラーハンドリングを見直すよう心がけています。</p>
+
+<p>このようなエラーハンドリングはえてして面倒くさいものですが、自分が書いたエラーメッセージが自分で分かりやすいと思えて助けになったときは「やるじゃん俺」と思えてモチベーションを維持できます。
+この精神的作用こそがエラーハンドリングに於いてもっとも重要な副作用かもしれません。</p>
+
+<!-- Links -->
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
