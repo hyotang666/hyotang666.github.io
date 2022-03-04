@@ -1,10 +1,11 @@
-<!DOCTYPE :HTML>
+<!DOCTYPE HTML>
 <HTML>
   <HEAD>
     <TITLE>pages</TITLE>
     <META CHARSET='UTF-8'>
     <META NAME='auhtor' CONTENT='hyotang666'>
     <META NAME='generator' CONTENT='pages'>
+    <LINK REL='STYLESHEET' HREF='https://unpkg.com/@picocss/pico@latest/css/pico.min.css'>
     <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
   </HEAD>
   <BODY>
@@ -25,7 +26,7 @@
 
 <p>まぁ、でも、そろそろなんか書こうかなぁ、と。</p>
 
-<p>2017年現在、技術系ブログは、僕の観測範囲内では大きく４つに別れる印象です。</p>
+<p>2017年現在、技術系ブログは、僕の観測範囲内では大きく４つに別れる印象です。<a href="#ref1" >^1</a></p>
 
 <ul>
 <li>qiita</li>
@@ -50,6 +51,10 @@ qiitaはなんかいろいろアレ。
 <p>なによりCommonLispを書くのは楽しいですからね。</p>
 
 <p>そうしてできたのが<a href="https://github.com/hyotang666/pages" >Pages</a>です。</p>
+
+<p id=ref1></p>
+
+<p>[1] 2022年現在は<a href="https://zenn.dev/" >zenn</a>が一大勢力となっております。</p>
 
 <h2>How to use</h2>
 
@@ -106,10 +111,10 @@ ros install hyotang666/pages</code></pre>
 
 <p>以下にhtmlを受け取ってhtmlへコンパイルする<code>IDENTITY</code>的なものの例を書いときますね。</p>
 
-<pre><code><span class="code"><span class="paren1">(<span class="code">pages:compile <span class="keyword">:pattern</span> <span class="string">"*.html"</span>
-               <span class="keyword">:compiler</span> <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren3">(<span class="code">pathname</span>)</span>
-                           <span class="paren3">(<span class="code"><i><span class="symbol">lambda</span></i><span class="paren4">(<span class="code"></span>)</span>
-                             <span class="paren4">(<span class="code">write-string <span class="paren5">(<span class="code">uiop:read-file-string pathname</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+<pre><code><span class="code"><span class="paren1">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_cmp.htm" class="symbol">pages:compile</a> <span class="keyword">:pattern</span> <span class="string">"*.html"</span>
+               <span class="keyword">:compiler</span> <span class="paren2">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_lambda.htm" class="symbol"><i><span class="symbol">lambda</span></i></a><span class="paren3">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_pn.htm" class="symbol">pathname</a></span>)</span>
+                           <span class="paren3">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_lambda.htm" class="symbol"><i><span class="symbol">lambda</span></i></a><span class="paren4">(<span class="code"></span>)</span>
+                             <span class="paren4">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_wr_stg.htm" class="symbol">write-string</a> <span class="paren5">(<span class="code">uiop:read-file-string <a href="http://www.lispworks.com/reference/HyperSpec/Body/a_pn.htm" class="symbol">pathname</a></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
 
 <h2>作ってみて。</h2>
 
@@ -135,8 +140,9 @@ cl-markdown？
 
 <h2>今後。</h2>
 
-<p>ご覧の通りのへっぽこCSSなので、見た目をもう少し何とかしたいかなぁとは思いつつ、必要充分だよなぁとも思いつつ。
-ここから先はデザイナの領域だなぁ、とも思いつつ。</p>
+<p><del>ご覧の通りのへっぽこCSSなので、見た目をもう少し何とかしたいかなぁとは思いつつ、必要充分だよなぁとも思いつつ。
+ここから先はデザイナの領域だなぁ、とも思いつつ。</del>
+CSSは<a href="https://picocss.com/" >pico</a>をお試しで導入してみました。</p>
 
 <p>JSは、べつに、いらない、、かなぁ？</p>
 
@@ -146,10 +152,25 @@ cl-markdown？
 
 <p>という訳でPagesの使用は非推奨です。</p>
 
+<p>Common Lispで静的サイトジェネレータが欲しいなら<a href="https://github.com/coleslaw-org/coleslaw" >coleslaw</a>がいいかもしれません。</p>
+
 <h3>2021年追記</h3>
 
 <p>なんだかんだで使い続けてはいます。
 リファクタリング等でコードの内容と記事が噛み合わなくなって来たので修正。</p>
+
+<h3>2022年追記</h3>
+
+<p>なんだかんだで使い続けてはいます。
+リファクタリング等でコードの内容と記事が噛み合わなくなって来たので修正。</p>
+
+<ul>
+<li>cssに<a href="https://picocss.com/" >pico</a>を導入してみました。</li>
+<li><a href="https://github.com/kingcons/colorize" >colorize</a>のclhs-lookup設定がうまくできてなかったのを修正しました。</li>
+<li><a href="https://github.com/kingcons/colorize" >colorize</a>の<code>*trace-output*</code>への出力を握りつぶすようにしました。</li>
+</ul>
+
+<!-- Links -->
 
     </MAIN>
     <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
