@@ -1,0 +1,112 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>restarter</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='STYLESHEET' HREF='https://unpkg.com/@picocss/pico@latest/css/pico.min.css'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Restarter or tiny tips for restart feature in common lisp.</h1>
+
+<h2>Meta notes.</h2>
+
+<h3>対象読者</h3>
+
+<ul>
+<li>Common Lispの<a href="http://www.lispworks.com/documentation/HyperSpec/Body/09_adb.htm" >restart</a>機構に関心のある方。</li>
+</ul>
+
+<h1>Confirmation.</h1>
+
+<h2>Typical restart.</h2>
+
+<p>典型的な<a href="http://www.lispworks.com/documentation/HyperSpec/Body/09_adb.htm" >restart</a>は、例えば以下のようなものになるかと思われます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">restart-case <span class="paren2">(<span class="code">the-form-that-may-fails</span>)</span>
+  <span class="paren2">(<span class="code">ignore <span class="paren3">(<span class="code"></span>)</span> nil</span>)</span></span>)</span></span></code></pre>
+
+<h2>Typical restart function.</h2>
+
+<p>上の<a href="http://www.lispworks.com/documentation/HyperSpec/Body/09_adb.htm" >restart</a>をプログラムから呼び出したい場合、<a href="http://clhs.lisp.se/Body/m_handle.htm" ><code>handler-bind</code></a>を使用して<a href="http://clhs.lisp.se/Body/e_cnd.htm" ><code>condition</code></a>に紐づけたハンドラ内で<a href="http://www.lispworks.com/documentation/HyperSpec/Body/09_adb.htm" >restart</a>を探して呼び出すという処理を行うと思います。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">handler-bind <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">error <span class="paren4">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren5">(<span class="code">condition</span>)</span>
+                        <span class="paren5">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren6">(<span class="code"><span class="paren1">(<span class="code">restart <span class="paren2">(<span class="code">find-restart 'ignore condition</span>)</span></span>)</span></span>)</span> <span class="comment">; &lt;--- restartを探して、
+</span>                          <span class="paren6">(<span class="code">when restart                                   <span class="comment">; &lt;--- もしあったら、
+</span>                            <span class="paren1">(<span class="code">invoke-restart restart</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>                 <span class="comment">; &lt;--- 呼び出す。
+</span>  ...</span>)</span></span></code></pre>
+
+<p>関数にしてしまう事例も多かろうと存じます。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> ignore <span class="paren2">(<span class="code">condition</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">restart <span class="paren5">(<span class="code">find-restart 'ignore condition</span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code">when restart
+      <span class="paren4">(<span class="code">invoke-restart restart</span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<h1>Issue.</h1>
+
+<h2>Package lock violation.</h2>
+
+<p>処理系によってはパッケージはロックされていたりします。
+上のリスタート関数<code>IGNORE</code>の定義は少なくとも<a href="http://www.sbcl.org/" >SBCL</a>においてはパッケージがロックされているためエラーとなります。</p>
+
+<p>ましてや<a href="http://www.lispworks.com/documentation/HyperSpec/Body/09_adb.htm" >restart</a>の名前を<a href="http://clhs.lisp.se/Body/f_rm_rm.htm" ><code>delete</code></a>や<a href="http://clhs.lisp.se/Body/f_replac.htm" ><code>replace</code></a>にしたい場合、Common Lispの通常の関数名と衝突するのでそのような名前のリスタート関数は定義できません。</p>
+
+<h2>Increasing exported symbols.</h2>
+
+<p>名前衝突を回避しようと試みる場合、リスタート名が不自然なものとなったり過剰に長くなったりするおそれがあります。</p>
+
+<p>また、それらの名前は通常エクスポートされるものです。
+エクスポートされるシンボルが増えるのは（将来の自分を含む）エンドユーザーにとって学習コスト増という負担になります。</p>
+
+<h1>Proposal.</h1>
+
+<h2>Restarter.</h2>
+
+<p>典型的なリスタート関数はどうせ同じ処理を行うのですからリスタート関数を作って返す関数を定義すれば良いのではないでしょうか。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><i><span class="symbol">defun</span></i> restarter <span class="paren2">(<span class="code">restart-name &amp;rest args</span>)</span>
+  <span class="paren2">(<span class="code"><i><span class="symbol">lambda</span></i> <span class="paren3">(<span class="code">condition</span>)</span>
+    <span class="paren3">(<span class="code"><i><span class="symbol">let</span></i> <span class="paren4">(<span class="code"><span class="paren5">(<span class="code">restart <span class="paren6">(<span class="code">find-restart restart-name condition</span>)</span></span>)</span></span>)</span>
+      <span class="paren4">(<span class="code">when restart
+        <span class="paren5">(<span class="code">apply #'invoke-restart restart args</span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<p>上記関数<code>RESTARTER</code>さえあればリスタート関数を定義する必要はなくなります。
+先の例を<code>RESTARTER</code>を使う形で書き直すと以下のようになります。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code">handler-bind <span class="paren2">(<span class="code"><span class="paren3">(<span class="code">error <span class="paren4">(<span class="code">restarter 'ignore</span>)</span></span>)</span></span>)</span>
+  ...</span>)</span></span></code></pre>
+
+<h2>Keyword symbol as a restart name.</h2>
+
+<p>リスタート名はシンボルである必要がありますが、それはただのIDとしてしか使われません。
+なら、キーワードシンボルでも構わないとは思いませんか？</p>
+
+<p>キーワードシンボルを使えばパッケージからエクスポートされるシンボルを減らせます。
+それはそのまま（自分を含む）エンドユーザーの学習コストの減少に直結します。</p>
+
+<p>たとえば<a href="https://github.com/cl-babel/babel" >babel</a>のように、たとえ頻繁に使うシンボルは<a href="https://github.com/cl-babel/babel/blob/master/src/strings.lisp#L251-L301" ><code>string-to-octets</code></a>と<a href="https://github.com/cl-babel/babel/blob/master/src/strings.lisp#L221-L235" ><code>octets-to-string</code></a>の２種だとしても、パッケージからエクスポートされているシンボルが合計３３個もあると、もうその時点で「うげぇ」となって学習に対するモチベーションが下がることがあるのは賢明な読者の皆様におかれましてはご承知のとおりのことと存じます。
+「学習コストの減少」にはそのような心理的抵抗（苦手意識）の減少も重要であると考えます。</p>
+
+<p>Common Lispの仕様がリスタートには対応するリスタート関数が定義されてあるものという設計になっているのが、ミスリーディングしているように思えます。
+上に見たように<code>RESTARTER</code>関数さえあればリスタート関数群は必要ありません。</p>
+
+<p>なお、賢明な読者諸兄の中にはキーワードシンボルを使うと複数の異なるライブラリ間でリスタート名の衝突が起こりうる点を懸念される御仁もいらっしゃるかもしれません。
+ですがリスタートはリスタート名のみで求まるものかというとさにあらず、<a href="http://clhs.lisp.se/Body/e_cnd.htm" ><code>condition</code></a>とセットで求まるものでございます。
+<a href="http://clhs.lisp.se/Body/e_cnd.htm" ><code>condition</code></a>を適切に定義すればたとえリスタート名が衝突してもリスタート節自体は適切に選択しうるものと愚考する次第でございます。</p>
+
+<h1>Conclusion.</h1>
+
+<p><a href="http://www.lispworks.com/documentation/HyperSpec/Body/f_abortc.htm" ><code>muffle-warning</code></a>のようにリスタートが存在しないなら<a href="http://clhs.lisp.se/Body/e_progra.htm#program-error" ><code>program-error</code></a>とするようなものにも対応するためにはやはりリスタート関数自体を自前で書く必要は残りますが、それでも多くの場合は<code>RESTARTER</code>関数で対応できるかと思われます。</p>
+
+<p><a href="https://gitlab.common-lisp.net/alexandria/alexandria" >alexandria</a>あたりが導入してくれると嬉しい。</p>
+
+<!-- Links -->
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
