@@ -1,0 +1,204 @@
+<!DOCTYPE HTML>
+<HTML>
+  <HEAD>
+    <TITLE>related-methods</TITLE>
+    <META CHARSET='UTF-8'>
+    <META NAME='auhtor' CONTENT='hyotang666'>
+    <META NAME='generator' CONTENT='pages'>
+    <LINK REL='STYLESHEET' HREF='https://unpkg.com/@picocss/pico@latest/css/pico.min.css'>
+    <LINK REL='stylesheet' HREF='../css/css.css' TYPE='text/css'>
+  </HEAD>
+  <BODY>
+    <MAIN>
+      <h1>Related-methods</h1>
+
+<h2>Introduction.</h2>
+
+<p>ツイッターにて、以下のような<a href="https://twitter.com/AkiteruMiho/status/1500048765298028553" >thread</a>がありました。</p>
+
+<blockquote>
+<p>最近のコーディングは型推論の情報によるエディタの支援がすっごい優秀で助かるのだけど、あの行き当たりばったりでなんとかなっちゃう快適性を前置記法のLisp系言語に持ち込めないだろうか…。</p>
+
+<p>関数の戻り値がオブジェクトだった時に、ライブラリのドキュメントを漁って「どういうオブジェクトを返しているのか？」「そのオブジェクトに対してどんな操作ができるのか？」を真面目に調べないといけないのが辛い。</p>
+</blockquote>
+
+<p>以下、Common Lispに限定して話を進めます。</p>
+
+<h2>Can do or not can do?</h2>
+
+<p>できるかできないかの話だけで考えるとできないと思います。</p>
+
+<h3>Rationale.</h3>
+
+<p>Common Lispがその言語仕様として採用したオブジェクトシステムであるCLOSはC++に代表されるようなオブジェクトシステムがクラスベースすなわちクラスがメソッドを管理する設計であるのと異なり総称関数がメソッドを管理する設計となっております。
+総称関数名をタイプしたときにどのようなメソッドがあるか/その総称関数はどのような引数の型を期待しているのかを表示するのはできるでしょうが、それはそもそも総称関数（その存在）を分かっている/知っている場合の話で、つまり、&apos;関数の戻り値がオブジェクトだった時に、〜中略〜「そのオブジェクトに対してどんな操作ができるのか？」を真面目に調べないといけない&apos;のは変わらないでしょう。</p>
+
+<h2>Goods and bads.</h2>
+
+<h3>Goods.</h3>
+
+<p>&apos;関数の戻り値がオブジェクトだった時に、ライブラリのドキュメントを漁って〜中略〜真面目に調べないといけない&apos;部分は<code>cl:describe</code>や<code>cl:inspect</code>を使ってLispに直接尋ねれば事足りる場合も多かろうとは存じます。</p>
+
+<h3>Bads.</h3>
+
+<p>&apos;関数の戻り値がオブジェクトだった時に、〜中略〜「そのオブジェクトに対してどんな操作ができるのか？」を真面目に調べないといけない&apos;の部分は素のCommon Lispでは対応できない部分でしょう。</p>
+
+<h3>Alternative.</h3>
+
+<p>まぁ、無いなら作ればいいだけの話ではあります。
+ツイ主さんがおっしゃる&apos;行き当たりばったりでなんとかなっちゃう快適性&apos;にはほど遠いでしょうが（というのもその&apos;快適性&apos;はシンタックスに負うところが大きく、変数宣言時にまずクラス名を書くような言語ではその時点でメソッドのリストが得られ表示できるでしょうが、まず関数名を書かねばならないCommon Lispではそうとはいかないからです。）幸いCommon LispではインクリメンタルにREPLと対話しながら開発するものですので&apos;関数の戻り値がオブジェクトだった時&apos;にオブジェクト名から関連する総称関数をリストアップできれば&apos;ライブラリのドキュメントを漁って〜中略〜真面目に調べないといけない&apos;つらみは軽減されるのではないでしょうか。</p>
+
+<h2>The fruit.</h2>
+
+<p>というわけで出来上がったのがこちら<code>RELATED-METHODS</code>でございます。</p>
+
+<h3>Usage.</h3>
+
+<p>必須引数として型名を渡すとカレントパッケージがエクスポートしているシンボルを舐めて関連している総称関数名をリストアップしてくれます。</p>
+
+<pre><code><span class="code">* *package*
+#&lt;PACKAGE "COMMON-LISP-USER"&gt;
+
+* <span class="paren1">(<span class="code">related-methods '<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_stream.htm" class="symbol">stream</a></span>)</span>
+NIL</span></code></pre>
+
+<p><code>cl-user</code>パッケージは一切シンボルをエクスポートしていないので当然結果は<code>NIL</code>です。</p>
+
+<p>カレントパッケージ意外を使いたい場合はキーワード引数<code>:PACKAGE</code>で指定できます。</p>
+
+<pre><code><span class="code"><span class="comment">;; COMMON-LISPパッケージを検索。
+</span>* <span class="paren1">(<span class="code">related-methods '<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_stream.htm" class="symbol">stream</a> <span class="keyword">:package</span> <span class="keyword">:cl</span></span>)</span>
+<span class="paren1">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_slt_mi.htm" class="symbol">SLOT-MISSING</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_comput.htm" class="symbol">COMPUTE-APPLICABLE-METHODS</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_docume.htm" class="symbol">DOCUMENTATION</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_shared.htm" class="symbol">SHARED-INITIALIZE</a>
+              <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_upda_1.htm" class="symbol">UPDATE-INSTANCE-FOR-REDEFINED-CLASS</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_no_app.htm" class="symbol">NO-APPLICABLE-METHOD</a>
+              <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_find_m.htm" class="symbol">FIND-METHOD</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_update.htm" class="symbol">UPDATE-INSTANCE-FOR-DIFFERENT-CLASS</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_pr_obj.htm" class="symbol">PRINT-OBJECT</a>
+              <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_desc_1.htm" class="symbol">DESCRIBE-OBJECT</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_chg_cl.htm" class="symbol">CHANGE-CLASS</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_slt_un.htm" class="symbol">SLOT-UNBOUND</a></span>)</span>
+
+<span class="comment">;; TRIVIAL-GRAY-STREAMSを指定。
+</span>* <span class="paren1">(<span class="code">related-methods '<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_stream.htm" class="symbol">stream</a> <span class="keyword">:package</span> <span class="keyword">:trivial-gray-streams</span></span>)</span>
+<span class="paren1">(<span class="code">STREAM-WRITE-STRING TRIVIAL-GRAY-STREAMS:STREAM-READ-SEQUENCE
+                     TRIVIAL-GRAY-STREAMS:STREAM-FILE-POSITION
+                     STREAM-ADVANCE-TO-COLUMN
+                     TRIVIAL-GRAY-STREAMS:STREAM-WRITE-SEQUENCE</span>)</span> </span></code></pre>
+
+<p>込み入った場合エクスポートされているシンボルだけでなく、インターナルな総称関数もチェックしたい場合があるかもしれません。
+そのような場合キーワード引数<code>:TARGET</code>で指定できます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">related-methods '<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_stream.htm" class="symbol">stream</a> <span class="keyword">:package</span> <span class="keyword">:cl-store</span> <span class="keyword">:target</span> <span class="keyword">:internal</span></span>)</span>
+<span class="paren1">(<span class="code">CL-STORE::INTERNAL-RESTORE-OBJECT</span>)</span></span></code></pre>
+
+<p>キーワード引数<code>:TARGET</code>は<code>:EXTERNAL</code>、<code>:INTERNAL</code>、<code>:INHERITED</code>、<code>:ALL</code>を受け付けます。
+各々、そのパッケージにインターンされておりかつエクスポートされているシンボル、そのパッケージにインターンされておりかつエクスポートされていないシンボル、そのパッケージに存在しているが他所のパッケージからインポートされてきたシンボル、そのパッケージ内でアクセス可能な全てのシンボルを意味します。</p>
+
+<pre><code><span class="code"><span class="comment">;; External. (The default.)
+</span>* <span class="paren1">(<span class="code">related-methods '<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_stream.htm" class="symbol">stream</a> <span class="keyword">:package</span> <span class="keyword">:cl-store</span> <span class="keyword">:target</span> <span class="keyword">:external</span></span>)</span>
+<span class="paren1">(<span class="code">CL-STORE:STORE-REFERRER CL-STORE:CHECK-MAGIC-NUMBER
+                         CL-STORE:BACKEND-RESTORE-OBJECT CL-STORE:BACKEND-STORE
+                         CL-STORE:STORE CL-STORE:GET-NEXT-READER
+                         CL-STORE:RESTORE CL-STORE:BACKEND-RESTORE
+                         CL-STORE:REFERRERP CL-STORE:INTERNAL-STORE-OBJECT
+                         CL-STORE:SERIALIZABLE-SLOTS-USING-CLASS
+                         CL-STORE:BACKEND-STORE-OBJECT
+                         CL-STORE:STORE-BACKEND-CODE</span>)</span> 
+
+<span class="comment">;; Internal. (再掲)
+</span>* <span class="paren1">(<span class="code">related-methods '<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_stream.htm" class="symbol">stream</a> <span class="keyword">:package</span> <span class="keyword">:cl-store</span> <span class="keyword">:target</span> <span class="keyword">:internal</span></span>)</span>
+<span class="paren1">(<span class="code">CL-STORE::INTERNAL-RESTORE-OBJECT</span>)</span>
+
+<span class="comment">;; Inherited.
+</span>* <span class="paren1">(<span class="code">related-methods '<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_stream.htm" class="symbol">stream</a> <span class="keyword">:package</span> <span class="keyword">:cl-store</span> <span class="keyword">:target</span> <span class="keyword">:inherited</span></span>)</span>
+<span class="paren1">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_slt_mi.htm" class="symbol">SLOT-MISSING</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_comput.htm" class="symbol">COMPUTE-APPLICABLE-METHODS</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_docume.htm" class="symbol">DOCUMENTATION</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_shared.htm" class="symbol">SHARED-INITIALIZE</a>
+              <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_upda_1.htm" class="symbol">UPDATE-INSTANCE-FOR-REDEFINED-CLASS</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_no_app.htm" class="symbol">NO-APPLICABLE-METHOD</a>
+              <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_find_m.htm" class="symbol">FIND-METHOD</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_update.htm" class="symbol">UPDATE-INSTANCE-FOR-DIFFERENT-CLASS</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_pr_obj.htm" class="symbol">PRINT-OBJECT</a>
+              <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_desc_1.htm" class="symbol">DESCRIBE-OBJECT</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_chg_cl.htm" class="symbol">CHANGE-CLASS</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_slt_un.htm" class="symbol">SLOT-UNBOUND</a></span>)</span>
+
+<span class="comment">;; All.
+</span>* <span class="paren1">(<span class="code">related-methods '<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_stream.htm" class="symbol">stream</a> <span class="keyword">:package</span> <span class="keyword">:cl-store</span> <span class="keyword">:target</span> <span class="keyword">:all</span></span>)</span>
+<span class="paren1">(<span class="code">CL-STORE::INTERNAL-RESTORE-OBJECT CL-STORE:STORE-REFERRER
+                                   CL-STORE:CHECK-MAGIC-NUMBER
+                                   CL-STORE:BACKEND-RESTORE-OBJECT
+                                   CL-STORE:BACKEND-STORE CL-STORE:STORE
+                                   CL-STORE:GET-NEXT-READER CL-STORE:RESTORE
+                                   CL-STORE:BACKEND-RESTORE CL-STORE:REFERRERP
+                                   CL-STORE:INTERNAL-STORE-OBJECT
+                                   CL-STORE:SERIALIZABLE-SLOTS-USING-CLASS
+                                   CL-STORE:BACKEND-STORE-OBJECT
+                                   CL-STORE:STORE-BACKEND-CODE <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_slt_mi.htm" class="symbol">SLOT-MISSING</a>
+                                   <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_comput.htm" class="symbol">COMPUTE-APPLICABLE-METHODS</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_docume.htm" class="symbol">DOCUMENTATION</a>
+                                   <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_shared.htm" class="symbol">SHARED-INITIALIZE</a>
+                                   <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_upda_1.htm" class="symbol">UPDATE-INSTANCE-FOR-REDEFINED-CLASS</a>
+                                   <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_no_app.htm" class="symbol">NO-APPLICABLE-METHOD</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_find_m.htm" class="symbol">FIND-METHOD</a>
+                                   <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_update.htm" class="symbol">UPDATE-INSTANCE-FOR-DIFFERENT-CLASS</a>
+                                   <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_pr_obj.htm" class="symbol">PRINT-OBJECT</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_desc_1.htm" class="symbol">DESCRIBE-OBJECT</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_chg_cl.htm" class="symbol">CHANGE-CLASS</a>
+                                   <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_slt_un.htm" class="symbol">SLOT-UNBOUND</a></span>)</span> </span></code></pre>
+
+<p>あるパッケージにおいて別なパッケージのシンボルがインポートされず、パッケージプリフィックスをつける形で直接参照されている場合も想定されます。
+そのようなシンボルはパッケージにとって<code>:EXTERNAL</code>でも<code>:INTERNAL</code>でも<code>:INHERITED</code>でもありません。
+ですが、使われているのは事実で、できれば複数パッケージに渡り検索をしたい場合もあることでしょう。
+そのような場合、キーワード引数<code>:PACKAGE</code>に<code>NIL</code>を渡すとLispランタイム上に存在する全てのパッケージから関連メソッドをリストアップできます。
+ただし結果は多すぎるかもしれません。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_length.htm" class="symbol">length</a> <span class="paren2">(<span class="code">related-methods '<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_stream.htm" class="symbol">stream</a> <span class="keyword">:package</span> <a href="http://www.lispworks.com/reference/HyperSpec/Body/a_nil.htm" class="symbol">nil</a></span>)</span></span>)</span>
+236</span></code></pre>
+
+<p>これはクラス<code>T</code>を受け付けるメソッドやクラス<code>STANDARD-OBJECT</code>を受け付けるメソッドまでもが対象になっているからです。
+無視したいクラスはキーワード引数<code>:IGNORE</code>にリスト形式で指定できます。</p>
+
+<pre><code><span class="code">* <span class="paren1">(<span class="code">related-methods '<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_stream.htm" class="symbol">stream</a> <span class="keyword">:package</span> <a href="http://www.lispworks.com/reference/HyperSpec/Body/a_nil.htm" class="symbol">nil</a> <span class="keyword">:ignore</span> '<span class="paren2">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_t.htm" class="symbol">t</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_std_ob.htm" class="symbol">standard-object</a></span>)</span></span>)</span>
+<span class="paren1">(<span class="code">CL-STORE:BACKEND-STORE CL-STORE:GET-NEXT-READER CL-STORE:BACKEND-RESTORE
+                        UIOP/RUN-PROGRAM:SLURP-INPUT-STREAM
+                        UIOP/RUN-PROGRAM:VOMIT-OUTPUT-STREAM <a href="http://www.lispworks.com/reference/HyperSpec/Body/f_pr_obj.htm" class="symbol">PRINT-OBJECT</a></span>)</span></span></code></pre>
+
+<p>これで少しは楽になるのではないでしょうか。
+もっとも関数の検索はできないので、最終的にはやはりドキュメントなりソースなり読み回さなきゃならなくなるでしょうけど。</p>
+
+<h3>The code.</h3>
+
+<p>コードは以下のとおり。</p>
+
+<p>やっていることは単純で、パッケージのシンボルを舐めてまわり、そのシンボルが総称関数名であるならその総称関数が管理しているメソッドのスペシャライザーを舐めてまわり、引数で指定された型が一つでもスペシャライザーを満たすようであればそのようなメソッドを持つ総称関数は指定された型に関連性のある総称関数だと判断して総称関数名（シンボル）を集積しているだけです。
+Lispが環境志向であるおかげで、パッケージのシンボルを舐めるのが容易であること、またMeta Object Protocolのおかげで、関連するメソッドの検索が容易だったのが幸いしました。
+LispのことはLispに訊け、というのもまたLispという言語の大きな魅力の一つかと思います。</p>
+
+<pre><code><span class="code"><span class="paren1">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/m_defun.htm" class="symbol"><i><span class="symbol">defun</span></i></a> related-methods
+       <span class="paren2">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_type.htm" class="symbol">type</a> &amp;key <span class="paren3">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/t_pkg.htm" class="symbol">package</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/v_pkg.htm" class="symbol"><span class="special">*package*</span></a></span>)</span> <span class="paren3">(<span class="code">target <span class="keyword">:external</span></span>)</span> <span class="paren3">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/d_ignore.htm" class="symbol">ignore</a></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/s_declar.htm" class="symbol">declare</a> <span class="paren3">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_type.htm" class="symbol">type</a> <span class="paren4">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_member.htm" class="symbol">member</a> <span class="keyword">:external</span> <span class="keyword">:internal</span> <span class="keyword">:inherited</span> <span class="keyword">:all</span></span>)</span> target</span>)</span>
+           <span class="paren3">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_type.htm" class="symbol">type</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/a_list.htm" class="symbol">list</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/d_ignore.htm" class="symbol">ignore</a></span>)</span></span>)</span>
+  <span class="paren2">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/s_flet_.htm" class="symbol"><i><span class="symbol">labels</span></i></a> <span class="paren3">(<span class="code"><span class="paren4">(<span class="code">subtype <span class="paren5">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_type.htm" class="symbol">type</a> specializer</span>)</span>
+             <span class="paren5">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/s_if.htm" class="symbol"><i><span class="symbol">if</span></i></a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/d_ignore.htm" class="symbol">ignore</a>
+                 <span class="paren6">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_and.htm" class="symbol">and</a> <span class="paren1">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_not.htm" class="symbol">not</a> <span class="paren2">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_typep.htm" class="symbol">typep</a> specializer 'c2mop:eql-specializer</span>)</span></span>)</span>
+                      <span class="paren1">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_not.htm" class="symbol">not</a> <span class="paren2">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_find_.htm" class="symbol">find</a> <span class="paren3">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_class_.htm" class="symbol">class-name</a> specializer</span>)</span> <a href="http://www.lispworks.com/reference/HyperSpec/Body/d_ignore.htm" class="symbol">ignore</a></span>)</span></span>)</span>
+                      <span class="paren1">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_subtpp.htm" class="symbol">subtypep</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/a_type.htm" class="symbol">type</a> specializer</span>)</span></span>)</span>
+                 <span class="paren6">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_subtpp.htm" class="symbol">subtypep</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/a_type.htm" class="symbol">type</a> specializer</span>)</span></span>)</span></span>)</span>
+           <span class="paren4">(<span class="code">related? <span class="paren5">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_type.htm" class="symbol">type</a> gf</span>)</span>
+             <span class="paren5">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/m_loop.htm" class="symbol"><i><span class="symbol">loop</span></i></a> <span class="keyword">:for</span> <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_method.htm" class="symbol">method</a> <span class="keyword">:in</span> <span class="paren6">(<span class="code">c2mop:generic-function-methods gf</span>)</span>
+                   <span class="keyword">:thereis</span> <span class="paren6">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/m_loop.htm" class="symbol"><i><span class="symbol">loop</span></i></a> <span class="keyword">:for</span> specializer
+                                       <span class="keyword">:in</span> <span class="paren1">(<span class="code">c2mop:method-specializers <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_method.htm" class="symbol">method</a></span>)</span>
+                                  <span class="keyword">:thereis</span> <span class="paren1">(<span class="code">subtype <a href="http://www.lispworks.com/reference/HyperSpec/Body/a_type.htm" class="symbol">type</a> specializer</span>)</span></span>)</span></span>)</span></span>)</span>
+           <span class="paren4">(<span class="code">targetp <span class="paren5">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm" class="symbol">symbol</a> target</span>)</span>
+             <span class="paren5">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_or.htm" class="symbol">or</a> <span class="paren6">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_eq.htm" class="symbol">eq</a> <span class="keyword">:all</span> target</span>)</span>
+                 <span class="paren6">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_eq.htm" class="symbol">eq</a> target
+                     <span class="paren1">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/m_nth_va.htm" class="symbol">nth-value</a> 1
+                                <span class="paren2">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_find_s.htm" class="symbol">find-symbol</a> <span class="paren3">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_symb_2.htm" class="symbol">symbol-name</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm" class="symbol">symbol</a></span>)</span>
+                                             <span class="paren3">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_or.htm" class="symbol">or</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_pkg.htm" class="symbol">package</a>
+                                                 <span class="paren4">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_symb_3.htm" class="symbol">symbol-package</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm" class="symbol">symbol</a></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span>
+           <span class="paren4">(<span class="code">ensure-list <span class="paren5">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/t_pkg.htm" class="symbol">package</a></span>)</span>
+             <span class="paren5">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/s_if.htm" class="symbol"><i><span class="symbol">if</span></i></a> <span class="paren6">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_null.htm" class="symbol">null</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_pkg.htm" class="symbol">package</a></span>)</span>
+                 <span class="paren6">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_list_a.htm" class="symbol">list-all-packages</a></span>)</span>
+                 <span class="paren6">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_list.htm" class="symbol">list</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_pkg.htm" class="symbol">package</a></span>)</span></span>)</span></span>)</span></span>)</span>
+    <span class="paren3">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_rm_dup.htm" class="symbol">delete-duplicates</a>
+      <span class="paren4">(<span class="code">uiop:while-collecting <span class="paren5">(<span class="code">collect</span>)</span>
+        <span class="paren5">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/m_dolist.htm" class="symbol">dolist</a> <span class="paren6">(<span class="code">p <span class="paren1">(<span class="code">ensure-list <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_pkg.htm" class="symbol">package</a></span>)</span></span>)</span>
+          <span class="paren6">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/m_do_sym.htm" class="symbol">do-symbols</a> <span class="paren1">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm" class="symbol">symbol</a> p</span>)</span>
+            <span class="paren1">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/m_when_.htm" class="symbol">when</a> <span class="paren2">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_and.htm" class="symbol">and</a> <span class="paren3">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_fbound.htm" class="symbol">fboundp</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm" class="symbol">symbol</a></span>)</span>
+                       <span class="paren3">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_typep.htm" class="symbol">typep</a> <span class="paren4">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_symb_1.htm" class="symbol">symbol-function</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm" class="symbol">symbol</a></span>)</span>
+                              '<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_std_ge.htm" class="symbol">standard-generic-function</a></span>)</span>
+                       <span class="paren3">(<span class="code">targetp <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm" class="symbol">symbol</a> target</span>)</span>
+                       <span class="paren3">(<span class="code">related? <a href="http://www.lispworks.com/reference/HyperSpec/Body/a_type.htm" class="symbol">type</a> <span class="paren4">(<span class="code"><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_symb_1.htm" class="symbol">symbol-function</a> <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm" class="symbol">symbol</a></span>)</span></span>)</span></span>)</span>
+              <span class="paren2">(<span class="code">collect <a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm" class="symbol">symbol</a></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span>)</span></span></code></pre>
+
+<!-- Links -->
+
+    </MAIN>
+    <FOOTER><A HREF='../indexes/index.html'>Index</A></FOOTER>
+  </BODY>
+</HTML>
